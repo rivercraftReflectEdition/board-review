@@ -199,13 +199,33 @@ def test_caps_alone_do_not_make_a_rail_of_a_net_with_i2c_or_reset_pins():
     assert [x.roles["net"] for x in resets.find_reset_nets(g)] == [["N_R"]]
 
 
-def test_straps_level_from_fitted_parts_and_role_tags():
+def test_straps_report_topology_and_fitted_state_and_role_tags():
     found = {b.roles["net"][0]: b for b in straps.find_straps(Graph(_ti()))}
     assert found["/BOOT0"].confidence == "high"
-    assert "level: low through R6 (R7 not fitted)" in found["/BOOT0"].notes
+    assert found["/BOOT0"].roles["pulldowns"] == ["R6"] and found["/BOOT0"].roles["pullups_dnp"] == ["R7"]
+    assert "pulled toward GND by R6; not fitted: R7 to +3V3" in found["/BOOT0"].notes
     assert any("enable" in n for n in found["/EN_BUCK"].notes)
-    assert "level: floating: no pull resistor is fitted" in found["/OPT_LINK"].notes
+    assert "no fitted pull resistor; not fitted: R10 to +3V3" in found["/OPT_LINK"].notes
     assert "I2C1_SDA" not in found
+
+
+def test_strap_finder_does_not_claim_a_logic_level():
+    rows = [("U1", "1", "MODE", "MODE"), ("U1", "2", "3V3", "VDD"), ("U1", "3", "GND", "GND")]
+    rows += _two("R1", "MODE", "3V3") + _two("C1", "3V3", "GND")
+    b = _only(straps.find_straps(Graph(_board(rows, values={"R1": "1M"}))), "strap")
+    text = " ".join(b.notes).lower()
+    assert "high" not in text and "low" not in text
+    assert "pulled toward 3V3 by R1" in b.notes
+    assert any(n.startswith("level: UNSURE") and "VIH" in n and "internal pull" in n for n in b.notes)
+
+
+def test_strap_with_both_sides_fitted_is_called_out():
+    found = {b.roles["net"][0]: b for b in straps.find_straps(_ti_dnp())}
+    assert not any("both fitted" in n for n in found["/BOOT0"].notes)
+    m = _ti()
+    m.components["R7"].fitted = True
+    b = {x.roles["net"][0]: x for x in straps.find_straps(Graph(m))}["/BOOT0"]
+    assert any("R7 to +3V3 and R6 to GND are both fitted" in n for n in b.notes)
 
 
 def test_find_all_skips_nets_explained_elsewhere_and_reports_edges():

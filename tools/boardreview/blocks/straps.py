@@ -1,23 +1,31 @@
-"""Strap pins: an IC pin set by resistors to rails or ground, with the level the fitted parts give."""
+"""Strap pins: an IC pin set by resistors to rails or ground, with the pull topology and what is fitted."""
 
 from __future__ import annotations
 
-from boardreview.blocks.base import Block, describe, is_supply, make_block
+from boardreview.blocks.base import Block, describe, dnp_note, fitted_split, is_supply, make_block
 from boardreview.model import naming
 from boardreview.model.board import natural_key
 from boardreview.model.graph import Graph
 
+LEVEL_NOTE = ("level: UNSURE; it depends on the pull values, the pin's internal pull and leakage, and its VIH and "
+              "VIL; settle it with a calculation against the datasheet thresholds")
 
-def _level(g: Graph, ups: list[str], downs: list[str]) -> str:
-    fu = [r for r in ups if g.fitted(r)]
-    fd = [r for r in downs if g.fitted(r)]
-    if fu and fd:
-        return f"divider: {', '.join(fu)} up and {', '.join(fd)} down are both fitted"
-    if fu:
-        return f"high through {', '.join(fu)}" + (f" ({', '.join(downs)} not fitted)" if downs else "")
-    if fd:
-        return f"low through {', '.join(fd)}" + (f" ({', '.join(ups)} not fitted)" if ups else "")
-    return "floating: no pull resistor is fitted"
+
+def _pulls(g: Graph, net: str, refs: list[str]) -> str:
+    return ", ".join(f"{r} to {g.other_net(r, net)}" for r in refs)
+
+
+def _topology(g: Graph, net: str, ups: list[str], downs: list[str], off: list[str]) -> str:
+    """Which pulls are fitted and where they go; no logic level is claimed."""
+    tail = f"; not fitted: {_pulls(g, net, off)}" if off else ""
+    if ups and downs:
+        return (f"{_pulls(g, net, ups)} and {_pulls(g, net, downs)} are both fitted: a divider, or both sides of a "
+                f"build option fitted at once; confirm which is meant{tail}")
+    if ups or downs:
+        on = ups or downs
+        rails = sorted({g.other_net(r, net) for r in on}, key=natural_key)
+        return f"pulled toward {', '.join(rails)} by {', '.join(on)}{tail}"
+    return f"no fitted pull resistor{tail}"
 
 
 def find_straps(g: Graph, exclude_nets: set[str] = frozenset()) -> list[Block]:
@@ -54,9 +62,16 @@ def find_straps(g: Graph, exclude_nets: set[str] = frozenset()) -> list[Block]:
             evidence.append(f"strap-like pin names {', '.join(strap_named)}")
         if series:
             evidence.append(f"net also passes through {', '.join(series)} (strap shared with a signal)")
-        roles = {"net": [net], "ic_pins": [p.key for p in ic_pins], "pullups": ups, "pulldowns": downs,
-                 "series_resistors": series, "other_parts": sorted(set(others), key=natural_key)}
-        notes = [f"level: {_level(g, ups, downs)}", "values: " + ", ".join(describe(g, r) for r in ups + downs)]
+        fit_ups, dnp_ups = fitted_split(g, ups)
+        fit_downs, dnp_downs = fitted_split(g, downs)
+        fit_series, dnp_series = fitted_split(g, series)
+        roles = {"net": [net], "ic_pins": [p.key for p in ic_pins], "pullups": fit_ups, "pulldowns": fit_downs,
+                 "series_resistors": fit_series, "other_parts": sorted(set(others), key=natural_key),
+                 "pullups_dnp": dnp_ups, "pulldowns_dnp": dnp_downs, "series_resistors_dnp": dnp_series}
+        notes = [_topology(g, net, fit_ups, fit_downs, dnp_ups + dnp_downs), LEVEL_NOTE]
+        if fit_ups or fit_downs:
+            notes.append("values: " + ", ".join(describe(g, r) for r in fit_ups + fit_downs))
+        notes += dnp_note(g, dnp_ups + dnp_downs + dnp_series)
         if tags:
             notes.append(f"pin role by name: {', '.join(tags)}; a pull on this pin is a bias, not a boot strap")
         found.append(make_block(g, "strap", f"strap {net}", score, 3, 2, evidence, roles, notes))
