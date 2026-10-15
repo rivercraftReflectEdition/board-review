@@ -26,6 +26,27 @@ For every item record one of: pass, marginal, fail, not applicable (with the rea
 - Guaranteed values decide pass and fail. Typical values may explain, never pass.
 - Print `Result.to_markdown()` in the working notes so the math is visible.
 
+## checks.json
+
+Write every item run, pass or fail, to `checks.json` in the review folder: a list of objects
+that validate against `schemas/check_result.schema.json`, or `{"board": ..., "checks": [...]}`.
+One entry per item per block instance:
+
+- `id` unique in the file (for example `U9-ch1.BR-1`), `block`, `instance` (for example
+  "U9 channel 1, 3V3 rail"), `item` (`BR-1`), `title`;
+- `verdict`: pass, marginal, fail, unknown or not_applicable, with `reason` (required for
+  unknown and not_applicable);
+- `results`: each calculator `Result` as `Result.to_dict(name)`, where name is the calculator
+  path such as `calc.loop.margins`; plots are included;
+- `digest_values`: the datasheet values the check used, each with document and page;
+- `not_published`, `assumptions`, `sources`, `bench_test`;
+- `simulation`: the setup verdict, the measured verdict, each sanity check and the sim Results;
+- `finding`: the id of the finding this check produced, when it produced one.
+
+Passes are recorded too. The verifier samples them, the coverage table counts them, and
+`python -m boardreview report --detail full` prints them in analysis.html. A pass that is not in
+checks.json was not run.
+
 ## Not-published rule
 
 1. Say what is missing and where you looked.

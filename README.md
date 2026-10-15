@@ -24,16 +24,18 @@ skill/                    installable skill (link into ~/.claude/skills/board-re
   workflow/               one page per stage: intake, extract, datasheets, blocks, checks, verify, report
   checklists/             one page per circuit block (buck, ldo, ferrite/LC, pdn, clocks, resets,
                           io levels, straps, ethernet, csi, xspi memory, protection, sequencing, thermal)
-  schemas/                board_model, datasheet_digest, finding (JSON Schema)
+  schemas/                board_model, datasheet_digest, finding, check_result (JSON Schema)
 tools/boardreview/        Python package the skill calls
-  model/                  netlist, BOM and pin map from Altium, KiCad and IPC-D-356; 3-way compare
+  model/                  netlist, BOM and pin map from Altium, KiCad and IPC-D-356; 3-way compare;
+                          part position, side and sheet from IPC-D-356, KiCad position files and XML
   lint/                   deterministic checks: single-pin nets, open IC pins, floating grounds, names
   blocks/                 find regulators, filters, clocks, resets, I2C buses and straps in the netlist
   calc/                   calculators: buck, loop (Bode, PM/GM, Cff), lc_tank, mlcc_bias, divider,
                           crystal, i2c, protection (TVS), thermal, timing
   sim/                    LTspice batch runs (ngspice optional): loop-gain injection, load step,
                           PDN and filter impedance, with netlist sanity checks before trusting a run
-  report/                 markdown and HTML report (not built yet)
+  report/                 report.html with fix and bench checkboxes, the artifact page, report.md,
+                          ticket drafts, analysis.html with every check and plot; verify-fixes
 tests/                    calculator and model tests with worked numbers
 evals/                    expected findings per board and the scorer (board data stays local)
 docs/lessons/             one page per real miss: what, why, which check now catches it
