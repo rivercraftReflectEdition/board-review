@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from boardreview.blocks.base import Block, describe, is_supply, make_block
+from boardreview.blocks.base import Block, describe, dnp_note, fitted_split, is_supply, make_block
 from boardreview.model import naming
 from boardreview.model.board import natural_key
 from boardreview.model.graph import Graph
@@ -38,18 +38,21 @@ def find_reset_nets(g: Graph) -> list[Block]:
         hit, evidence = _is_reset_net(g, net)
         if not hit:
             continue
-        pullups, pulldowns, series = [], [], []
+        ups, downs, through = [], [], []
         for r, far in g.resistors_to(net):
             if is_supply(g, far):
-                pullups.append(r)
+                ups.append(r)
             elif g.is_ground(far):
-                pulldowns.append(r)
+                downs.append(r)
             elif far is not None:
-                series.append(r)
-        caps = g.caps_to_ground(net)
+                through.append(r)
+        pullups, pullups_dnp = fitted_split(g, ups)
+        pulldowns, pulldowns_dnp = fitted_split(g, downs)
+        series, series_dnp = fitted_split(g, through)
+        caps, caps_dnp = fitted_split(g, g.caps_to_ground(net))
         actives = sorted({p.refdes for p in g.active_pins(net)}, key=natural_key)
-        sups = [r for r in actives if _supervisor(g, r)]
-        diodes = [d for d in g.refs_on(net, {"diode"}) if g.is_two_pin(d)]
+        sups, sups_dnp = fitted_split(g, [r for r in actives if _supervisor(g, r)])
+        diodes, diodes_dnp = fitted_split(g, [d for d in g.refs_on(net, {"diode"}) if g.is_two_pin(d)])
         links = sorted({g.other_net(d, net) for d in diodes if g.other_net(d, net)}
                        | {g.other_net(r, net) for r in series if g.other_net(r, net)}, key=natural_key)
         score = 1 + (1 if pullups or pulldowns else 0) + (1 if sups else 0) + (1 if len(evidence) > 1 else 0)
@@ -57,21 +60,26 @@ def find_reset_nets(g: Graph) -> list[Block]:
             evidence.append(f"pull-up {', '.join(pullups)}")
         if sups:
             evidence.append(f"supervisor or watchdog {', '.join(sups)}")
+        fitted_active = [p for p in g.active_pins(net) if g.fitted(p.refdes)]
         roles = {
             "net": [net], "pullups": pullups, "pulldowns": pulldowns, "delay_caps": caps, "supervisors": sups,
-            "receivers": [p.key for p in g.active_pins(net) if p.refdes not in sups],
-            "driver_pins": [p.key for p in g.active_pins(net) if p.refdes in sups],
+            "receivers": [p.key for p in fitted_active if p.refdes not in sups],
+            "driver_pins": [p.key for p in fitted_active if p.refdes in sups],
             "diodes": diodes, "series_resistors": series, "linked_nets": links,
             "connectors": [p.key for p in g.net_pins[net] if g.kind(p.refdes) in ("connector", "testpoint")],
             "transistors": [p.key for p in g.net_pins[net] if g.kind(p.refdes) == "transistor"],
+            "pullups_dnp": pullups_dnp, "pulldowns_dnp": pulldowns_dnp, "delay_caps_dnp": caps_dnp,
+            "supervisors_dnp": sups_dnp, "diodes_dnp": diodes_dnp, "series_resistors_dnp": series_dnp,
+            "receivers_dnp": [p.key for p in g.active_pins(net) if not g.fitted(p.refdes) and p.refdes not in sups_dnp],
         }
         notes = []
         if diodes:
             notes.append(f"diode-OR or isolation through {', '.join(diodes)} to {', '.join(links) or 'other nets'}")
         if not pullups and not sups:
-            notes.append("no pull-up or supervisor found on this net; it may rely on an internal pull-up")
+            notes.append("no fitted pull-up or supervisor on this net; it may rely on an internal pull-up")
         parts_listed = pullups + pulldowns + caps
         if parts_listed:
             notes.append("values: " + ", ".join(describe(g, r) for r in parts_listed))
+        notes += dnp_note(g, pullups_dnp + pulldowns_dnp + caps_dnp + sups_dnp + diodes_dnp + series_dnp)
         found.append(make_block(g, "reset", f"reset {net}", score, 3, 2, evidence, roles, notes))
     return found

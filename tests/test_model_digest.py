@@ -44,6 +44,14 @@ def test_power_tree_shows_rails_links_and_grounds():
     assert text.index("## +3V3") < text.index("## GND")
 
 
+def test_power_tree_lists_dnp_caps_apart_from_fitted_caps():
+    m = _model()
+    m.components["C6"].fitted = False
+    text = digest.power_tree(m)
+    section = text[text.index("## 3V3A"):]
+    assert "- caps to ground (1): C7" in section and "- DNP caps to ground (1): C6" in section
+
+
 def test_pin_map_and_write_digests(tmp_path):
     m = _model()
     pm = digest.pin_map(m, "U1")

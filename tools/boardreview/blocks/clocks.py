@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from boardreview.blocks.base import Block, describe, is_supply, make_block
+from boardreview.blocks.base import Block, describe, dnp_note, fitted_split, is_supply, make_block
 from boardreview.model import naming
 from boardreview.model.board import natural_key
 from boardreview.model.graph import Graph
@@ -22,13 +22,16 @@ def _series_to_ic(g: Graph, net: str) -> tuple[list[str], list[str]]:
 
 
 def _crystal(g: Graph, ref: str, signal: list[str]) -> Block:
-    caps = {n: g.caps_to_ground(n) for n in signal}
+    split = {n: fitted_split(g, g.caps_to_ground(n)) for n in signal}
+    caps = {n: split[n][0] for n in signal}
+    caps_dnp = [c for n in signal for c in split[n][1]]
     ic_pins = [p.key for n in signal for p in g.active_pins(n)]
-    series, far_pins = [], []
+    through, far_pins = [], []
     for n in signal:
         r, pins = _series_to_ic(g, n)
-        series += r
+        through += r
         far_pins += pins
+    series, series_dnp = fitted_split(g, through)
     named = [k for k in ic_pins + far_pins if naming.pin_is(g.model.pin(k).name, "xtal")]
     score = 1 + sum(1 for n in signal if caps[n]) + (1 if ic_pins or far_pins else 0) + (1 if named else 0)
     evidence = [f"{ref} has two signal nets {', '.join(signal)}"]
@@ -38,11 +41,18 @@ def _crystal(g: Graph, ref: str, signal: list[str]) -> Block:
     if named:
         evidence.append(f"oscillator pin names on {', '.join(named)}")
     roles = {"crystal": [ref], "signal_nets": signal, "load_caps": [c for n in signal for c in caps[n]],
-             "driver_pins": ic_pins + far_pins, "series_resistors": series}
+             "driver_pins": ic_pins + far_pins, "series_resistors": series, "load_caps_dnp": caps_dnp,
+             "series_resistors_dnp": series_dnp}
     notes = ["values: " + ", ".join(describe(g, r) for r in [ref] + roles["load_caps"] + series),
              "load capacitance check needs the crystal CL and the pin and stray capacitance from datasheets"]
-    if any(not caps[n] for n in signal):
-        notes.append("a signal net has no load cap: internal load caps or a missing part")
+    bare = [n for n in signal if not caps[n]]
+    if bare:
+        notes.append(f"no fitted load cap on {', '.join(bare)}: internal load caps or a missing part")
+    if series_dnp:
+        notes.append(f"series {', '.join(series_dnp)} is DNP: that crystal pin may not reach the driver")
+    if not g.fitted(ref):
+        notes.append(f"{ref} is DNP: this crystal is not in the build")
+    notes += dnp_note(g, caps_dnp + series_dnp)
     return make_block(g, "crystal", f"{ref} crystal", score, 4, 3, evidence, roles, notes)
 
 
@@ -66,10 +76,16 @@ def _oscillator(g: Graph, ref: str, supply: list[str], signal: list[str], unconn
         evidence.append(f"supply pins on {', '.join(supply)}")
     if outputs:
         evidence.append(f"output {', '.join(outputs)} reaches {', '.join(loads)}")
+    series, series_dnp = fitted_split(g, series)
+    bypass, bypass_dnp = fitted_split(g, [c for n in supply for c in g.caps_to_ground(n)])
     roles = {"oscillator": [ref], "supply": supply, "output": outputs, "loads": loads, "series_resistors": series,
-             "enable_nets": enables, "pins_on_supply": tied_high, "bypass_caps": [c for n in supply
-                                                                                   for c in g.caps_to_ground(n)]}
+             "enable_nets": enables, "pins_on_supply": tied_high, "bypass_caps": bypass,
+             "series_resistors_dnp": series_dnp, "bypass_caps_dnp": bypass_dnp}
     notes = []
+    if not comp.fitted:
+        notes.append(f"{ref} is DNP: this oscillator is not in the build")
+    if series_dnp:
+        notes.append(f"series {', '.join(series_dnp)} is DNP: that output may not reach its load")
     if unconnected:
         notes.append(f"pins with no net: {', '.join(unconnected)}; check OE/ST and NC pins against the datasheet")
     if len(tied_high) > 1:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from boardreview.blocks.base import Block, describe, is_supply, make_block
+from boardreview.blocks.base import Block, describe, fitted_split, is_supply, make_block
 from boardreview.model import naming
 from boardreview.model.board import natural_key
 from boardreview.model.graph import Graph
@@ -26,16 +26,29 @@ def _bus_key(net: str) -> str:
 
 
 def _line(g: Graph, net: str) -> dict[str, list[str]]:
-    pullups, series = [], []
+    pulls, through = [], []
     for r, far in g.resistors_to(net):
         if is_supply(g, far):
-            pullups.append(r)
+            pulls.append(r)
         elif far is not None and not g.is_ground(far):
-            series.append(r)
-    return {"pullups": pullups, "pullup_rails": sorted({g.other_net(r, net) for r in pullups}),
-            "series": series, "devices": sorted({p.refdes for p in g.net_pins[net]
-                                                 if g.kind(p.refdes) in ("ic", "connector", "oscillator")},
-                                                key=natural_key)}
+            through.append(r)
+    pullups, pullups_dnp = fitted_split(g, pulls)
+    series, series_dnp = fitted_split(g, through)
+    return {"pullups": pullups, "pullups_dnp": pullups_dnp,
+            "pullup_rails": sorted({g.other_net(r, net) for r in pullups}),
+            "series": series, "series_dnp": series_dnp,
+            "devices": sorted({p.refdes for p in g.net_pins[net]
+                               if g.kind(p.refdes) in ("ic", "connector", "oscillator")}, key=natural_key)}
+
+
+def _pullup_note(g: Graph, net: str, info: dict[str, list[str]]) -> list[str]:
+    if info["pullups"]:
+        return []
+    where = "it may be on another board or inside a device"
+    if info["pullups_dnp"]:
+        options = ", ".join(describe(g, r) for r in info["pullups_dnp"])
+        return [f"no fitted pull-up on {net}; DNP options: {options}; {where}"]
+    return [f"no pull-up found on {net}; {where}"]
 
 
 def find_i2c_buses(g: Graph) -> list[Block]:
@@ -73,9 +86,12 @@ def find_i2c_buses(g: Graph) -> list[Block]:
                  "pullups": [r for n in nets for r in info[n]["pullups"]],
                  "pullup_rails": sorted({x for n in nets for x in info[n]["pullup_rails"]}),
                  "series_resistors": [r for n in nets for r in info[n]["series"]],
-                 "devices": sorted({d for n in nets for d in info[n]["devices"]}, key=natural_key)}
-        notes = [f"no pull-up found on {n}; it may be on another board or inside a device" for n in nets
-                 if not info[n]["pullups"]]
+                 "devices": sorted({d for n in nets for d in info[n]["devices"]}, key=natural_key),
+                 "pullups_dnp": [r for n in nets for r in info[n]["pullups_dnp"]],
+                 "series_resistors_dnp": [r for n in nets for r in info[n]["series_dnp"]]}
+        notes = [x for n in nets for x in _pullup_note(g, n, info[n])]
+        notes += [f"series {', '.join(info[n]['series_dnp'])} on {n} is DNP: the line is open there unless another "
+                  "part bridges it" for n in nets if info[n]["series_dnp"]]
         if len(roles["pullup_rails"]) > 1:
             notes.append(f"pull-ups go to different rails: {', '.join(roles['pullup_rails'])}")
         if roles["pullups"]:

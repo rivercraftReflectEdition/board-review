@@ -48,6 +48,16 @@ def describe(g: Graph, ref: str) -> str:
     return f"{ref}" + (f" {label}" if label else "") + ("" if c.fitted else " (DNP)")
 
 
+def fitted_split(g: Graph, refs: list[str]) -> tuple[list[str], list[str]]:
+    """Refdes split into fitted parts and DNP parts, order kept."""
+    return [r for r in refs if g.fitted(r)], [r for r in refs if not g.fitted(r)]
+
+
+def dnp_note(g: Graph, refs: list[str]) -> list[str]:
+    """A note naming DNP options, or nothing when there are none."""
+    return [f"DNP options: {', '.join(describe(g, r) for r in refs)}"] if refs else []
+
+
 def make_block(g: Graph, kind: str, name: str, score: int, high: int, medium: int, evidence: list[str],
                roles: dict[str, list[str]], notes: list[str] | None = None) -> Block:
     """Build a Block and its subgraph from the refdes and nets named in its roles."""

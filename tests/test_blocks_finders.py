@@ -185,6 +185,56 @@ def test_find_all_skips_nets_explained_elsewhere_and_reports_edges():
     assert "## switching regulator (1)" in text and "### U1 via L1 -> +3V3 (high)" in text
 
 
+def _ti_dnp(*refs):
+    m = _ti()
+    for ref in refs:
+        m.components[ref].fitted = False
+    return Graph(m)
+
+
+def test_filter_total_uses_fitted_caps_and_lists_dnp_apart():
+    b = _only(filters.find_series_filters(_ti_dnp("C6")), "ferrite_filter")
+    assert b.roles["caps_downstream"] == ["C7"] and b.roles["caps_downstream_dnp"] == ["C6"]
+    assert any("downstream C total 1e-07 F" in n for n in b.notes)
+    assert any("DNP options: C6 1uF (DNP)" in n for n in b.notes)
+
+
+def test_i2c_pullups_are_fitted_parts_only():
+    b = _only(i2c.find_i2c_buses(_ti_dnp("R8")), "i2c_bus")
+    assert b.roles["pullups"] == ["R9"] and b.roles["pullups_dnp"] == ["R8"]
+    assert b.roles["pullup_rails"] == ["3V3"]
+    assert any("no fitted pull-up on I2C1_SCL" in n and "R8" in n for n in b.notes)
+    assert not any("different rails" in n for n in b.notes)
+
+
+def test_regulator_output_caps_and_bootstrap_from_fitted_parts():
+    b = _only(regulators.find_switching_regulators(_ti_dnp("C3", "C2")), "switching_regulator")
+    assert b.roles["output_caps"] == ["C4", "C11", "C12"] and b.roles["output_caps_dnp"] == ["C3"]
+    assert "bootstrap" not in b.roles and b.roles["bootstrap_dnp"] == ["C2"]
+    assert any("bootstrap" in n and "C2" in n and "DNP" in n for n in b.notes)
+
+
+def test_regulator_divider_with_a_dnp_leg_is_not_a_divider():
+    b = _only(regulators.find_switching_regulators(_ti_dnp("R1")), "switching_regulator")
+    assert "feedback_top" not in b.roles and b.roles["feedback_top_dnp"] == ["R1"]
+    assert b.roles["feedback_bottom"] == ["R2"]
+    assert not any(e.startswith("divider") for e in b.evidence)
+    assert any("no fitted top or bottom leg" in n for n in b.notes)
+
+
+def test_reset_pullup_and_delay_cap_from_fitted_parts():
+    found = resets.find_reset_nets(_ti_dnp("R5", "C10"))
+    b = next(x for x in found if x.roles["net"] == ["NRST"])
+    assert "pullups" not in b.roles and b.roles["pullups_dnp"] == ["R5"]
+    assert "delay_caps" not in b.roles and b.roles["delay_caps_dnp"] == ["C10"]
+
+
+def test_crystal_load_caps_from_fitted_parts():
+    b = _only(clocks.find_clocks(_ti_dnp("C8")), "crystal")
+    assert b.roles["load_caps"] == ["C9"] and b.roles["load_caps_dnp"] == ["C8"]
+    assert any("no fitted load cap" in n for n in b.notes)
+
+
 @pytest.mark.parametrize("loader", [_ti, _mps, _adi])
 def test_block_dicts_are_json_ready(loader):
     import json

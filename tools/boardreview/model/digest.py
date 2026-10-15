@@ -84,9 +84,12 @@ def power_tree(model: BoardModel, edges: list[str] | None = None) -> str:
         pins = model.nets[net].pins
         head = f"## {net}" + (f" ({v:g} V by name)" if v is not None else "")
         lines += [head, "", f"- evidence: {', '.join(rails[net])}", f"- pins: {len(pins)}"]
-        caps = g.caps_to_ground(net)
+        caps = [c for c in g.caps_to_ground(net) if g.fitted(c)]
+        dnp = [c for c in g.caps_to_ground(net) if not g.fitted(c)]
         if caps:
             lines.append(f"- caps to ground ({len(caps)}): {', '.join(caps)}")
+        if dnp:
+            lines.append(f"- DNP caps to ground ({len(dnp)}): {', '.join(dnp)}")
         links = _series_links(g, net)
         if links:
             lines.append(f"- series links: {'; '.join(links)}")
