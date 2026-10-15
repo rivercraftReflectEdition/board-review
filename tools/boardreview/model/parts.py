@@ -34,6 +34,17 @@ _MPN_FERRITE = re.compile(r"^(?:BLM|BLE|BLA|MPZ|MMZ|HZ|KPZ|FBMH|BK\d|MI\d|742\d|
 _SI = {"p": 1e-12, "n": 1e-9, "u": 1e-6, "µ": 1e-6, "μ": 1e-6, "m": 1e-3, "k": 1e3, "K": 1e3,
        "M": 1e6, "G": 1e9, "R": 1.0, "r": 1.0, "": 1.0}
 _VALUE = re.compile(r"^\s*(\d+(?:[.,]\d+)?)\s*(meg|[pnuµμmkKMGRr]?)(\d*)\s*(ohms?|Ω|F|H|Hz)?\s*$", re.I)
+_UNIT_KINDS = {"ohm": {"resistor", "ferrite", "jumper"}, "f": {"capacitor"}, "h": {"inductor"},
+               "hz": {"crystal", "oscillator"}}
+_KINDS_WITH_UNITS = set().union(*_UNIT_KINDS.values())
+
+
+def _unit_fits(unit: str | None, kind: str) -> bool:
+    """False when the value names a unit that the part kind cannot have (1mF on a resistor)."""
+    if not unit or kind not in _KINDS_WITH_UNITS:
+        return True
+    key = "ohm" if unit.lower().startswith("ohm") else unit.lower()
+    return kind in _UNIT_KINDS.get(key, set())
 
 
 def prefix(refdes: str) -> str:
@@ -69,7 +80,9 @@ def parse_value(text: str, kind: str = "") -> float | None:
     m = _VALUE.match(s)
     if not m:
         return None
-    num, mult, tail, _unit = m.groups()
+    num, mult, tail, unit = m.groups()
+    if not _unit_fits(unit, kind):
+        return None
     num = num.replace(",", ".")
     if tail and "." not in num:
         num = f"{num}.{tail}"

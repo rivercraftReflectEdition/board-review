@@ -102,6 +102,16 @@ def test_parse_value(text, kind, value):
     assert got == (pytest.approx(value) if value is not None else None)
 
 
+@pytest.mark.parametrize("text, kind, value", [
+    ("1mF", "resistor", None), ("10uH", "capacitor", None), ("4.7kohm", "capacitor", None), ("100nF", "inductor", None),
+    ("8MHz", "resistor", None), ("1mF", "capacitor", 1e-3), ("8MHz", "crystal", 8e6), ("0ohm", "jumper", 0.0),
+    ("100nF", "", 100e-9), ("100nF", "other", 100e-9),
+])
+def test_parse_value_rejects_a_unit_that_does_not_fit_the_kind(text, kind, value):
+    got = parts.parse_value(text, kind)
+    assert got == (pytest.approx(value) if value is not None else None)
+
+
 @pytest.mark.parametrize("desc, kind, value", [
     ("100n 10% 50V X7R 0402 Multilayer Ceramic Capacitor", "capacitor", "100nF"),
     ("CAP-A 0.01UF 0402 50V X7R", "capacitor", "0.01UF"),
