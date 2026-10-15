@@ -1,4 +1,4 @@
-"""Timing budgets: a sum of terms against a limit, RC edges, and star tracker timestamp, IMX900 exposure and smear."""
+"""Timing budgets: a sum of terms against a limit, RC edges, timestamp error from slew, sensor line and exposure time, smear."""
 
 from __future__ import annotations
 
@@ -6,9 +6,10 @@ import math
 
 from boardreview.calc.base import Quantity, Result, Verdict
 
-IMX900 = "Sony IMX900-AQR-C/AMR-C data sheet E24604D5Z"
-HMAX_CLOCK_HZ = 74.25e6
-INTEGRATION_OFFSET_S = 1.55e-6
+SENSOR_REF = (
+    "sensor data sheet: line-length register, the clock it counts and the integration formula; "
+    "pass part, revision and page in refs"
+)
 
 
 def _budget(value: float, limit: float | None, what: str, unit_scale: float, unit: str) -> tuple[Verdict, str]:
@@ -93,49 +94,58 @@ def timestamp_error(
     )
 
 
-def imx900_line_time(hmax: int, inck_hz: float = 74.25e6) -> Result:
-    """IMX900 1H period from the HMAX register."""
-    clock = inck_hz if abs(inck_hz - 24e6) < 1.0 else HMAX_CLOCK_HZ
-    t_h = hmax / clock
+def line_time(clocks_per_line: float, clock_hz: float, refs: tuple[str, ...] = ()) -> Result:
+    """Image sensor line period (1H) from its line-length register and the clock that register counts."""
+    t_h = clocks_per_line / clock_hz
     return Result(
-        name="IMX900 line time",
-        formula="1H = HMAX / 74.25 MHz (INCK 37.125, 54 or 74.25 MHz); 1H = HMAX / 24 MHz (INCK 24 MHz)",
-        inputs={"hmax": Quantity(hmax, "clk"), "inck": Quantity(inck_hz, "Hz")},
+        name="sensor line time",
+        formula="1H = clocks per line / line clock",
+        inputs={"clocks_per_line": Quantity(clocks_per_line, "clk"), "clock": Quantity(clock_hz, "Hz")},
         outputs={"t_h": Quantity(t_h, "s", f"{t_h * 1e6:.6g} us")},
         verdict=Verdict.INFO,
-        refs=(f"{IMX900} p. 168, HMAX [15:0] = number of INCK in 1H x 74.25/INCK (24 MHz: number of INCK)",),
-        assumptions=("HMAX taken from the register list of the readout mode in use",),
+        refs=(SENSOR_REF,) + tuple(refs),
+        assumptions=(
+            "line-length register value from the readout mode in use",
+            "clock is the one the line counter runs on, which can differ from the input clock",
+        ),
     )
 
 
-def imx900_exposure(
-    vmax: int, shs: int, hmax: int, inck_hz: float = 74.25e6, t_target_s: float | None = None, tol_s: float = 0.0
+def exposure_time(
+    integration_lines: float,
+    t_line_s: float,
+    offset_s: float = 0.0,
+    t_target_s: float | None = None,
+    tol_s: float = 0.0,
+    refs: tuple[str, ...] = (),
 ) -> Result:
-    """IMX900 global-shutter integration time in normal mode from VMAX, SHS and HMAX."""
-    t_h = imx900_line_time(hmax, inck_hz).outputs["t_h"].value
-    t_int = (vmax - shs) * t_h + INTEGRATION_OFFSET_S
-    if shs >= vmax:
-        verdict, reason = Verdict.FAIL, "SHS must be below the number of lines per frame"
+    """Integration time from the integration line count, the line period and the sensor's fixed offset."""
+    t_int = integration_lines * t_line_s + offset_s
+    if integration_lines <= 0:
+        verdict, reason = Verdict.FAIL, "no integration lines: the shutter line is at or past the frame length"
     elif t_target_s is None:
         verdict, reason = Verdict.INFO, ""
     elif abs(t_int - t_target_s) > tol_s:
         verdict, reason = Verdict.FAIL, f"integration {t_int * 1e3:.6g} ms differs from target {t_target_s * 1e3:.6g} ms"
     else:
         verdict, reason = Verdict.PASS, f"integration {t_int * 1e3:.6g} ms matches target"
+    inputs = {
+        "integration_lines": Quantity(integration_lines, "lines", "for example frame lines minus shutter start line"),
+        "t_line": Quantity(t_line_s, "s"),
+        "offset": Quantity(offset_s, "s"),
+    }
+    if t_target_s is not None:
+        inputs["t_target"] = Quantity(t_target_s, "s")
+        inputs["tol"] = Quantity(tol_s, "s")
     return Result(
-        name="IMX900 integration time",
-        formula="t_int = (VMAX - SHS) * 1H + 1.55 us",
-        inputs={
-            "vmax": Quantity(vmax, "lines"),
-            "shs": Quantity(shs, "lines"),
-            "hmax": Quantity(hmax, "clk"),
-            "inck": Quantity(inck_hz, "Hz"),
-        },
-        outputs={"t_h": Quantity(t_h, "s"), "t_int": Quantity(t_int, "s", f"{t_int * 1e3:.6g} ms")},
+        name="sensor integration time",
+        formula="t_int = integration lines * 1H + offset",
+        inputs=inputs,
+        outputs={"t_int": Quantity(t_int, "s", f"{t_int * 1e3:.6g} ms")},
         verdict=verdict,
         reason=reason,
-        refs=(f"{IMX900} p. 173, 20.7.1 Global Shutter (Normal Mode), integration time formula and tOFFSET 1.55 us",),
-        assumptions=("master mode, so lines per frame = VMAX",),
+        refs=(SENSOR_REF,) + tuple(refs),
+        assumptions=("integration line count and offset from the sensor's shutter mode in use",),
     )
 
 
