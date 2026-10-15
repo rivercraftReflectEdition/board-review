@@ -289,6 +289,11 @@ class BuckPoint:
 
 
 DEFAULT_TOL = {"vin": 0.05, "vout": 0.15, "fsw": 0.25, "l": 0.5, "cout": 0.5}
+_DIMS = (("vout", "vout_v", "V"), ("fsw", "fsw_hz", "Hz"), ("l", "l_h", "H"), ("cout", "cout_f", "F"))
+
+
+def _missing(p: BuckPoint) -> list[str]:
+    return [k for k, attr, _ in _DIMS if getattr(p, attr) is None] + ([] if p.comp else ["comp"])
 
 
 def _mismatches(ours: BuckPoint, ex: BuckPoint, tol: dict[str, float]) -> list[str]:
@@ -298,7 +303,7 @@ def _mismatches(ours: BuckPoint, ex: BuckPoint, tol: dict[str, float]) -> list[s
     lo, hi = ex.vin_min_v * (1 - tol["vin"]), ex.vin_max_v * (1 + tol["vin"])
     if ours.vin_min_v < lo or ours.vin_max_v > hi:
         out.append(f"VIN {ours.vin_min_v:g}-{ours.vin_max_v:g} V vs {ex.vin_min_v:g}-{ex.vin_max_v:g} V")
-    for key, attr, unit in (("vout", "vout_v", "V"), ("fsw", "fsw_hz", "Hz"), ("l", "l_h", "H"), ("cout", "cout_f", "F")):
+    for key, attr, unit in _DIMS:
         a, b = getattr(ours, attr), getattr(ex, attr)
         if a is None or b is None:
             continue
@@ -312,7 +317,7 @@ def example_envelope(
     examples: list[BuckPoint],
     tol: dict[str, float] | None = None,
 ) -> Result:
-    """Flag a design that sits outside every datasheet example circuit."""
+    """Flag a design that sits outside every datasheet example circuit; pass only when every field is known."""
     t = {**DEFAULT_TOL, **(tol or {})}
     if not examples:
         return Result(
@@ -323,8 +328,11 @@ def example_envelope(
             verdict=Verdict.UNKNOWN,
             reason="no examples given",
         )
+    ours_missing = _missing(ours)
     checks = [(ex, _mismatches(ours, ex, t)) for ex in examples]
-    covered = [ex for ex, m in checks if not m]
+    consistent = [ex for ex, m in checks if not m]
+    covered = [ex for ex in consistent if not ours_missing and not _missing(ex)]
+    open_ = [ex for ex in consistent if ours_missing or _missing(ex)]
     same_comp = [ex for ex in examples if not (ours.comp and ex.comp and ex.comp != ours.comp)]
     outputs: dict[str, Quantity] = {
         "examples": Quantity(len(examples), "count"),
@@ -337,10 +345,24 @@ def example_envelope(
         if ls:
             outputs["l_hi_same_comp"] = Quantity(max(ls), "H", "largest example L")
     for ex, m in checks:
-        outputs[f"miss[{ex.name}]"] = Quantity(len(m), "count", "; ".join(m) if m else "covers our point")
+        if m:
+            note = "; ".join(m)
+        elif ex in open_:
+            note = "matches the given values; missing " + ", ".join(ours_missing + [f"example {k}" for k in _missing(ex)])
+        else:
+            note = "covers our point"
+        outputs[f"miss[{ex.name}]"] = Quantity(len(m), "count", note)
     if covered:
         verdict = Verdict.PASS
         reason = "inside " + ", ".join(e.name for e in covered)
+    elif open_:
+        parts = [f"ours: {', '.join(ours_missing)}"] if ours_missing else []
+        parts += [f"{e.name}: {', '.join(_missing(e))}" for e in open_ if _missing(e)]
+        verdict = Verdict.UNKNOWN
+        reason = (
+            f"consistent with {', '.join(e.name for e in open_)} on the values given, but missing "
+            f"{'; '.join(parts)}. Give these to settle coverage"
+        )
     else:
         nearest, miss = min(checks, key=lambda c: len(c[1]))
         verdict = Verdict.MARGINAL
@@ -369,6 +391,7 @@ def example_envelope(
         assumptions=(
             f"our compensation: {ours.comp or 'not stated'}",
             f"VIN range may exceed the example range by {t['vin']:.0%}; other values within a factor ({factors})",
-            "example values not stated on the page are not compared",
+            "tolerances are screening heuristics, not vendor stability guarantees",
+            "a value missing on our side or the example's blocks a pass",
         ),
     )

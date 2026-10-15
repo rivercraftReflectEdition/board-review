@@ -113,6 +113,34 @@ def test_envelope_passes_a_copy_of_the_p30_circuit():
     assert "ldo ch1" in r.reason
 
 
+def test_envelope_with_our_values_missing_is_unknown():
+    ours = BuckPoint("vin and vout only", 11.5, 12.5, 3.3)
+    r = example_envelope(ours, LTC3633A_EXAMPLES)
+    assert r.verdict is Verdict.UNKNOWN
+    assert all(k in r.reason for k in ("fsw", "l", "cout", "comp"))
+
+
+def test_envelope_with_unknown_compensation_is_unknown():
+    ours = BuckPoint("comp unknown", 11.5, 12.5, 3.3, 2.0e6, 1.0e-6, 22e-6)
+    r = example_envelope(ours, LTC3633A_EXAMPLES)
+    assert r.verdict is Verdict.UNKNOWN
+    assert "comp" in r.reason
+
+
+def test_envelope_with_example_values_missing_is_unknown():
+    ours = BuckPoint("ours", 11.5, 12.5, 3.3, 2.0e6, 1.0e-6, 22e-6, "internal")
+    ex = BuckPoint("p1 values only", 6, 20, 3.3, source=f"{DS} p. 1")
+    r = example_envelope(ours, [ex])
+    assert r.verdict is Verdict.UNKNOWN
+    assert "p1 values only" in r.reason and "fsw" in r.reason
+
+
+def test_envelope_tolerances_are_screening_heuristics():
+    ours = BuckPoint("copy", 11.5, 12.5, 3.3, 2.0e6, 1.0e-6, 22e-6, "internal")
+    r = example_envelope(ours, LTC3633A_EXAMPLES)
+    assert any("screening" in a for a in r.assumptions)
+
+
 def test_envelope_without_examples_is_unknown():
     ours = BuckPoint("x", 5, 5, 1.8)
     assert example_envelope(ours, []).verdict is Verdict.UNKNOWN
