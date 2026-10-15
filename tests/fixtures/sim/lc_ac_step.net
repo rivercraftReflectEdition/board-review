@@ -1,0 +1,8 @@
+* Series RLC AC, C stepped
+V1 in 0 AC 1
+R1 in mid 0.5
+L1 mid out 10u
+C1 out 0 {c}
+.step param c list 1u 4u
+.ac dec 50 1k 1meg
+.end

@@ -1,0 +1,5 @@
+* Syntax error on purpose: R1 has no value
+V1 in 0 1
+R1 in out
+.tran 1m
+.end

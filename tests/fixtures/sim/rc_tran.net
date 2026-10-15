@@ -1,0 +1,6 @@
+* RC low-pass, 1k and 10n (tau 10 us), 1 V step at 1 us
+V1 in 0 PULSE(0 1 1u 10n 10n 500u 1m)
+R1 in out 1k
+C1 out 0 10n
+.tran 0 100u 0 50n
+.end

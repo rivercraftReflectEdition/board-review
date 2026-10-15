@@ -1,0 +1,6 @@
+* RC low-pass AC, corner 1/(2 pi 1k 10n) = 15.9 kHz
+V1 in 0 AC 1
+R1 in out 1k
+C1 out 0 10n
+.ac dec 20 100 10meg
+.end

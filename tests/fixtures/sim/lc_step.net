@@ -1,0 +1,10 @@
+* Series RLC step, C stepped: f0 = 1/(2 pi sqrt(L C)), zeta = R/2 sqrt(C/L)
+V1 in 0 PULSE(0 1 2u 10n 10n 1 2)
+R1 in mid 0.5
+L1 mid out 10u
+C1 out 0 {c}
+.param c=1u
+.step param c list 1u 4u
+.tran 0 300u 0 20n
+.options plotwinsize=0
+.end
