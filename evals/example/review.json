@@ -20,7 +20,7 @@
       ],
       "calculations": [
         {
-          "calculator": "calc.buck",
+          "calculator": "calc.buck.current_slew",
           "formula": "slew = (vin * dmax - vout) / l",
           "inputs": {"vin": {"value": 5.0, "unit": "V"}, "dmax": {"value": 0.9, "unit": ""}, "vout": {"value": 3.3, "unit": "V"}, "l": {"value": 3.3e-06, "unit": "H"}},
           "outputs": {"slew": {"value": 363636.0, "unit": "A/s"}},

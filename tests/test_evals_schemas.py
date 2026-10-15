@@ -80,8 +80,9 @@ def test_result_fields_map_onto_the_calculation_schema():
 def test_real_result_serializes_to_a_valid_calculation():
     r = enable_thresholds(1.15, 1.20, 1.25, 1.05, 1.10, 1.15, 100e3, 10.0, r_tol=0.01, i_leak_a=1e-6,
                           vin_min_v=10.8, refs=("synthetic U1 datasheet rev A p.5",))
-    calc = json.loads(json.dumps(_calculation(r, enable_thresholds.__module__.removeprefix("boardreview."))))
-    assert calc["calculator"] == "calc.divider"
+    name = f"{enable_thresholds.__module__.removeprefix('boardreview.')}.{enable_thresholds.__name__}"
+    calc = json.loads(json.dumps(_calculation(r, name)))
+    assert calc["calculator"] == "calc.divider.enable_thresholds" and _resolve(name) is enable_thresholds
     assert score.validate(_finding(calculations=[calc]), FINDING) == []
     ins, outs = calc["inputs"], calc["outputs"]
     assert (ins["r_top"], ins["r_bot"]) == ({"value": 100e3, "unit": "ohm"}, {"value": 10.0, "unit": "ohm"})
@@ -128,6 +129,33 @@ def test_example_reviews_valid():
     for p in list(EVALS.glob("*/review.json")) + list(EVALS.glob("*/clean_review.json")):
         for f in score.review_list(json.loads(p.read_text(encoding="utf-8"))):
             assert score.validate(f, FINDING) == [], (p, f["id"])
+
+
+def _resolve(name: str):
+    parts = f"boardreview.{name}".split(".")
+    for i in range(len(parts), 1, -1):
+        try:
+            obj = importlib.import_module(".".join(parts[:i]))
+        except ModuleNotFoundError:
+            continue
+        for attr in parts[i:]:
+            obj = getattr(obj, attr)
+        return obj
+    raise ModuleNotFoundError(name)
+
+
+def test_calculators_cited_in_example_reviews_resolve():
+    cited = set()
+    for p in list(EVALS.glob("*/review.json")) + list(EVALS.glob("*/clean_review.json")):
+        for f in score.review_list(json.loads(p.read_text(encoding="utf-8"))):
+            cited |= {c["calculator"] for c in f.get("calculations", [])}
+            cited |= {e["ref"] for e in f["evidence"] if e["kind"] == "calculator"}
+    assert "calc.protection.tvs_standoff" in cited
+    for name in sorted(cited):
+        try:
+            _resolve(name)
+        except (ImportError, AttributeError) as exc:
+            pytest.fail(f"{name}: {exc}")
 
 
 def _digest():

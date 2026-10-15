@@ -70,7 +70,7 @@
       "parts": ["D1"],
       "nets": ["VIN_24V"],
       "claim": "The TVS conducts inside the normal input range.",
-      "evidence": [{"kind": "datasheet", "ref": "SMAJ series datasheet, VRWM column"}, {"kind": "calculator", "ref": "calc.tvs"}],
+      "evidence": [{"kind": "datasheet", "ref": "SMAJ series datasheet, VRWM column"}, {"kind": "calculator", "ref": "calc.protection.tvs_standoff"}],
       "fix": "Use the 30 V standoff part and recheck clamp against U1 abs max.",
       "verification": {"status": "CONFIRMED"}
     },

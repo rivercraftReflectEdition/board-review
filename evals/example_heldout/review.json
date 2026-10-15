@@ -11,7 +11,7 @@
       "parts": ["D4"],
       "nets": ["VIN"],
       "claim": "The TVS starts to conduct within the normal input range and leaks or overheats.",
-      "evidence": [{"kind": "datasheet", "ref": "synthetic TVS datasheet p.2"}, {"kind": "calculator", "ref": "calc.tvs"}],
+      "evidence": [{"kind": "datasheet", "ref": "synthetic TVS datasheet p.2"}, {"kind": "calculator", "ref": "calc.protection.tvs_standoff"}],
       "fix": "Use the 28 V standoff part and recheck the clamp against downstream abs max.",
       "verification": {"status": "CONFIRMED"}
     },
