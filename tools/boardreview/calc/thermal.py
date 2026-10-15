@@ -33,6 +33,7 @@ def junction_temp(
             "theta_ja": Quantity(theta_ja_c_per_w, "C/W"),
             "t_ambient": Quantity(t_ambient_c, "C"),
             "tj_max": Quantity(tj_max_c, "C"),
+            "margin_min": Quantity(margin_c, "C", "below Tj max"),
         },
         outputs={"tj": Quantity(tj, "C"), "rise": Quantity(tj - t_ambient_c, "C")},
         verdict=verdict,

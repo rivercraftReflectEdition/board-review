@@ -85,6 +85,10 @@ def dropout(
         "t_off_min": Quantity(t_off_min_s, "s"),
         "t_dead": Quantity(t_dead_s, "s"),
         "iout": Quantity(iout_a, "A"),
+        "r_top": Quantity(r_top_ohm, "ohm"),
+        "r_bot": Quantity(r_bot_ohm, "ohm"),
+        "r_l": Quantity(r_l_ohm, "ohm"),
+        "margin_min": Quantity(margin_frac, "", "headroom as a fraction of VIN"),
     }
     if dmax_measured is not None:
         inputs["dmax_measured"] = Quantity(dmax_measured, "")
@@ -142,16 +146,22 @@ def inductor_ripple(
     reason = "; ".join(problems) if problems else "within the given limits"
     if i_sat_a is None and i_valley_limit_a is None and i_neg_limit_a is None and iout_max_a is None:
         verdict, reason = Verdict.INFO, ""
+    inputs = {
+        "vin": Quantity(vin_v, "V"),
+        "vout": Quantity(vout_v, "V"),
+        "f": Quantity(f_hz, "Hz"),
+        "l": Quantity(l_h, "H"),
+        "iout": Quantity(iout_a, "A"),
+    }
+    for key, value in (
+        ("i_sat", i_sat_a), ("i_valley_limit", i_valley_limit_a), ("i_neg_limit", i_neg_limit_a), ("iout_max", iout_max_a)
+    ):
+        if value is not None:
+            inputs[key] = Quantity(value, "A")
     return Result(
         name="inductor ripple",
         formula="dI = VOUT*(1 - VOUT/VIN)/(f*L); Ipk = IOUT + dI/2; Ivalley = IOUT - dI/2",
-        inputs={
-            "vin": Quantity(vin_v, "V"),
-            "vout": Quantity(vout_v, "V"),
-            "f": Quantity(f_hz, "Hz"),
-            "l": Quantity(l_h, "H"),
-            "iout": Quantity(iout_a, "A"),
-        },
+        inputs=inputs,
         outputs=outputs,
         verdict=verdict,
         reason=reason,
@@ -190,6 +200,7 @@ def current_slew(
         "vout": Quantity(vout_v, "V"),
         "l": Quantity(l_h, "H"),
         "dmax": Quantity(dmax, ""),
+        "asymmetry_limit": Quantity(asymmetry_limit, "", "MARGINAL above this down/up slew ratio"),
     }
     if load_slew_a_per_s is not None:
         inputs["load_slew"] = Quantity(load_slew_a_per_s, "A/s")
@@ -378,6 +389,8 @@ def example_envelope(
     for key, attr, unit in (("fsw", "fsw_hz", "Hz"), ("l", "l_h", "H"), ("cout", "cout_f", "F")):
         if getattr(ours, attr) is not None:
             inputs[key] = Quantity(getattr(ours, attr), unit)
+    for key in ("vin", "vout", "fsw", "l", "cout"):
+        inputs[f"tol_{key}"] = Quantity(t[key], "", "screening tolerance")
     refs = tuple(dict.fromkeys(e.source for e in examples if e.source))
     factors = ", ".join(f"{k} x{1 + t[k]:g}" for k in ("vout", "fsw", "l", "cout"))
     return Result(

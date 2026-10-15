@@ -27,6 +27,7 @@ def load_capacitance(
         verdict, reason = Verdict.INFO, ""
     else:
         inputs["cl_spec"] = Quantity(cl_spec_f, "F")
+        inputs["tol"] = Quantity(tol_frac, "", "allowed CL error")
         err = (cl - cl_spec_f) / cl_spec_f
         outputs["cl_error"] = Quantity(err, "", "relative to CL spec")
         if c0_f is not None and c_motional_f is not None:
@@ -82,6 +83,7 @@ def oscillation_margin(
             verdict, reason = Verdict.PASS, f"Gmcritmax is {ratio:.2f}x the crystal gm_crit"
     if gm_a_per_v is not None:
         inputs["gm"] = Quantity(gm_a_per_v, "A/V")
+        inputs["min_gain_margin"] = Quantity(min_gain_margin, "")
         margin = gm_a_per_v / gm_crit
         outputs["gain_margin"] = Quantity(margin, "")
         if margin < min_gain_margin:

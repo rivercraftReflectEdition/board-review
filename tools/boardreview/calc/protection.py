@@ -31,6 +31,7 @@ def tvs_standoff(
         "v_rail_max": Quantity(v_rail_max_v, "V", "worst-case DC"),
         "ripple_pp": Quantity(ripple_pp_v, "V"),
         "v_rwm": Quantity(v_rwm_v, "V"),
+        "margin_min": Quantity(margin_frac, "", "fraction of VRWM"),
     }
     if v_br_min_v is not None:
         inputs["v_br_min"] = Quantity(v_br_min_v, "V")
@@ -98,6 +99,7 @@ def tvs_clamp(
         "v_abs_max": Quantity(v_abs_max_v, "V"),
         "i_surge": Quantity(i_surge_a, "A"),
         **{f"vc_at_{p[0]:g}A": Quantity(p[1], "V") for p in pts},
+        "margin_min": Quantity(margin_frac, "", "fraction of the abs max"),
     }
     if i_pp_max_a is not None:
         inputs["i_pp_max"] = Quantity(i_pp_max_a, "A")

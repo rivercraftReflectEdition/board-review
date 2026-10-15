@@ -31,7 +31,11 @@ def i2c_rise_time(r_pullup_ohm: float, c_bus_f: float, mode: str = "fast", margi
     return Result(
         name=f"I2C rise time ({mode})",
         formula="tr = 0.8473 * Rp * Cb",
-        inputs={"r_pullup": Quantity(r_pullup_ohm, "ohm"), "c_bus": Quantity(c_bus_f, "F")},
+        inputs={
+            "r_pullup": Quantity(r_pullup_ohm, "ohm"),
+            "c_bus": Quantity(c_bus_f, "F"),
+            "margin_min": Quantity(margin_frac, "", "fraction of tr max"),
+        },
         outputs={"tr": Quantity(tr, "s"), "tr_max": Quantity(m["tr_max_s"], "s")},
         verdict=verdict,
         reason=reason,

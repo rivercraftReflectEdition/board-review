@@ -99,16 +99,17 @@ def test_rc_damper_optimum_matches_formula(n):
         _, z = filter_response(BeadRLC(l, 0.0), Cap(c), f, [Cap(n * c, rd)])
         return float(np.abs(z).max())
 
-    best = peak(opt["rd_opt"])
-    assert best == pytest.approx(opt["zout_peak_opt"], rel=2e-3)
-    assert peak(0.8 * opt["rd_opt"]) > best and peak(1.25 * opt["rd_opt"]) > best
+    rd = opt.outputs["rd_opt"].value
+    best = peak(rd)
+    assert best == pytest.approx(opt.outputs["zout_peak_opt"].value, rel=2e-3)
+    assert peak(0.8 * rd) > best and peak(1.25 * rd) > best
 
 
 def test_series_damping_values():
     o = damping_options(0.25e-6, 100e-9)
-    assert o["r0"] == pytest.approx(math.sqrt(2.5))
-    assert o["r_series_critical"] == pytest.approx(2 * math.sqrt(2.5))
-    assert o["cd"] == pytest.approx(400e-9)
+    assert o.outputs["r0"].value == pytest.approx(math.sqrt(2.5))
+    assert o.outputs["r_series_critical"].value == pytest.approx(2 * math.sqrt(2.5))
+    assert o.outputs["cd"].value == pytest.approx(400e-9)
 
 
 def test_bead_curve_r_includes_rdc_and_sets_the_peak():

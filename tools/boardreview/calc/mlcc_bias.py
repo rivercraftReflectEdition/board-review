@@ -98,8 +98,16 @@ def mlcc_effective(
         d = _CLASS1_PPM["C0G"] * 1e-6 * max(abs(t_lo - 25.0), abs(t_hi - 25.0))
         dc_lo, dc_hi = -d, d
     notes: list[str] = []
+    bracket: dict[str, Quantity] = {}
     if curve_v is not None and curve_ratio is not None:
         ratio = float(np.interp(v_bias_v, curve_v, curve_ratio))
+        k = int(np.clip(np.searchsorted(curve_v, v_bias_v), 1, len(curve_v) - 1))
+        bracket = {
+            "curve_v_lo": Quantity(float(curve_v[k - 1]), "V"),
+            "curve_k_lo": Quantity(float(curve_ratio[k - 1]), "", "C/Cnom"),
+            "curve_v_hi": Quantity(float(curve_v[k]), "V"),
+            "curve_k_hi": Quantity(float(curve_ratio[k]), "", "C/Cnom"),
+        }
         if v_bias_v > float(np.max(curve_v)):
             notes.append(f"bias {v_bias_v:g} V beyond the curve ({np.max(curve_v):g} V)")
         bias_note = "from vendor DC-bias curve"
@@ -129,6 +137,9 @@ def mlcc_effective(
         "tol": Quantity(tol_frac, ""),
         "v_bias": Quantity(v_bias_v, "V"),
         "aging": Quantity(aging_frac, ""),
+        "t_min": Quantity(t_lo, "C", "operating"),
+        "t_max": Quantity(t_hi, "C", "operating"),
+        **bracket,
     }
     if c_required_f is not None:
         inputs["c_required"] = Quantity(c_required_f, "F")

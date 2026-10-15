@@ -27,6 +27,8 @@ class Bead(Protocol):
 
     def uncharacterized(self, f_hz: np.ndarray) -> np.ndarray: ...
 
+    def params(self) -> dict[str, Quantity]: ...
+
 
 @dataclass(frozen=True)
 class BeadRLC:
@@ -51,6 +53,14 @@ class BeadRLC:
 
     def uncharacterized(self, f_hz):
         return np.full(np.shape(f_hz), self.assumed)
+
+    def params(self):
+        return {
+            "l": Quantity(self.l_h, "H"),
+            "rdc": Quantity(self.rdc_ohm, "ohm"),
+            "r_ac": Quantity(self.r_ac_ohm, "ohm"),
+            "c_par": Quantity(self.c_par_f, "F"),
+        }
 
 
 @dataclass(frozen=True)
@@ -80,6 +90,14 @@ class BeadCurve:
     def uncharacterized(self, f_hz):
         f = np.asarray(f_hz, dtype=float)
         return (f < self.f_hz[0]) | (f > self.f_hz[-1])
+
+    def params(self):
+        return {
+            "f_first": Quantity(self.f_hz[0], "Hz"),
+            "f_last": Quantity(self.f_hz[-1], "Hz"),
+            "points": Quantity(len(self.f_hz), "count"),
+            "rdc": Quantity(self.rdc_ohm, "ohm", "used below the first point only"),
+        }
 
 
 @dataclass(frozen=True)
@@ -126,18 +144,29 @@ def parse_bead_csv(text: str, rdc_ohm: float = 0.0, part: str = "") -> BeadCurve
     )
 
 
-def damping_options(l_h: float, c_f: float, n: float = 4.0) -> dict[str, float]:
+def damping_options(l_h: float, c_f: float, n: float = 4.0) -> Result:
     """Series-R and RC-shunt damping values for an LC with characteristic impedance sqrt(L/C)."""
     r0 = math.sqrt(l_h / c_f)
     k = math.sqrt((2 + n) * (4 + 3 * n) / (2 * n * n * (4 + n)))
-    return {
-        "r0": r0,
-        "r_series_q1": r0,
-        "r_series_critical": 2.0 * r0,
-        "cd": n * c_f,
-        "rd_opt": k * r0,
-        "zout_peak_opt": r0 * math.sqrt(2 * (2 + n)) / n,
-    }
+    return Result(
+        name="LC damping options",
+        formula=(
+            "R0 = sqrt(L/C); series R = R0 (Q about 1) or 2 R0 (Q = 0.5); Cd = n C; "
+            "Rd_opt = R0*sqrt((2+n)(4+3n)/(2 n^2 (4+n))); Zout_peak = R0*sqrt(2(2+n))/n"
+        ),
+        inputs={"l": Quantity(l_h, "H"), "c": Quantity(c_f, "F"), "n": Quantity(n, "", "Cd/C")},
+        outputs={
+            "r0": Quantity(r0, "ohm", "sqrt(L/C)"),
+            "r_series_q1": Quantity(r0, "ohm", "series R = sqrt(L/C), Q about 1"),
+            "r_series_critical": Quantity(2.0 * r0, "ohm", "series R = 2 sqrt(L/C), Q = 0.5"),
+            "cd": Quantity(n * c_f, "F", f"Cd = {n:g} C"),
+            "rd_opt": Quantity(k * r0, "ohm", f"optimum Rd for Cd = {n:g} C"),
+            "zout_peak_opt": Quantity(r0 * math.sqrt(2 * (2 + n)) / n, "ohm", "peak Zout with that damper"),
+        },
+        verdict=Verdict.INFO,
+        refs=(ERICKSON,),
+        assumptions=("lossless L and C apart from the damper",),
+    )
 
 
 def _shunt(cap: Cap, dampers: Sequence[Cap], r_load_ohm: float, f: np.ndarray) -> np.ndarray:
@@ -183,7 +212,7 @@ def lc_filter(
     i_z = int(np.argmax(np.abs(zout)))
     l_low = bead.l_low_h()
     f0 = 1.0 / (TWO_PI * math.sqrt(l_low * cap.c_f))
-    opts = damping_options(l_low, cap.c_f)
+    opts = {k: q.value for k, q in damping_options(l_low, cap.c_f).outputs.items()}
     hits = []
     for fs in f_switch_hz:
         for k in range(1, harmonics + 1):
@@ -238,10 +267,17 @@ def lc_filter(
         "z_source": Quantity(z_source_ohm, "ohm"),
         "r_load": Quantity(r_load_ohm, "ohm"),
         "peak_limit": Quantity(peak_limit_db, "dB"),
+        "harmonics": Quantity(harmonics, "count"),
+        "window": Quantity(window_frac, "", "fraction of each harmonic"),
+        "f_min": Quantity(f_min_hz, "Hz"),
+        "f_max": Quantity(f_max_hz, "Hz"),
+        "points_per_decade": Quantity(points_per_decade, "count"),
+        **{f"bead_{k}": q for k, q in bead.params().items()},
     }
     for i, d in enumerate(dampers):
         inputs[f"damper{i + 1}_r"] = Quantity(d.esr_ohm, "ohm")
         inputs[f"damper{i + 1}_c"] = Quantity(d.c_f, "F")
+        inputs[f"damper{i + 1}_esl"] = Quantity(d.esl_h, "H")
     for i, fs in enumerate(f_switch_hz):
         inputs[f"f_switch{i + 1}"] = Quantity(fs, "Hz")
     assumptions = [

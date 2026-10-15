@@ -380,6 +380,10 @@ def margins(
     inputs = {f"b{i + 1}_{k}": q for i, b in enumerate(blocks) for k, q in b.params().items()}
     inputs["f_start"] = Quantity(f_start_hz, "Hz")
     inputs["f_stop"] = Quantity(f_stop_hz, "Hz")
+    inputs["pm_min"] = Quantity(pm_min_deg, "deg")
+    inputs["pm_fail"] = Quantity(pm_fail_deg, "deg")
+    inputs["gm_min"] = Quantity(gm_min_db, "dB")
+    inputs["gm_fail"] = Quantity(gm_fail_db, "dB")
     formula = (
         "T = " + " * ".join(f"[{b.text()}]" for b in blocks)
         + "; PM = 180 + arg T(fc); GM = -|T(f180)| dB; peak_fc = 1/(2 sin(PM/2)); peak_f180 = 1/(1 - 10^(-GM/20))"

@@ -85,6 +85,8 @@ def regulator_output(
             "r_bot": Quantity(r_bot_ohm, "ohm"),
             "r_tol": Quantity(r_tol, ""),
             "i_fb": Quantity(i_fb_a, "A"),
+            **({"v_out_max_allowed": Quantity(v_out_max_allowed_v, "V")} if v_out_max_allowed_v is not None else {}),
+            **({"v_out_min_allowed": Quantity(v_out_min_allowed_v, "V")} if v_out_min_allowed_v is not None else {}),
         },
         outputs={"vout_nom": Quantity(nom, "V"), "vout_min": Quantity(lo, "V"), "vout_max": Quantity(hi, "V")},
         verdict=verdict,
@@ -134,6 +136,7 @@ def enable_thresholds(
     }
     if vin_min_v is not None:
         inputs["vin_min"] = Quantity(vin_min_v, "V")
+        inputs["margin_min"] = Quantity(margin_frac, "", "fraction of VIN min")
     return Result(
         name="enable threshold from divider",
         formula="VIN_th = Vth*(1 + R1/R2) + I*R1; high corner: Vth max, R1 high, R2 low, I into pin",
