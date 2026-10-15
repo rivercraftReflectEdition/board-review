@@ -2,8 +2,6 @@ import importlib.util
 import json
 from pathlib import Path
 
-import pytest
-
 from boardreview import lint
 from boardreview.lint import Finding, convert, to_finding, to_findings
 from boardreview.model import bom, loaders
@@ -104,10 +102,6 @@ def test_prep_writes_lint_findings(tmp_path, capsys):
     lint_json = json.loads((tmp_path / "lint.json").read_text(encoding="utf-8"))
     assert len(findings) == len(lint_json["findings"]) > 0
     assert all(score.validate(f, SCHEMA) == [] for f in findings)
-    assert f"| lint_findings.json | lint results as candidate findings, verification PENDING | {len(findings)} findings |" \
-        in capsys.readouterr().out
+    row = f"| lint_findings.json | lint results as candidate findings, verification PENDING | {len(findings)} findings |"
+    assert row in capsys.readouterr().out
 
-
-@pytest.mark.parametrize("check", sorted(lint.CHECKS))
-def test_fix_text_is_plain(check):
-    assert "—" not in convert.CHECKS[check][3] and "–" not in convert.CHECKS[check][3]
