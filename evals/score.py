@@ -9,7 +9,10 @@ import re
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+import numpy as np
+from scipy.optimize import linear_sum_assignment
+
+ROOT =Path(__file__).resolve().parent.parent
 FINDING_SCHEMA = ROOT / "skill" / "schemas" / "finding.schema.json"
 EXPECTED_SCHEMA = Path(__file__).resolve().parent / "expected.schema.json"
 BUG_CLASSES = Path(__file__).resolve().parent / "bug_classes.json"
@@ -281,10 +284,12 @@ def accepted_blocks(exp: dict, blocks: set[str], modes: set[str]) -> set[str]:
 
 
 def evaluate(exp: dict, rev: dict, blocks: set[str], modes: set[str]) -> tuple[bool, float]:
-    """Match rule: block, location and stated mechanism must agree, and the finding must not assert a pass."""
+    """Match rule: block, location and stated mechanism agree and no pass is asserted; returns (match, specificity)."""
     ok_block = canon_block(rev.get("block", ""), blocks) in accepted_blocks(exp, blocks, modes)
     e_parts, e_nets = norm_parts(exp.get("parts")), finding_nets(exp)
-    overlap = len(e_parts & finding_parts(rev)) + shared_nets(e_nets, finding_nets(rev))
+    r_parts, r_nets = finding_parts(rev), finding_nets(rev)
+    overlap = len(e_parts & r_parts) + shared_nets(e_nets, r_nets)
+    union = len(e_parts | r_parts) + len(e_nets) + len(r_nets) - shared_nets(e_nets, r_nets)
     ok_loc = overlap > 0 or not (e_parts or e_nets)
     rm = canon_mode(rev.get("failure_mode", ""), modes)
     ok_tag = rm == canon_mode(exp.get("failure_mode", ""), modes) or rm in {
@@ -294,7 +299,20 @@ def evaluate(exp: dict, rev: dict, blocks: set[str], modes: set[str]) -> tuple[b
     hits = sum(keyword_hit(k, text) for k in kws)
     ok_mech = bool(kws) and hits >= keywords_needed(kws)
     ok = ok_block and ok_loc and ok_mech and not asserts_pass(rev)
-    return ok, overlap + hits + (2 if ok_tag else 0)
+    return ok, (overlap / union if union else 0.0) + (hits / len(kws) if kws else 0.0) + ok_tag
+
+
+def max_matching(spec: list[list[float | None]]) -> list[tuple[int, int]]:
+    """Most pairs possible, one to one; among those, the highest total specificity."""
+    cells = [(i, j, w) for i, row in enumerate(spec) for j, w in enumerate(row) if w is not None]
+    if not cells:
+        return []
+    big = 1.0 + sum(w for _, _, w in cells)
+    weights = np.zeros((len(spec), len(spec[0])))
+    for i, j, w in cells:
+        weights[i, j] = big + w
+    rows, cols = linear_sum_assignment(weights, maximize=True)
+    return sorted((int(i), int(j)) for i, j in zip(rows, cols) if spec[i][j] is not None)
 
 
 def scored_findings(review: list[dict], include_refuted: bool) -> tuple[list[dict], int]:
@@ -309,25 +327,15 @@ def ratio(num: int, den: int) -> float | None:
 
 def score_board(expected: dict, review: list[dict], schema: dict,
                 include_refuted: bool = False) -> dict:
-    """Pair expected and review findings one to one, best score first, and count the outcome."""
+    """Pair expected and review findings by maximum matching and count the outcome."""
     blocks, modes = vocab(schema)
     exp = expected.get("findings", [])
     good = expected.get("known_good", [])
     revs, refuted = scored_findings(review, include_refuted)
-    pairs = []
-    for ei, e in enumerate(exp):
-        for ri, r in enumerate(revs):
-            ok, s = evaluate(e, r, blocks, modes)
-            if ok:
-                pairs.append((-s, ei, ri))
-    pairs.sort()
-    e_used, r_used, matches = set(), set(), []
-    for _, ei, ri in pairs:
-        if ei not in e_used and ri not in r_used:
-            e_used.add(ei)
-            r_used.add(ri)
-            matches.append((ei, ri))
-    paired_r = {ri for _, _, ri in pairs}
+    spec = [[s if ok else None for ok, s in (evaluate(e, r, blocks, modes) for r in revs)] for e in exp]
+    matches = max_matching(spec)
+    e_used, r_used = {ei for ei, _ in matches}, {ri for _, ri in matches}
+    paired_r = {ri for row in spec for ri, s in enumerate(row) if s is not None}
     dups, good_hits, fps = [], [], []
     for ri, r in enumerate(revs):
         if ri in r_used:

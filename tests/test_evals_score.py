@@ -178,6 +178,21 @@ DROPOUT = {"id": "E1", "title": "x", "block": "ldo", "parts": ["U3"], "failure_m
 HEADROOM = "U3 is in dropout at the 3.0 V input minimum."
 
 
+def test_pairing_finds_the_maximum_number_of_matches():
+    expected = {"board": "t", "findings": [dict(LOOP, id="E1", parts=["U1", "U2"]), dict(LOOP, id="E2", parts=["U1"])]}
+    review = [_finding(id="A", parts=["U1"], claim=OSC), _finding(id="B", parts=["U2"], claim=OSC)]
+    r = score.score_board(expected, review, SCHEMA)
+    assert r["matches"] == [{"expected": "E1", "review": "B"}, {"expected": "E2", "review": "A"}]
+    assert (r["tp"], r["fp"]) == (2, 0)
+
+
+def test_specificity_breaks_ties_between_maximum_pairings():
+    expected = {"board": "t", "findings": [dict(LOOP, id="E1", parts=["U2"])]}
+    review = [_finding(id="WIDE", parts=["U2", "U3", "U4", "U5"], claim=OSC),
+              _finding(id="NARROW", parts=["U2"], claim=OSC)]
+    assert score.score_board(expected, review, SCHEMA)["matches"] == [{"expected": "E1", "review": "NARROW"}]
+
+
 def test_refuted_findings_excluded_unless_asked():
     expected = {"board": "t", "findings": [DROPOUT]}
     review = [_finding(block="ldo", parts=["U3"], failure_mode="dropout", claim=HEADROOM,

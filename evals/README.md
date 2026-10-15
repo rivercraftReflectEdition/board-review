@@ -81,8 +81,13 @@ A missing I2C pull-up on a camera module's control bus filed under camera_csi th
 an expected item filed under io_levels_and_domains. Anything outside the table still needs
 `alt_blocks` in the expected file.
 
-Pairing is one to one. Candidate pairs are ranked by location overlap plus keyword hits plus 2
-for a failure-mode tag match, best first. The tag still ranks pairs; it no longer decides them.
+Pairing is one to one and finds the most pairs possible (maximum bipartite matching, solved
+with `scipy.optimize.linear_sum_assignment`). Expected `{U1, U2}` and `{U1}` against review
+`{U1}` and `{U2}` pair twice, not once. When several pairings reach that count, the scorer keeps
+the one with the highest total specificity. A pair's specificity is the shared parts and nets
+over their union, plus the fraction of keyword groups hit, plus 1 when R's `failure_mode` equals
+E's or one of E's `alt_failure_modes` after synonyms (`oscillation` reads as
+`loop_instability`). The tag ranks pairs; it never decides a match.
 
 Counting:
 - True positive: an expected finding paired with a review finding. Recall = TP / expected.
