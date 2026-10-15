@@ -32,6 +32,7 @@ CASES = [
     lambda: crystal.drive_level(50, 100e-6, i_rms_a=1e-3),
     lambda: thermal.junction_temp(0.5, 43, 25, 125),
     lambda: thermal.buck_ic_dissipation(12, 1.8, 2, 0.145, 0.07, 2e6, 2.3e-9, 0.65e-3),
+    lambda: thermal.via_resistance(9, 0.3e-3, 25e-6, 1.6e-3),
 ]
 
 
