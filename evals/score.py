@@ -325,6 +325,17 @@ def ratio(num: int, den: int) -> float | None:
     return num / den if den else None
 
 
+def same_root_cause(a: dict, b: dict, modes: set[str]) -> bool:
+    """Same failure-mode tag and the same parts, or the same nets when neither names parts."""
+    if canon_mode(a.get("failure_mode", ""), modes) != canon_mode(b.get("failure_mode", ""), modes):
+        return False
+    pa, pb = finding_parts(a), finding_parts(b)
+    if pa or pb:
+        return pa == pb
+    na, nb = finding_nets(a), finding_nets(b)
+    return bool(na) and na == nb
+
+
 def score_board(expected: dict, review: list[dict], schema: dict,
                 include_refuted: bool = False) -> dict:
     """Pair expected and review findings by maximum matching and count the outcome."""
@@ -335,18 +346,19 @@ def score_board(expected: dict, review: list[dict], schema: dict,
     spec = [[s if ok else None for ok, s in (evaluate(e, r, blocks, modes) for r in revs)] for e in exp]
     matches = max_matching(spec)
     e_used, r_used = {ei for ei, _ in matches}, {ri for _, ri in matches}
-    paired_r = {ri for row in spec for ri, s in enumerate(row) if s is not None}
+    paired_to = dict(matches)
     dups, good_hits, fps = [], [], []
     for ri, r in enumerate(revs):
         if ri in r_used:
             continue
-        if ri in paired_r:
+        found = [ei for ei, row in enumerate(spec) if row[ri] is not None and ei in paired_to]
+        if any(same_root_cause(r, revs[paired_to[ei]], modes) for ei in found):
             dups.append(r)
             continue
         hit = next((g for g in good if evaluate(g, r, blocks, modes)[0]), None)
         if hit is not None:
             good_hits.append((r, hit))
-        fps.append(r)
+        fps.append((r, exp[found[0]].get("id") if found else None))
     sev: dict[str, list[int]] = {}
     cls: dict[str, list[int]] = {}
     for ei, e in enumerate(exp):
@@ -374,7 +386,8 @@ def score_board(expected: dict, review: list[dict], schema: dict,
         "matches": [{"expected": exp[ei].get("id"), "review": revs[ri].get("id")} for ei, ri in matches],
         "misses": [{k: e.get(k) for k in ("id", "title", "severity", "block", "bug_class", "lesson") if e.get(k)}
                    for ei, e in enumerate(exp) if ei not in e_used],
-        "false_positives": [{"id": r.get("id"), "title": r.get("title")} for r in fps],
+        "false_positives": [{"id": r.get("id"), "title": r.get("title"), **({"repeats": e} if e else {})}
+                            for r, e in fps],
         "known_good_hits": [{"review": r.get("id"), "known_good": g.get("id")} for r, g in good_hits],
         "duplicate_ids": [r.get("id") for r in dups],
         "schema_errors": schema_errors,
@@ -467,7 +480,8 @@ def format_board(b: dict, reveal: bool) -> list[str]:
         return lines
     lines += [f"MISS {m['id']} [{m.get('severity', '')}] {m.get('block', '')}: {m.get('title', '')}"
               + (f" (lesson {m['lesson']})" if m.get("lesson") else "") for m in b["misses"]]
-    lines += [f"FALSE POSITIVE {f['id']}: {f['title']}" for f in b["false_positives"]]
+    lines += [f"FALSE POSITIVE {f['id']}: {f['title']}" + (f" (repeats {f['repeats']})" if f.get("repeats") else "")
+              for f in b["false_positives"]]
     lines += [f"KNOWN-GOOD FLAGGED {k['review']} matches {k['known_good']}" for k in b["known_good_hits"]]
     lines += [f"DUPLICATE {d}" for d in b["duplicate_ids"]]
     lines += [f"match {m['expected']} <- {m['review']}" for m in b["matches"]]

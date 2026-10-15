@@ -154,7 +154,7 @@ def test_expected_without_location_matches_on_block_and_mechanism():
     assert score.evaluate(exp, f, BLOCKS, MODES)[0]
 
 
-def test_one_to_one_pairing_duplicates_and_known_good():
+def test_one_to_one_pairing_repeats_and_known_good():
     expected = {
         "board": "t",
         "findings": [dict(LOOP, id="E1", parts=["U2", "L2"])],
@@ -169,9 +169,10 @@ def test_one_to_one_pairing_duplicates_and_known_good():
     ]
     r = score.score_board(expected, review, SCHEMA)
     assert r["matches"] == [{"expected": "E1", "review": "B"}]
-    assert r["duplicate_ids"] == ["A"]
+    assert r["duplicate_ids"] == []
+    assert r["false_positives"][0] == {"id": "A", "title": "test finding", "repeats": "E1"}
     assert r["known_good_hits"] == [{"review": "C", "known_good": "K1"}]
-    assert (r["tp"], r["fp"], r["recall"], r["precision"]) == (1, 2, 1.0, pytest.approx(1 / 3))
+    assert (r["tp"], r["fp"], r["recall"], r["precision"]) == (1, 3, 1.0, pytest.approx(1 / 4))
 
 
 DROPOUT = {"id": "E1", "title": "x", "block": "ldo", "parts": ["U3"], "failure_mode": "dropout", "keywords": ["dropout"]}
@@ -191,6 +192,22 @@ def test_specificity_breaks_ties_between_maximum_pairings():
     review = [_finding(id="WIDE", parts=["U2", "U3", "U4", "U5"], claim=OSC),
               _finding(id="NARROW", parts=["U2"], claim=OSC)]
     assert score.score_board(expected, review, SCHEMA)["matches"] == [{"expected": "E1", "review": "NARROW"}]
+
+
+def test_repeats_count_against_precision_unless_parts_and_mode_agree():
+    expected = {"board": "t", "findings": [dict(LOOP, id="E1", parts=["U2", "L2"], nets=["3V3"])]}
+    review = [
+        _finding(id="B", parts=["U2", "L2"], nets=["3V3"], claim=OSC),
+        _finding(id="SAME", parts=["L2", "U2"], claim=OSC, check="buck_regulator#BR-2"),
+        _finding(id="GENERIC", parts=["U2"], claim=OSC),
+        _finding(id="OTHER_MODE", parts=["U2", "L2"], failure_mode="saturation", claim=OSC),
+    ]
+    r = score.score_board(expected, review, SCHEMA)
+    assert r["matches"] == [{"expected": "E1", "review": "B"}]
+    assert r["duplicate_ids"] == ["SAME"]
+    assert r["false_positives"] == [{"id": "GENERIC", "title": "test finding", "repeats": "E1"},
+                                    {"id": "OTHER_MODE", "title": "test finding", "repeats": "E1"}]
+    assert (r["tp"], r["fp"], r["precision"]) == (1, 2, pytest.approx(1 / 3))
 
 
 def test_refuted_findings_excluded_unless_asked():

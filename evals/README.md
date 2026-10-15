@@ -37,7 +37,7 @@ the full result; `--include-refuted` also scores findings the refutation pass ma
 
 The report gives recall and precision per board, totals per split and overall (sums over
 boards), recall by severity, detection per seeded bug class, and lists of misses, false
-positives, known-good hits and duplicates.
+positives (with repeats marked), known-good hits and duplicates.
 
 ## Matching rule
 
@@ -91,8 +91,13 @@ E's or one of E's `alt_failure_modes` after synonyms (`oscillation` reads as
 
 Counting:
 - True positive: an expected finding paired with a review finding. Recall = TP / expected.
-- Duplicate: an unpaired review finding that matches an already-paired expected finding. Listed,
-  not counted in precision.
+- Duplicate: an unpaired review finding that matches an already-paired expected finding and
+  shares a demonstrated root cause with the review finding paired to it: the same
+  `failure_mode` tag after synonyms and the same parts (the same nets when neither names
+  parts). Listed, not counted in precision.
+- Repeat: an unpaired review finding that matches an already-paired expected finding without
+  that common root cause, for example a second finding that names only `U2` for a bug already
+  found at `U2, L2`. Counted as a false positive and listed with the expected item it repeats.
 - Known-good hit: an unpaired review finding that matches a `known_good` item. Counted as a
   false positive and listed.
 - False positive: any other unpaired review finding. Precision = TP / (TP + FP).
