@@ -8,7 +8,7 @@ from dataclasses import dataclass
 import numpy as np
 from scipy import signal
 
-from boardreview.calc.base import Marker, Plot, Quantity, Result, Verdict, plot_from_arrays, si_text
+from boardreview.calc.base import Key, Marker, Plot, Quantity, Result, Verdict, fmt, plot_from_arrays, si_text
 
 MAX_POINTS = 1 << 22
 _trapz = getattr(np, "trapezoid", None) or np.trapz
@@ -339,30 +339,51 @@ def _alternating_peaks(t: np.ndarray, e: np.ndarray, min_height: float) -> list[
 def ring_result(sr: StepResponse, zeta_marginal: float = 0.42, zeta_fail: float = 0.27) -> Result:
     """Ring-down math; a light ring fails, a damped ring passes nothing, and the PM estimate is informational."""
     formula = "r = peak_3 / peak_1; zeta = ln(1/r) / sqrt(4 pi^2 + ln(1/r)^2)"
+    p1 = sr.peaks[0][1] if sr.peaks else float("nan")
     inputs = {
-        "peak_1": Quantity(sr.peaks[0][1] if sr.peaks else float("nan"), "V", "first deviation peak"),
-        "peak_3": Quantity(sr.peaks[2][1] if len(sr.peaks) > 2 else float("nan"), "V", "next same-sign peak"),
+        "peak_1": Quantity(p1, "V", "first deviation peak", "First deviation peak"),
+        "peak_3": Quantity(sr.peaks[2][1] if len(sr.peaks) > 2 else float("nan"), "V", "next same-sign peak",
+                           "Next same-sign peak"),
     }
     if sr.decay_ratio is None:
+        first = f"The first deviation peak is {fmt(p1, 'V')}, but there is" if math.isfinite(p1) else "There is"
         return Result(name="ring-down after step", formula=formula, inputs=inputs, outputs={}, verdict=Verdict.INFO,
                       reason="no second same-sign peak above the noise: damped, or the window is too short; this "
-                             "does not show margin, use the loop gain")
-    outputs = {"r": Quantity(sr.decay_ratio, ""), "f_ring": Quantity(sr.ring_hz, "Hz")}
+                             "does not show margin, use the loop gain",
+                      summary=f"{first} no second same-sign peak above the noise, so there is no ring to measure. "
+                              "The output may be well damped or the window may end early; read the margins from the "
+                              "loop gain.",
+                      key=(Key("peak_1"),) if math.isfinite(p1) else ())
+    outputs = {"r": Quantity(sr.decay_ratio, "", label="Decay ratio"),
+               "f_ring": Quantity(sr.ring_hz, "Hz", label="Ring frequency")}
+    r_s, f_s = fmt(sr.decay_ratio, ""), fmt(sr.ring_hz, "Hz")
     if sr.zeta is None:
         return Result(name="ring-down after step", formula=formula, inputs=inputs, outputs=outputs,
                       verdict=Verdict.FAIL, reason=f"the ring does not decay (r = {sr.decay_ratio:.2f}): sustained or "
-                                                   "growing oscillation")
-    inputs["zeta_marginal"] = Quantity(zeta_marginal, "", "default 0.42, the standard loop's zeta at PM 45 deg")
-    inputs["zeta_fail"] = Quantity(zeta_fail, "", "default 0.27, the standard loop's zeta at PM 30 deg")
-    outputs["zeta"] = Quantity(sr.zeta, "", "closed-loop damping of the ring")
-    outputs["PM_est"] = Quantity(sr.pm_deg_est, "deg", "informational: standard second-order loop only")
+                                                   "growing oscillation",
+                      summary=f"The ring at {f_s} does not decay: each peak is {r_s} times the one a period before. "
+                              "The output oscillates.",
+                      key=(Key("r", "below 1"), Key("f_ring")))
+    inputs["zeta_marginal"] = Quantity(zeta_marginal, "", "default 0.42, the standard loop's zeta at PM 45 deg",
+                                       "Damping ratio wanted")
+    inputs["zeta_fail"] = Quantity(zeta_fail, "", "default 0.27, the standard loop's zeta at PM 30 deg",
+                                   "Damping ratio fail limit")
+    outputs["zeta"] = Quantity(sr.zeta, "", "closed-loop damping of the ring", "Damping ratio")
+    outputs["PM_est"] = Quantity(sr.pm_deg_est, "deg", "informational: standard second-order loop only",
+                                 "Phase margin estimate")
+    z_s = fmt(sr.zeta, "")
+    first = f"The output rings at {f_s} with a damping ratio of {z_s}."
     if sr.zeta < zeta_fail:
         verdict, reason = Verdict.FAIL, f"lightly damped ring, zeta {sr.zeta:.2f} below {zeta_fail:.2f}"
+        then = (f"That is below the {fmt(zeta_fail, '')} fail limit, so it rings for many cycles after each step "
+                "and the loop is close to oscillating.")
     elif sr.zeta < zeta_marginal:
         verdict, reason = Verdict.MARGINAL, f"ring damping zeta {sr.zeta:.2f} below {zeta_marginal:.2f}"
+        then = f"We want at least {fmt(zeta_marginal, '')}, so it rings for a few cycles after each step."
     else:
         verdict = Verdict.INFO
         reason = f"ring damping zeta {sr.zeta:.2f}; a damped ring does not show margin, use the loop gain"
+        then = "A well damped ring does not prove margin; read the margins from the loop gain."
     return Result(
         name="ring-down after step",
         formula=formula + "; PM_est ~ 100 zeta deg",
@@ -374,46 +395,74 @@ def ring_result(sr: StepResponse, zeta_marginal: float = 0.42, zeta_fail: float 
         assumptions=("the ring is one dominant second-order pair",
                      "PM_est holds only for T = wn^2 / (s (s + 2 zeta wn)); a loop zero or a third pole breaks it: "
                      "T = (0.9 - 100 s) / (s^2 + 101 s + 0.1) rings at zeta 0.5 with PM 9 deg"),
+        summary=f"{first} {then}",
+        key=(Key("zeta", f"{fmt(zeta_marginal, '')} or more"), Key("f_ring")),
     )
 
 
 def settling_result(sr: StepResponse, settle_max_s: float | None = None) -> Result:
     """Settling time after a step against an optional limit; still outside the band at the window end fails."""
+    band_s = fmt(sr.band, "V")
+    lim_s = fmt(settle_max_s, "s") if settle_max_s is not None else ""
+    key: tuple[Key, ...] = (Key("t_settle", f"{lim_s} or less" if lim_s else ""),)
     if sr.settle_s is None:
         verdict = Verdict.FAIL
         reason = "not inside the band for the last 20 percent of the window: the ring has not decayed (lengthen " \
                  "the window if it is still decaying)"
-    elif settle_max_s is None:
-        verdict, reason = Verdict.INFO, f"settles in {sr.settle_s * 1e6:.1f} us; no limit given"
+        summary = (f"The output is still outside {band_s} of its final value at the end of the window, so the ring "
+                   "has not decayed. Lengthen the window if it is still decaying.")
+        key = ()
     else:
-        verdict = Verdict.PASS if sr.settle_s <= settle_max_s else Verdict.FAIL
-        reason = f"{sr.settle_s * 1e6:.1f} us against {settle_max_s * 1e6:.1f} us"
+        t_s = fmt(sr.settle_s, "s")
+        said = f"The output settles inside {band_s} of its final value {t_s} after the step."
+        if settle_max_s is None:
+            verdict, reason = Verdict.INFO, f"settles in {sr.settle_s * 1e6:.1f} us; no limit given"
+            summary = f"{said} No settling limit was given."
+        else:
+            verdict = Verdict.PASS if sr.settle_s <= settle_max_s else Verdict.FAIL
+            reason = f"{sr.settle_s * 1e6:.1f} us against {settle_max_s * 1e6:.1f} us"
+            summary = (f"{said} That is within the {lim_s} limit." if verdict is Verdict.PASS else
+                       f"{said} The limit is {lim_s}, so loads see the rail off its value for longer than budgeted.")
     return Result(
         name="settling after step",
         formula="t_settle = last time |V - V_final| > band, after the step",
-        inputs={"band": Quantity(sr.band, "V"),
-                "t_settle_max": Quantity(settle_max_s if settle_max_s is not None else float("nan"), "s")},
-        outputs={"t_settle": Quantity(sr.settle_s if sr.settle_s is not None else float("nan"), "s")},
+        inputs={"band": Quantity(sr.band, "V", label="Settling band"),
+                "t_settle_max": Quantity(settle_max_s if settle_max_s is not None else float("nan"), "s",
+                                         label="Settling time limit")},
+        outputs={"t_settle": Quantity(sr.settle_s if sr.settle_s is not None else float("nan"), "s",
+                                      label="Settling time")},
         verdict=verdict,
         reason=reason,
+        summary=summary,
+        key=key,
     )
 
 
 def deviation_result(sr: StepResponse, dev_max_v: float | None = None) -> Result:
     """Peak deviation from the final value after a step against an optional limit."""
     peak = abs(sr.peak_dev)
+    said = f"The peak deviation after the step is {fmt(sr.peak_dev, 'V')}, {fmt(sr.t_peak_s - sr.t_step_s, 's')} " \
+           "after the edge."
+    lim_s = fmt(dev_max_v, "V") if dev_max_v is not None else ""
     if dev_max_v is None:
         verdict, reason = Verdict.INFO, f"{peak * 1e3:.1f} mV; no limit given"
+        summary = f"{said} No limit was given."
     else:
         verdict = Verdict.PASS if peak <= dev_max_v else Verdict.FAIL
         reason = f"{peak * 1e3:.1f} mV against {dev_max_v * 1e3:.1f} mV"
+        summary = (f"{said} That is within the {lim_s} limit." if verdict is Verdict.PASS else
+                   f"{said} It goes past the {lim_s} limit, so loads on this rail see a bigger dip than budgeted.")
     return Result(
         name="peak deviation after step",
         formula="dV = max |V - V_final| after the step",
-        inputs={"dV_max": Quantity(dev_max_v if dev_max_v is not None else float("nan"), "V")},
-        outputs={"dV": Quantity(sr.peak_dev, "V"), "t_peak": Quantity(sr.t_peak_s, "s")},
+        inputs={"dV_max": Quantity(dev_max_v if dev_max_v is not None else float("nan"), "V",
+                                   label="Deviation limit")},
+        outputs={"dV": Quantity(sr.peak_dev, "V", label="Peak deviation"),
+                 "t_peak": Quantity(sr.t_peak_s, "s", label="Time of the peak")},
         verdict=verdict,
         reason=reason,
+        summary=summary,
+        key=(Key("dV", f"within {lim_s}" if lim_s else ""),),
     )
 
 
@@ -472,17 +521,21 @@ def loop_gain_plot(f_hz: np.ndarray, t_loop: np.ndarray, m: LoopMargins | None =
     ph = np.degrees(np.unwrap(np.angle(tl)))
     ph -= 360.0 * np.round(ph[0] / 360.0)
     lf = np.log(f)
-    marks = [Marker("-180 deg", y=-180.0, unit="deg")]
+    marks = [Marker("-180°", y=-180.0, unit="deg")]
+    caption = "The measured gain never crosses 0 dB in this sweep."
     if m is not None and m.crossover_hz is not None:
         fc = m.crossover_hz
         marks += [Marker(f"fc {si_text(fc, 'Hz')}", x=fc),
-                  Marker(f"PM {m.phase_margin_deg:.0f} deg", x=fc, y=float(np.interp(math.log(fc), lf, ph)),
+                  Marker(f"PM {m.phase_margin_deg:.0f}°", x=fc, y=float(np.interp(math.log(fc), lf, ph)),
                          unit="deg")]
+        side = (f"{fmt(m.phase_margin_deg, 'deg')} above" if m.phase_margin_deg >= 0
+                else f"{fmt(-m.phase_margin_deg, 'deg')} below")
+        caption = f"Read the phase where the gain crosses 0 dB (dashed line, {fmt(fc, 'Hz')}): it is {side} -180°."
     if m is not None and m.phase_crossover_hz is not None and m.gain_margin_db is not None:
         marks += [Marker(f"f180 {si_text(m.phase_crossover_hz, 'Hz')}", x=m.phase_crossover_hz),
                   Marker(f"GM {m.gain_margin_db:.1f} dB", x=m.phase_crossover_hz, y=-m.gain_margin_db, unit="dB")]
     return plot_from_arrays(title, "Frequency", "Hz", f, [("Gain", "dB", mag), ("Phase", "deg", ph)], x_log=True,
-                            markers=marks)
+                            markers=marks, caption=caption)
 
 
 def step_plot(t: np.ndarray, y: np.ndarray, sr: StepResponse, t_end_s: float | None = None,
@@ -499,27 +552,35 @@ def step_plot(t: np.ndarray, y: np.ndarray, sr: StepResponse, t_end_s: float | N
              Marker(f"band -{sr.band * 1e3:.3g} mV", y=sr.final - sr.band, unit="V")]
     if sr.settle_s:
         marks.append(Marker(f"settled {si_text(sr.settle_s, 's')}", x=sr.t_step_s + sr.settle_s))
+    caption = (f"Read how far the output moves after the step ({fmt(sr.peak_dev, 'V')} at the peak) and when it "
+               "stays inside the dashed band.")
     if smooth_period_s:
         ta, ya = box_average(t, y, smooth_period_s)
         ta, ya = window(ta, ya, t0, t_end)
         raw = np.interp(ta, tw, yw)
         series = [("one-period average", "V", ya), ("raw", "V", raw)]
-        return plot_from_arrays(title, "Time", "s", ta, series, markers=marks)
-    return plot_from_arrays(title, "Time", "s", tw, [("output", "V", yw)], markers=marks)
+        return plot_from_arrays(title, "Time", "s", ta, series, markers=marks, caption=caption)
+    return plot_from_arrays(title, "Time", "s", tw, [("output", "V", yw)], markers=marks, caption=caption)
 
 
-def margins_result(m: LoopMargins, pm_min_deg: float = 45.0, gm_min_db: float = 6.0, source: str = "",
+def margins_result(m: LoopMargins, pm_min_deg: float = 45.0, gm_min_db: float = 10.0, source: str = "",
                    f_hz: np.ndarray | None = None, t_loop: np.ndarray | None = None) -> Result:
     """Loop margins as a Result with a verdict against the PM and GM targets; T, when given, adds the Bode plot."""
+    inputs = {"pm_min": Quantity(pm_min_deg, "deg", label="Phase margin wanted"),
+              "gm_min": Quantity(gm_min_db, "dB", label="Gain margin wanted")}
     outputs = {}
     if m.crossover_hz is not None:
-        outputs["f_c"] = Quantity(m.crossover_hz, "Hz", "|T| = 0 dB")
-        outputs["PM"] = Quantity(m.phase_margin_deg, "deg", "180 + angle(T) at f_c")
+        outputs["f_c"] = Quantity(m.crossover_hz, "Hz", "|T| = 0 dB", "Crossover frequency")
+        outputs["PM"] = Quantity(m.phase_margin_deg, "deg", "180 + angle(T) at f_c", "Phase margin")
     if m.gain_margin_db is not None:
-        outputs["f_180"] = Quantity(m.phase_crossover_hz, "Hz", "angle(T) = -180 deg")
-        outputs["GM"] = Quantity(m.gain_margin_db, "dB", "-|T| at f_180")
+        outputs["f_180"] = Quantity(m.phase_crossover_hz, "Hz", "angle(T) = -180 deg", "Phase crossover frequency")
+        outputs["GM"] = Quantity(m.gain_margin_db, "dB", "-|T| at f_180", "Gain margin")
+    pm_min_s, gm_min_s = fmt(pm_min_deg, "deg"), fmt(gm_min_db, "dB")
+    key: list[Key] = []
     if m.crossover_hz is None:
         verdict, reason = Verdict.UNKNOWN, "no 0 dB crossing inside the sweep; widen it"
+        text = ["The measured loop gain never crosses 0 dB inside the sweep, so there is no crossover to read the "
+                "margins at. Widen the sweep."]
     else:
         worst_pm = min(m.phase_margins_deg)
         gm_ok = m.gain_margin_db is None or m.gain_margin_db >= gm_min_db
@@ -534,15 +595,48 @@ def margins_result(m: LoopMargins, pm_min_deg: float = 45.0, gm_min_db: float = 
             ", GM not measured (no -180 deg crossing in the sweep)"
         if len(m.crossovers_hz) > 1:
             reason += f", {len(m.crossovers_hz)} crossovers"
+        text = [f"The measured loop crosses over at {fmt(m.crossover_hz, 'Hz')} with "
+                f"{fmt(m.phase_margin_deg, 'deg')} of phase margin."]
+        pm_key = "PM"
+        if len(m.crossovers_hz) > 1:
+            outputs["PM_worst"] = Quantity(worst_pm, "deg", f"lowest of {len(m.crossovers_hz)} crossings",
+                                           "Worst phase margin")
+            text.append(f"It crosses 0 dB {len(m.crossovers_hz)} times; the worst crossing has "
+                        f"{fmt(worst_pm, 'deg')}.")
+            pm_key = "PM_worst"
+        key.append(Key(pm_key, f"{pm_min_s} or more"))
+        if m.gain_margin_db is not None:
+            text.append(f"The phase reaches -180° at {fmt(m.phase_crossover_hz, 'Hz')}, where the gain margin is "
+                        f"{fmt(m.gain_margin_db, 'dB')}.")
+            key.append(Key("GM", f"{gm_min_s} or more"))
+        else:
+            text.append("The phase does not reach -180° inside the sweep, so the gain margin was not measured.")
+        key.append(Key("f_c"))
+        if verdict is Verdict.PASS:
+            both = f"{pm_min_s} of phase margin" + (f" and {gm_min_s} of gain margin" if m.gain_margin_db is not None
+                                                     else "")
+            text.append(f"We want at least {both}, and the loop has that, so the rail settles cleanly after load "
+                        "steps.")
+        elif verdict is Verdict.FAIL:
+            text.append("With no margin left the loop is unstable: the rail will oscillate.")
+        else:
+            if worst_pm < pm_min_deg:
+                text.append(f"We want at least {pm_min_s}, so the rail will ring for a few cycles after each load "
+                            "step and may oscillate at light load.")
+            if not gm_ok:
+                text.append(f"We want at least {gm_min_s} of gain margin, so a rise in loop gain from load, "
+                            "temperature or part tolerance can push it into oscillation.")
     return Result(
         name="loop margins",
         formula="T = -V(b)/V(a); f_c at |T| = 1; PM = 180 + angle T(f_c); GM = -20 log|T(f_180)|",
-        inputs={},
+        inputs=inputs,
         outputs=outputs,
         verdict=verdict,
         reason=reason,
         refs=(source,) if source else (),
         plots=(loop_gain_plot(f_hz, t_loop, m),) if f_hz is not None and t_loop is not None and len(f_hz) > 1 else (),
+        summary=" ".join(text),
+        key=tuple(key),
     )
 
 
@@ -595,7 +689,15 @@ def impedance_plot(f_hz: np.ndarray, z: np.ndarray, summary: ImpedanceSummary | 
             marks.append(Marker(f"target {si_text(summary.z_target_ohm, 'ohm')}", y=summary.z_target_ohm, unit="ohm"))
         for p in sorted(summary.peaks, key=lambda p: -p.z_ohm)[:3]:
             marks.append(Marker(f"peak {si_text(p.z_ohm, 'ohm')}", x=p.f_hz, y=p.z_ohm, unit="ohm"))
-    return plot_from_arrays(title, "Frequency", "Hz", f, [("|Z|", "ohm", mag)], x_log=True, y_log=True, markers=marks)
+    k = int(np.argmax(mag)) if len(mag) else 0
+    caption = (f"Read the highest point of |Z|: {fmt(float(mag[k]), 'ohm')} at {fmt(float(f[k]), 'Hz')}"
+               if len(mag) else "No impedance data.")
+    if len(mag) and summary is not None and summary.z_target_ohm is not None:
+        caption += f", against the dashed target at {fmt(summary.z_target_ohm, 'ohm')}."
+    elif len(mag):
+        caption += "."
+    return plot_from_arrays(title, "Frequency", "Hz", f, [("|Z|", "ohm", mag)], x_log=True, y_log=True, markers=marks,
+                            caption=caption)
 
 
 def _half_power_q(f: np.ndarray, mag: np.ndarray, i: int) -> float | None:

@@ -10,7 +10,7 @@ from pathlib import Path
 
 import numpy as np
 
-from boardreview.calc.base import Quantity, Result, Verdict
+from boardreview.calc.base import Key, Quantity, Result, Verdict, fmt
 from boardreview.sim import measure
 from boardreview.sim.netlist import (
     GROUND,
@@ -437,23 +437,40 @@ def injection_slew_check(amplitude_v: float, f_hz: float, slew_up_a_per_s: float
     w = 2 * math.pi * f_hz
     a_max = slew_limited_amplitude(slew, f_hz, c_out_f) if slew > 0 else 0.0
     ratio = amplitude_v / a_max if a_max > 0 else float("inf")
+    a_s, f_s, max_s, r_s, m_s = (fmt(amplitude_v, "V"), fmt(f_hz, "Hz"), fmt(a_max, "V"), fmt(ratio, ""),
+                                 fmt(margin, ""))
+    said = (f"The {a_s} output sine at {f_s} is {r_s} times the {max_s} the inductor current can follow there.")
+    key: tuple[Key, ...] = (Key("A/A_max", f"{m_s} or less"), Key("A_max"))
     if slew <= 0:
         verdict, reason = Verdict.FAIL, "no slew available: S_up or S_down is not positive"
+        summary = (f"The inductor current has no slope in one direction (up {fmt(slew_up_a_per_s, 'A/s')}, down "
+                   f"{fmt(slew_down_a_per_s, 'A/s')}), so any injection slew-limits it. Check the input voltage, the "
+                   "duty limits and the inductor.")
+        key = ()
     elif ratio > 1:
         verdict, reason = Verdict.FAIL, f"{amplitude_v * 1e3:.3g} mV exceeds the {a_max * 1e3:.3g} mV slew limit"
+        summary = (f"{said} The inductor cannot follow it, so the measured loop gain is wrong. Lower the injection "
+                   "amplitude.")
     elif ratio > margin:
         verdict, reason = Verdict.MARGINAL, f"{ratio:.0%} of the slew limit; halve the amplitude to be safe"
+        summary = f"{said} We want {m_s} times or less; halve the amplitude to keep a margin."
     else:
         verdict, reason = Verdict.PASS, f"{ratio:.0%} of the slew limit"
+        summary = f"{said} We want {m_s} times or less, so the loop gain reading is not slew limited."
     return Result(
         name="injection amplitude vs inductor slew",
         formula="A_max = min(S_up, S_down) / ((2 pi f)^2 C_out); S_up = (VIN Dmax - VOUT) / L, "
                 "S_down = (VOUT - VIN Dmin) / L; I_sine = A 2 pi f C_out",
-        inputs={"A": Quantity(amplitude_v, "V"), "f": Quantity(f_hz, "Hz"),
-                "S_up": Quantity(slew_up_a_per_s, "A/s"), "S_down": Quantity(slew_down_a_per_s, "A/s"),
-                "C_out": Quantity(c_out_f, "F")},
-        outputs={"A_max": Quantity(a_max, "V"), "A/A_max": Quantity(ratio, ""),
-                 "I_sine": Quantity(amplitude_v * w * c_out_f, "A", "peak sine current in C_out")},
+        inputs={"A": Quantity(amplitude_v, "V", label="Output sine amplitude"),
+                "f": Quantity(f_hz, "Hz", label="Injection frequency"),
+                "S_up": Quantity(slew_up_a_per_s, "A/s", label="Inductor current up-slope"),
+                "S_down": Quantity(slew_down_a_per_s, "A/s", label="Inductor current down-slope"),
+                "C_out": Quantity(c_out_f, "F", label="Output capacitance"),
+                "margin": Quantity(margin, "", label="Largest fraction of the limit wanted")},
+        outputs={"A_max": Quantity(a_max, "V", label="Largest amplitude the inductor can follow"),
+                 "A/A_max": Quantity(ratio, "", label="Fraction of that limit"),
+                 "I_sine": Quantity(amplitude_v * w * c_out_f, "A", "peak sine current in C_out",
+                                    "Peak sine current in the output capacitors")},
         verdict=verdict,
         reason=reason,
         assumptions=("the output sine is carried by C_out alone",
@@ -462,6 +479,8 @@ def injection_slew_check(amplitude_v: float, f_hz: float, slew_up_a_per_s: float
                      "load current plus ripple plus I_sine stays below the current limit; this check does not see "
                      "the current limit",
                      "near crossover the output sine is A/|1+T|, about 1.4 A at 40 deg PM; check the measured V(b)"),
+        summary=summary,
+        key=key,
     )
 
 
@@ -470,24 +489,36 @@ def switching_frequency_check(t: np.ndarray, v_sw: np.ndarray, expected_hz: floa
     """Measured switching frequency against the value the RT/ FREQ network should give."""
     sw = measure.switching_frequency(t, v_sw, t_start_s=t_start_s)
     err = sw.f_hz / expected_hz - 1
+    said = (f"The switch node {label} runs at {fmt(sw.f_hz, 'Hz')}, {fmt(round(err * 100, 2), '%')} from the "
+            f"{fmt(expected_hz, 'Hz')} the timing network sets.")
     if abs(err) > tol:
         verdict = Verdict.FAIL
         reason = (f"{sw.f_hz / 1e3:.1f} kHz is {err:+.1%} from {expected_hz / 1e3:.1f} kHz; check the RT/FREQ "
                   "network wiring before reading anything else from this run")
+        summary = (f"{said} We allow {fmt(tol * 100, '%')}, so check the timing network wiring before reading "
+                   "anything else from this run.")
     elif not sw.regular:
         verdict = Verdict.MARGINAL
         reason = f"period varies {sw.period_cv:.0%}: pulse skipping, burst or a limit cycle"
+        summary = (f"{said} The period varies by {fmt(sw.period_cv * 100, '%')}, which means pulse skipping, burst "
+                   "mode or a limit cycle.")
     else:
         verdict, reason = Verdict.PASS, f"{err:+.1%} from expected"
+        summary = f"{said} That is within the {fmt(tol * 100, '%')} we allow, and the period is steady."
     return Result(
         name=f"switching frequency at {label}",
         formula="f_sw = (N_edges - 1) / (t_last - t_first), rising crossings of the mid level",
-        inputs={"expected": Quantity(expected_hz, "Hz"), "tol": Quantity(tol, "")},
-        outputs={"f_sw": Quantity(sw.f_hz, "Hz"), "error": Quantity(err, ""),
-                 "period_cv": Quantity(sw.period_cv, ""), "duty": Quantity(sw.duty, ""),
-                 "edges": Quantity(sw.n_edges, "")},
+        inputs={"expected": Quantity(expected_hz, "Hz", label="Expected switching frequency"),
+                "tol": Quantity(tol, "", label="Allowed error")},
+        outputs={"f_sw": Quantity(sw.f_hz, "Hz", label="Measured switching frequency"),
+                 "error": Quantity(err, "", label="Error"),
+                 "period_cv": Quantity(sw.period_cv, "", label="Period variation"),
+                 "duty": Quantity(sw.duty, "", label="Duty cycle"),
+                 "edges": Quantity(sw.n_edges, "", label="Edges counted")},
         verdict=verdict,
         reason=reason,
+        summary=summary,
+        key=(Key("f_sw", f"{fmt(expected_hz, 'Hz')} within {fmt(tol * 100, '%')}"),),
     )
 
 
@@ -496,22 +527,37 @@ def edge_resolution_check(t: np.ndarray, v_sw: np.ndarray, t_start_s: float | No
     """Switch edges must be resolved in time; a PWM edge pinned to the max time step quantizes the duty cycle."""
     unc, period = measure.edge_timing_uncertainty(t, v_sw, t_start_s)
     frac = unc / period if period and period == period else float("nan")
+    key: tuple[Key, ...] = (Key("u", f"{fmt(max_frac * 100, '%')} of the period or less"),)
     if frac != frac:
         verdict, reason = Verdict.UNKNOWN, "no regular edges to measure"
-    elif frac > max_frac:
-        verdict = Verdict.MARGINAL
-        reason = (f"edges land on a {unc * 1e9:.3g} ns time grid, {frac:.2%} of the period: the duty cycle is "
-                  "quantized, so modulator gain and loop gain are not trustworthy. Lower the max step or let the "
-                  "model place its own breakpoints")
+        summary = f"There are no regular switch edges at {label} to measure, so edge timing was not checked."
+        key = ()
     else:
-        verdict, reason = Verdict.PASS, f"edge timing within {frac:.3%} of the period"
+        said = (f"Switch edges at {label} land on a {fmt(unc, 's')} time grid, {fmt(frac * 100, '%')} of the "
+                f"{fmt(period, 's')} period." if unc > 0 else
+                f"Switch edges at {label} span two or more time steps, so the edge timing error is {fmt(unc, 's')} "
+                f"in a {fmt(period, 's')} period.")
+        if frac > max_frac:
+            verdict = Verdict.MARGINAL
+            reason = (f"edges land on a {unc * 1e9:.3g} ns time grid, {frac:.2%} of the period: the duty cycle is "
+                      "quantized, so modulator gain and loop gain are not trustworthy. Lower the max step or let the "
+                      "model place its own breakpoints")
+            summary = (f"{said} We want at most {fmt(max_frac * 100, '%')}, so the duty cycle is quantized and the "
+                       "loop gain from this run cannot be trusted. Lower the max time step.")
+        else:
+            verdict, reason = Verdict.PASS, f"edge timing within {frac:.3%} of the period"
+            summary = f"{said} That is within the {fmt(max_frac * 100, '%')} we allow."
     return Result(
         name=f"switch edge resolution at {label}",
         formula="u = time step at edges that jump between two samples; u / T_sw <= 0.2 percent",
-        inputs={"T_sw": Quantity(period, "s")},
-        outputs={"u": Quantity(unc, "s"), "u/T_sw": Quantity(frac, "")},
+        inputs={"T_sw": Quantity(period, "s", label="Switching period"),
+                "max_frac": Quantity(max_frac, "", label="Largest edge step wanted, as a fraction of the period")},
+        outputs={"u": Quantity(unc, "s", label="Edge timing step"),
+                 "u/T_sw": Quantity(frac, "", label="Edge step as a fraction of the period")},
         verdict=verdict,
         reason=reason,
+        summary=summary,
+        key=key,
     )
 
 

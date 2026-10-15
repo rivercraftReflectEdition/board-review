@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Protocol, Sequence
 
 import numpy as np
 from scipy.optimize import brentq
 
-from boardreview.calc.base import Marker, Plot, Quantity, Result, Verdict, plot_from_arrays, si_text
+from boardreview.calc.base import Key, Marker, Plot, Quantity, Result, Verdict, fmt, plot_from_arrays, si_text
 
 TWO_PI = 2.0 * math.pi
 
@@ -38,7 +38,7 @@ class Gain:
         return np.full(np.shape(f_hz), 0.0 if self.k >= 0 else -180.0)
 
     def params(self):
-        return {"k": Quantity(self.k, self.unit)}
+        return {"k": Quantity(self.k, self.unit, label="gain")}
 
     def text(self):
         return f"{self.k:g} {self.unit}".strip()
@@ -59,7 +59,7 @@ class Integrator:
         return np.full(np.shape(f_hz), -90.0)
 
     def params(self):
-        return {"f_unity": Quantity(self.f_unity_hz, "Hz")}
+        return {"f_unity": Quantity(self.f_unity_hz, "Hz", label="unity-gain frequency")}
 
     def text(self):
         return f"wi/s (fi = {self.f_unity_hz:g} Hz)"
@@ -79,7 +79,7 @@ class Pole:
         return -np.degrees(np.arctan(np.asarray(f_hz, dtype=float) / self.f_hz))
 
     def params(self):
-        return {"fp": Quantity(self.f_hz, "Hz")}
+        return {"fp": Quantity(self.f_hz, "Hz", label="pole frequency")}
 
     def text(self):
         return f"1/(1 + s/wp) (fp = {self.f_hz:g} Hz)"
@@ -105,7 +105,8 @@ class Zero:
         return sign * np.degrees(np.arctan(np.asarray(f_hz, dtype=float) / self.f_hz))
 
     def params(self):
-        return {"fz": Quantity(self.f_hz, "Hz", "RHP" if self.rhp else "")}
+        return {"fz": Quantity(self.f_hz, "Hz", "RHP" if self.rhp else "",
+                              label="right-half-plane zero frequency" if self.rhp else "zero frequency")}
 
     def text(self):
         return f"(1 {'-' if self.rhp else '+'} s/wz) (fz = {self.f_hz:g} Hz{', RHP' if self.rhp else ''})"
@@ -129,7 +130,7 @@ class IntegratorZero:
         return -np.degrees(np.arctan(self.f_hz / np.asarray(f_hz, dtype=float)))
 
     def params(self):
-        return {"fz": Quantity(self.f_hz, "Hz")}
+        return {"fz": Quantity(self.f_hz, "Hz", label="integrator zero frequency")}
 
     def text(self):
         return f"(1 + wz/s) (fz = {self.f_hz:g} Hz)"
@@ -156,7 +157,7 @@ class DoublePole:
         return -np.degrees(np.arctan2(im, re))
 
     def params(self):
-        return {"f0": Quantity(self.f_hz, "Hz"), "q": Quantity(self.q, "")}
+        return {"f0": Quantity(self.f_hz, "Hz", label="double-pole frequency"), "q": Quantity(self.q, "", label="double-pole Q")}
 
     def text(self):
         return f"1/(1 + s/(Q*w0) + s^2/w0^2) (f0 = {self.f_hz:g} Hz, Q = {self.q:g})"
@@ -182,7 +183,7 @@ class Delay:
         return -360.0 * np.asarray(f_hz, dtype=float) * self.t_s
 
     def params(self):
-        return {"td": Quantity(self.t_s, "s")}
+        return {"td": Quantity(self.t_s, "s", label="delay")}
 
     def text(self):
         return f"exp(-s*Td) (Td = {self.t_s:g} s)"
@@ -217,9 +218,9 @@ class Divider:
 
     def params(self):
         return {
-            "r_top": Quantity(self.r_top_ohm, "ohm"),
-            "r_bot": Quantity(self.r_bot_ohm, "ohm"),
-            "cff": Quantity(self.cff_f, "F"),
+            "r_top": Quantity(self.r_top_ohm, "ohm", label="top resistor"),
+            "r_bot": Quantity(self.r_bot_ohm, "ohm", label="bottom resistor"),
+            "cff": Quantity(self.cff_f, "F", label="feed-forward capacitor"),
         }
 
     def text(self):
@@ -251,7 +252,8 @@ class ParallelRC:
         return np.degrees(np.arctan(w * self.c_f * self.esr_ohm) - np.arctan(w * self.c_f * (self.r_ohm + self.esr_ohm)))
 
     def params(self):
-        return {"r": Quantity(self.r_ohm, "ohm"), "c": Quantity(self.c_f, "F"), "esr": Quantity(self.esr_ohm, "ohm")}
+        return {"r": Quantity(self.r_ohm, "ohm", label="load resistance"), "c": Quantity(self.c_f, "F", label="capacitance"),
+                "esr": Quantity(self.esr_ohm, "ohm", label="capacitor ESR")}
 
     def text(self):
         return f"R || (ESR + 1/sC) (R = {self.r_ohm:g} ohm, C = {self.c_f:g} F, ESR = {self.esr_ohm:g} ohm)"
@@ -342,20 +344,56 @@ def bode_plot(
     f180_hz: float | None = None,
     points_per_decade: int = 50,
     title: str = "Loop gain",
+    caption: str = "",
 ) -> Plot:
     """Gain and phase of T on a log grid, with the crossover, PM, phase crossover and GM marked."""
     f, mag, ph = bode(blocks, f_start_hz, f_stop_hz, points_per_decade)
-    markers = [Marker("-180 deg", y=-180.0, unit="deg")]
+    markers = [Marker("-180°", y=-180.0, unit="deg")]
     if fc_hz is not None and math.isfinite(fc_hz):
         mag_c, ph_c = loop_response(blocks, fc_hz)
         markers += [Marker(f"fc {si_text(fc_hz, 'Hz')}", x=fc_hz),
-                    Marker(f"PM {180.0 + float(ph_c[0]):.0f} deg", x=fc_hz, y=float(ph_c[0]), unit="deg")]
+                    Marker(f"PM {180.0 + float(ph_c[0]):.0f}°", x=fc_hz, y=float(ph_c[0]), unit="deg")]
     if f180_hz is not None and math.isfinite(f180_hz):
         mag_p, _ = loop_response(blocks, f180_hz)
         markers += [Marker(f"f180 {si_text(f180_hz, 'Hz')}", x=f180_hz),
                     Marker(f"GM {-float(mag_p[0]):.1f} dB", x=f180_hz, y=float(mag_p[0]), unit="dB")]
     return plot_from_arrays(title, "Frequency", "Hz", f, [("Gain", "dB", mag), ("Phase", "deg", ph)],
-                            x_log=True, markers=markers)
+                            x_log=True, markers=markers, caption=caption)
+
+
+def phase_caption(fc_hz: float, pm_deg: float) -> str:
+    """Where to look on a Bode plot: the phase at the gain crossover, against -180°."""
+    side = f"{fmt(pm_deg, 'deg')} above" if pm_deg >= 0 else f"{fmt(-pm_deg, 'deg')} below"
+    return f"Read the phase where the gain crosses 0 dB (dashed line, {fmt(fc_hz, 'Hz')}): it is {side} -180°."
+
+
+def margin_sentences(pm_deg: float, gm_db: float | None, verdict: Verdict, pm_min_deg: float, pm_fail_deg: float,
+                     gm_min_db: float, gm_fail_db: float, conditional: bool = False) -> list[str]:
+    """What the margins mean on the bench, in words that agree with the verdict."""
+    pm_min, gm_min = fmt(pm_min_deg, "deg"), fmt(gm_min_db, "dB")
+    gm_ok = gm_db is None or not math.isfinite(gm_db) or gm_db >= gm_min_db
+    if verdict is Verdict.PASS:
+        both = f"{pm_min} of phase margin and {gm_min} of gain margin" if gm_db is not None else f"{pm_min} of phase margin"
+        return [f"We want at least {both}, and this loop has that, so the rail settles cleanly after load steps."]
+    if verdict is Verdict.FAIL:
+        if pm_deg <= 0 or (gm_db is not None and gm_db <= 0):
+            return ["With no margin left the loop is unstable: the rail will oscillate."]
+        if pm_deg < pm_fail_deg:
+            return [f"That is below the {fmt(pm_fail_deg, 'deg')} fail limit, so the rail will ring hard after each "
+                    "load step and is likely to oscillate."]
+        return [f"The gain margin is below the {fmt(gm_fail_db, 'dB')} fail limit, so a small rise in loop gain from "
+                "load, temperature or part tolerance makes it oscillate."]
+    out = []
+    if pm_deg < pm_min_deg:
+        out.append(f"We want at least {pm_min}, so the rail will ring for a few cycles after each load step and may "
+                   "oscillate at light load.")
+    if not gm_ok:
+        out.append(f"We want at least {gm_min} of gain margin, so a rise in loop gain from load, temperature or part "
+                   "tolerance can push it into oscillation.")
+    if conditional:
+        out.append("The phase also passes -180° below the crossover while the gain is above 0 dB, so the loop is only "
+                   "conditionally stable and can oscillate during start-up or overload.")
+    return out
 
 
 def _gm_above(blocks: Sequence[Block], f_hz: float) -> float:
@@ -401,13 +439,14 @@ def margins(
 ) -> Result:
     """Crossover, phase margin, gain margin and peaking for a loop built from blocks."""
     gc, pc = crossings(blocks, f_start_hz, f_stop_hz)
-    inputs = {f"b{i + 1}_{k}": q for i, b in enumerate(blocks) for k, q in b.params().items()}
-    inputs["f_start"] = Quantity(f_start_hz, "Hz")
-    inputs["f_stop"] = Quantity(f_stop_hz, "Hz")
-    inputs["pm_min"] = Quantity(pm_min_deg, "deg")
-    inputs["pm_fail"] = Quantity(pm_fail_deg, "deg")
-    inputs["gm_min"] = Quantity(gm_min_db, "dB")
-    inputs["gm_fail"] = Quantity(gm_fail_db, "dB")
+    inputs = {f"b{i + 1}_{k}": replace(q, label=f"Block {i + 1} {q.label or k.replace('_', ' ')}")
+              for i, b in enumerate(blocks) for k, q in b.params().items()}
+    inputs["f_start"] = Quantity(f_start_hz, "Hz", label="Sweep start")
+    inputs["f_stop"] = Quantity(f_stop_hz, "Hz", label="Sweep stop")
+    inputs["pm_min"] = Quantity(pm_min_deg, "deg", label="Phase margin wanted")
+    inputs["pm_fail"] = Quantity(pm_fail_deg, "deg", label="Phase margin fail limit")
+    inputs["gm_min"] = Quantity(gm_min_db, "dB", label="Gain margin wanted")
+    inputs["gm_fail"] = Quantity(gm_fail_db, "dB", label="Gain margin fail limit")
     formula = (
         "T = " + " * ".join(f"[{b.text()}]" for b in blocks)
         + "; PM = 180 + arg T(fc); GM = -|T(f180)| dB; peak_fc = 1/(2 sin(PM/2)); peak_f180 = 1/(1 - 10^(-GM/20))"
@@ -417,8 +456,12 @@ def margins(
         "at f180, |1 + T| = 1 - |T|, so |1/(1+T)| = 1/(1 - 10^(-GM/20))",
     ) + tuple(refs)
     if not gc:
+        summary = (f"The loop gain never crosses 0 dB between {fmt(f_start_hz, 'Hz')} and {fmt(f_stop_hz, 'Hz')}, so "
+                   "there is no crossover to read the margins at. Widen the sweep or check the blocks.")
         return Result(name, formula, inputs, {}, Verdict.UNKNOWN, "no 0 dB crossing in the swept range", base_refs,
-                      plots=(bode_plot(blocks, f_start_hz, f_stop_hz),))
+                      plots=(bode_plot(blocks, f_start_hz, f_stop_hz,
+                                       caption="The gain never crosses 0 dB in this sweep."),),
+                      summary=summary)
     fc_min = min(f for f, _ in gc)
     fc_worst, pm = min(gc, key=lambda c: c[1])
     relevant = [(f, g) for f, g in pc if not (pm > 0 and f < fc_min and g < 0)]
@@ -443,22 +486,48 @@ def margins(
     pk_fc = peaking_at_crossover(pm)
     pk_180 = peaking_at_f180(gm)
     outputs = {
-        "fc": Quantity(fc_worst, "Hz", "crossover with the lowest PM"),
-        "pm": Quantity(pm, "deg"),
-        "f180": Quantity(f180 if known else math.nan, "Hz"),
-        "gm": Quantity(gm, "dB", "" if known else "lower bound: phase may cross -180 above f_stop"),
-        "gm_above_f_stop": Quantity(gm_above, "dB", "lowest GM any phase crossing above f_stop can have"),
-        "peak_fc": Quantity(pk_fc, "", f"{_db(pk_fc):.2f} dB"),
-        "peak_f180": Quantity(pk_180, "", f"{_db(pk_180):.2f} dB" + ("" if known else ", upper bound")),
-        "n_gain_crossings": Quantity(len(gc), "count"),
-        "n_phase_crossings": Quantity(len(pc), "count"),
+        "fc": Quantity(fc_worst, "Hz", "crossover with the lowest PM", "Crossover frequency"),
+        "pm": Quantity(pm, "deg", label="Phase margin"),
+        "f180": Quantity(f180 if known else math.nan, "Hz", label="Phase crossover frequency"),
+        "gm": Quantity(gm, "dB", "" if known else "lower bound: phase may cross -180 above f_stop",
+                       "Gain margin" if known else "Gain margin, lower bound"),
+        "gm_above_f_stop": Quantity(gm_above, "dB", "lowest GM any phase crossing above f_stop can have",
+                                    "Lowest gain margin above the sweep"),
+        "peak_fc": Quantity(pk_fc, "", f"{_db(pk_fc):.2f} dB", "Closed-loop peaking at crossover"),
+        "peak_f180": Quantity(pk_180, "", f"{_db(pk_180):.2f} dB" + ("" if known else ", upper bound"),
+                              "Peaking at the phase crossover"),
+        "n_gain_crossings": Quantity(len(gc), "count", label="Gain crossings"),
+        "n_phase_crossings": Quantity(len(pc), "count", label="Phase crossings"),
     }
     for i, (f, p) in enumerate(gc):
-        outputs[f"fc_{i + 1}"] = Quantity(f, "Hz", f"PM {p:.2f} deg")
+        outputs[f"fc_{i + 1}"] = Quantity(f, "Hz", f"PM {p:.2f} deg", f"Gain crossing {i + 1}")
     for i, (f, g) in enumerate(pc):
-        outputs[f"f180_{i + 1}"] = Quantity(f, "Hz", f"GM {g:.2f} dB")
+        outputs[f"f180_{i + 1}"] = Quantity(f, "Hz", f"GM {g:.2f} dB", f"Phase crossing {i + 1}")
     if len(gc) > 1:
         reason += f"; {len(gc)} gain crossings"
+    fc_s, pm_s, gm_s = fmt(fc_worst, "Hz"), fmt(pm, "deg"), fmt(gm, "dB")
+    text = [f"The loop crosses over at {fc_s} with {pm_s} of phase margin." if len(gc) == 1 else
+            f"The gain crosses 0 dB {len(gc)} times; the worst crossing is at {fc_s} with {pm_s} of phase margin."]
+    gm_finite = math.isfinite(gm)
+    if known and gm_finite:
+        text.append(f"The phase reaches -180° at {fmt(f180, 'Hz')}, where the gain margin is {gm_s}.")
+    elif known:
+        text.append("The phase never reaches -180°, so the gain margin is not limited.")
+    elif gm_finite:
+        text.append(f"The phase may reach -180° above the {fmt(f_stop_hz, 'Hz')} sweep, where the gain margin could "
+                    f"be as low as {gm_s}.")
+    else:
+        text.append(f"The phase may reach -180° above the {fmt(f_stop_hz, 'Hz')} sweep, and nothing in the model "
+                    "bounds the gain margin there.")
+    if verdict is Verdict.UNKNOWN:
+        text.append("Extend the sweep past the phase crossing to settle it.")
+    else:
+        text += margin_sentences(pm, gm_swept if math.isfinite(gm_swept) else None, verdict, *limits,
+                                 conditional=conditional)
+    key = [Key("pm", f"{fmt(pm_min_deg, 'deg')} or more")]
+    if gm_finite:
+        key.append(Key("gm", f"{fmt(gm_min_db, 'dB')} or more"))
+    key.append(Key("fc"))
     return Result(
         name=name,
         formula=formula,
@@ -472,7 +541,10 @@ def margins(
             "phase is the sum of block phases, so it is continuous",
             "above f_stop, phase and gain are bounded from each block's limits, not swept",
         ),
-        plots=(bode_plot(blocks, f_start_hz, f_stop_hz, fc_worst, f180 if known else None),),
+        plots=(bode_plot(blocks, f_start_hz, f_stop_hz, fc_worst, f180 if known else None,
+                         caption=phase_caption(fc_worst, pm)),),
+        summary=" ".join(text),
+        key=tuple(key),
     )
 
 
@@ -486,6 +558,10 @@ def cff_lead(r_top_ohm: float, r_bot_ohm: float, cff_f: float, f_hz: float) -> R
     f_max = math.sqrt(fz * fp)
     c_best = 1.0 / (TWO_PI * f_hz * math.sqrt(r_top_ohm * rp))
     gain_hf = 20.0 * math.log10((r_top_ohm + r_bot_ohm) / r_bot_ohm)
+    summary = (f"A {fmt(cff_f, 'F')} capacitor across the {fmt(r_top_ohm, 'ohm')} top resistor puts a zero at "
+               f"{fmt(fz, 'Hz')} and a pole at {fmt(fp, 'Hz')}. At {fmt(f_hz, 'Hz')} it adds {fmt(lead, 'deg')} of "
+               f"phase lead. The most it can add is {fmt(lead_max, 'deg')}, at {fmt(f_max, 'Hz')}; "
+               f"{fmt(c_best, 'F')} would put that peak at {fmt(f_hz, 'Hz')}.")
     return Result(
         name="feed-forward capacitor lead",
         formula=(
@@ -493,19 +569,19 @@ def cff_lead(r_top_ohm: float, r_bot_ohm: float, cff_f: float, f_hz: float) -> R
             "max lead = asin((fp - fz)/(fp + fz)) at sqrt(fz*fp)"
         ),
         inputs={
-            "r_top": Quantity(r_top_ohm, "ohm"),
-            "r_bot": Quantity(r_bot_ohm, "ohm"),
-            "cff": Quantity(cff_f, "F"),
-            "f": Quantity(f_hz, "Hz"),
+            "r_top": Quantity(r_top_ohm, "ohm", label="Top resistor"),
+            "r_bot": Quantity(r_bot_ohm, "ohm", label="Bottom resistor"),
+            "cff": Quantity(cff_f, "F", label="Feed-forward capacitor"),
+            "f": Quantity(f_hz, "Hz", label="Frequency of interest"),
         },
         outputs={
-            "fz": Quantity(fz, "Hz"),
-            "fp": Quantity(fp, "Hz"),
-            "lead_at_f": Quantity(lead, "deg"),
-            "lead_max": Quantity(lead_max, "deg", "set by R1/R2 only"),
-            "f_lead_max": Quantity(f_max, "Hz"),
-            "cff_for_max_lead_at_f": Quantity(c_best, "F"),
-            "hf_gain_boost": Quantity(gain_hf, "dB", "gain rise from below fz to above fp"),
+            "fz": Quantity(fz, "Hz", label="Zero frequency"),
+            "fp": Quantity(fp, "Hz", label="Pole frequency"),
+            "lead_at_f": Quantity(lead, "deg", label="Phase lead at that frequency"),
+            "lead_max": Quantity(lead_max, "deg", "set by R1/R2 only", "Most phase lead"),
+            "f_lead_max": Quantity(f_max, "Hz", label="Frequency of the most lead"),
+            "cff_for_max_lead_at_f": Quantity(c_best, "F", label="Capacitor for the most lead there"),
+            "hf_gain_boost": Quantity(gain_hf, "dB", "gain rise from below fz to above fp", "High-frequency gain rise"),
         },
         verdict=Verdict.INFO,
         refs=(
@@ -513,4 +589,6 @@ def cff_lead(r_top_ohm: float, r_bot_ohm: float, cff_f: float, f_hz: float) -> R
             "lead-lag network algebra: max of atan(f/fz) - atan(f/fp) is at the geometric mean",
         ),
         assumptions=("FB pin input impedance far above R1||R2",),
+        summary=summary,
+        key=(Key("lead_at_f"), Key("lead_max"), Key("cff_for_max_lead_at_f")),
     )

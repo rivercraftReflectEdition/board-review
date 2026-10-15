@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 
-from boardreview.calc.base import Marker, Plot, Quantity, Result, Verdict, plot_from_arrays, si_text
+from boardreview.calc.base import Key, Marker, Plot, Quantity, Result, Verdict, fmt, plot_from_arrays, si_text
 from boardreview.sim import measure
 from boardreview.sim.netlist import GROUND, Element, norm_name, parse_netlist, read_netlist_text
 from boardreview.sim.runner import RunResult, run, run_many
@@ -284,7 +284,7 @@ class LoopGainResult:
     def t(self) -> np.ndarray:
         return np.array([p.t for p in self.points])
 
-    def margins_result(self, pm_min_deg: float = 45.0, gm_min_db: float = 6.0) -> Result | None:
+    def margins_result(self, pm_min_deg: float = 45.0, gm_min_db: float = 10.0) -> Result | None:
         if self.margins is None:
             return None
         return measure.margins_result(self.margins, pm_min_deg, gm_min_db,
@@ -298,8 +298,11 @@ class LoopGainResult:
         mr = self.margins_result()
         if mr is not None:
             return [mr]
+        n = len(self.points)
         return [Result(name="loop margins", formula="needs T at two or more frequencies", inputs={}, outputs={},
-                       verdict=Verdict.UNKNOWN, reason=f"{len(self.points)} measured point(s)")]
+                       verdict=Verdict.UNKNOWN, reason=f"{n} measured point(s)",
+                       summary=f"Only {n} frequency {'point was' if n == 1 else 'points were'} measured, so there is "
+                               "no loop gain curve to read the margins from. Measure at two or more frequencies.")]
 
     @property
     def measured(self) -> Verdict:
@@ -359,7 +362,9 @@ def measure_loop_gain_point(run_result: RunResult, setup: LoopGainSetup, f_hz: f
         else:
             report.results.append(Result(name="lock-in convergence", formula="T(second half) / T(first half)",
                                          inputs={}, outputs={}, verdict=Verdict.UNKNOWN,
-                                         reason="fewer than 2 measured periods; nothing to compare"))
+                                         reason="fewer than 2 measured periods; nothing to compare",
+                                         summary="Fewer than two periods were measured at this frequency, so the "
+                                                 "two halves of the window cannot be compared."))
     return LoopGainPoint(f_hz=f_hz, t=-xb / xa, va=xa, vb=xb, fsw_hz=fsw_meas)
 
 
@@ -373,19 +378,30 @@ def lockin_convergence(early: complex, late: complex, f_hz: float, max_db: float
     """T from the first and the last half of the measurement window must agree, or the response has not settled."""
     r = late / early
     d_db, d_deg = 20 * math.log10(abs(r)), math.degrees(np.angle(r))
+    said = (f"At {fmt(f_hz, 'Hz')} the loop gain changes by {fmt(d_db, 'dB')} and its phase by {fmt(d_deg, 'deg')} "
+            "between the first and the last half of the window.")
+    limit = f"within {fmt(max_db, 'dB')} and {fmt(max_deg, 'deg')}"
     if abs(d_db) <= max_db and abs(d_deg) <= max_deg:
         verdict, reason = Verdict.PASS, "the two halves of the window agree"
+        summary = f"{said} Both are {limit}, so the response had settled before the measurement."
     else:
         verdict = Verdict.MARGINAL if abs(d_db) <= 4 * max_db and abs(d_deg) <= 4 * max_deg else Verdict.FAIL
         reason = (f"T moved {d_db:+.2f} dB and {d_deg:+.1f} deg between the halves of the window at {f_hz:.4g} Hz: "
                   "not settled; raise n_settle_periods or min_settle_s")
+        summary = (f"{said} We want them {limit}, so the response had not settled. Allow more settling periods "
+                   "before the measurement.")
     return Result(
         name="lock-in convergence",
         formula=f"dT = T(last half) / T(first half); settled if |dT| <= {max_db} dB and angle <= {max_deg} deg",
-        inputs={"f": Quantity(f_hz, "Hz")},
-        outputs={"d_mag": Quantity(d_db, "dB"), "d_phase": Quantity(d_deg, "deg")},
+        inputs={"f": Quantity(f_hz, "Hz", label="Injection frequency"),
+                "max_db": Quantity(max_db, "dB", label="Allowed gain change"),
+                "max_deg": Quantity(max_deg, "deg", label="Allowed phase change")},
+        outputs={"d_mag": Quantity(d_db, "dB", label="Gain change between halves"),
+                 "d_phase": Quantity(d_deg, "deg", label="Phase change between halves")},
         verdict=verdict,
         reason=reason,
+        summary=summary,
+        key=(Key("d_mag", f"within {fmt(max_db, 'dB')}"), Key("d_phase", f"within {fmt(max_deg, 'deg')}")),
     )
 
 
@@ -420,8 +436,10 @@ def run_loop_gain(setup: LoopGainSetup, freqs: list[float], workdir: str | Path,
                                               **run_kwargs))
     else:
         why = "linearity=False" if not linearity else "no crossover to rerun at"
+        said = "the linearity rerun was turned off" if not linearity else "there is no crossover to rerun at"
         report.results.append(Result(name="loop gain linearity", formula="T(A) vs T(A ratio)", inputs={}, outputs={},
-                                     verdict=Verdict.UNKNOWN, reason=f"amplitude independence not checked ({why})"))
+                                     verdict=Verdict.UNKNOWN, reason=f"amplitude independence not checked ({why})",
+                                     summary=f"The loop gain was not checked for amplitude dependence: {said}."))
     return LoopGainResult(points, margins, report, runs)
 
 
@@ -433,20 +451,40 @@ def linearity_check(setup: LoopGainSetup, f_hz: float, workdir: str | Path, rati
                     [f"lin_full_{f_hz:.0f}Hz", f"lin_small_{f_hz:.0f}Hz"], **run_kwargs)
     if not all(r.ok for r in runs):
         return Result(name="loop gain linearity", formula="T(A) vs T(A ratio)", inputs={}, outputs={},
-                      verdict=Verdict.UNKNOWN, reason="; ".join(p for r in runs for p in r.problems()))
+                      verdict=Verdict.UNKNOWN, reason="; ".join(p for r in runs for p in r.problems()),
+                      summary="The linearity rerun did not complete, so the loop gain was not checked for amplitude "
+                              "dependence.")
     a = measure_loop_gain_point(runs[0], setup, f_hz)
     b = measure_loop_gain_point(runs[1], small, f_hz)
     d_db = b.mag_db - a.mag_db
     d_deg = (b.phase_deg - a.phase_deg + 180.0) % 360.0 - 180.0
+    return linearity_result(f_hz, setup.amplitude_v, ratio, d_db, d_deg, max_db, max_deg)
+
+
+def linearity_result(f_hz: float, amplitude_v: float, ratio: float, d_db: float, d_deg: float, max_db: float = 0.5,
+                     max_deg: float = 3.0) -> Result:
+    """Change of T between the full and the reduced injection amplitude, against the small-signal limits."""
     ok = abs(d_db) <= max_db and abs(d_deg) <= max_deg
+    said = (f"Rerun at {fmt(ratio, '')} times the {fmt(amplitude_v, 'V')} injection at {fmt(f_hz, 'Hz')}, the loop "
+            f"gain changes by {fmt(d_db, 'dB')} and its phase by {fmt(d_deg, 'deg')}.")
+    limit = f"{fmt(max_db, 'dB')} and {fmt(max_deg, 'deg')}"
+    summary = (f"{said} Both are within {limit}, so the measured loop gain does not depend on the amplitude." if ok
+               else f"{said} We allow {limit}, so the measured loop gain depends on the amplitude: slew limit, "
+                    "clipping or locking. Lower the injection amplitude.")
     return Result(
         name="loop gain linearity",
         formula="dT = T(A ratio) / T(A); small signal if |dT| <= 0.5 dB and angle <= 3 deg",
-        inputs={"f": Quantity(f_hz, "Hz"), "A": Quantity(setup.amplitude_v, "V"), "ratio": Quantity(ratio, "")},
-        outputs={"d_mag": Quantity(d_db, "dB"), "d_phase": Quantity(d_deg, "deg")},
+        inputs={"f": Quantity(f_hz, "Hz", label="Frequency"), "A": Quantity(amplitude_v, "V", label="Injection amplitude"),
+                "ratio": Quantity(ratio, "", label="Amplitude ratio of the rerun"),
+                "max_db": Quantity(max_db, "dB", label="Allowed gain change"),
+                "max_deg": Quantity(max_deg, "deg", label="Allowed phase change")},
+        outputs={"d_mag": Quantity(d_db, "dB", label="Gain change at the smaller amplitude"),
+                 "d_phase": Quantity(d_deg, "deg", label="Phase change at the smaller amplitude")},
         verdict=Verdict.PASS if ok else Verdict.FAIL,
         reason="T does not depend on the amplitude" if ok else
         "T changes with the amplitude: slew limit, clipping or locking; lower the amplitude",
+        summary=summary,
+        key=(Key("d_mag", f"within {fmt(max_db, 'dB')}"), Key("d_phase", f"within {fmt(max_deg, 'deg')}")),
     )
 
 
@@ -679,37 +717,63 @@ def startup_plot(t: np.ndarray, vout: np.ndarray, vin: np.ndarray, m: Startup, v
     if m.overshoot_pct > 0.5:
         k = int(np.argmax(vout))
         marks.append(Marker(f"overshoot {m.overshoot_pct:.0f} %", x=float(t[k]), y=float(vout[k]), unit="V"))
+    when = f" (dashed line, {fmt(m.t_reg_s, 's')})" if m.t_reg_s is not None else ""
+    caption = (f"Read where the output reaches {fmt(v_target_v, 'V')} and stays there{when}; the second trace is the "
+               "input ramp.")
     return plot_from_arrays(title, "Time", "s", t, [("output", "V", vout), ("input", "V", np.asarray(vin, float))],
-                            markers=marks)
+                            markers=marks, caption=caption)
 
 
 def startup_result(m: Startup, v_target_v: float, overshoot_max_pct: float = 10.0,
                    plot: Plot | None = None) -> Result:
     """Start-up verdict: in regulation at the end, no restarts, overshoot within the limit, monotonic rise."""
     fails = []
+    target_s, ov_s, max_s = fmt(v_target_v, "V"), fmt(m.overshoot_pct, "%"), fmt(overshoot_max_pct, "%")
     if m.t_reg_s is None:
         fails.append("never settles in the band")
+        said = [f"The output never settles within 2% of {target_s}; it ends at {fmt(m.final_v, 'V')}, with {ov_s} "
+                "overshoot."]
+    else:
+        said = [f"The output reaches {target_s} and stays within 2% after {fmt(m.t_reg_s, 's')}, with {ov_s} "
+                "overshoot."]
     if m.restarts:
         fails.append(f"{m.restarts} restart(s): output fell below half of target after reaching 90 percent, hiccup "
                      "or UVLO cycling")
+        said.append(f"It restarts {fmt(m.restarts, '')} times: after reaching 90% it falls below half the target, "
+                    "which is hiccup or UVLO cycling.")
     if m.overshoot_pct > overshoot_max_pct:
         fails.append(f"overshoot {m.overshoot_pct:.0f} percent exceeds {overshoot_max_pct:.0f} percent")
+        said.append(f"The overshoot of {ov_s} is above the {max_s} limit.")
     if fails:
         verdict, reason = Verdict.FAIL, "; ".join(fails)
+        said.append("Loads on this rail see a start-up they were not designed for.")
     elif not m.monotonic:
         verdict, reason = Verdict.MARGINAL, "rise not monotonic"
+        said.append("The rise is not monotonic, which can upset loads that start at a voltage threshold.")
     else:
         verdict, reason = Verdict.PASS, f"in regulation at {m.t_reg_s * 1e6:.0f} us"
+        said.append(f"The rise is monotonic, with no restarts and the overshoot within the {max_s} limit.")
+    key =[Key("overshoot", f"{max_s} or less")]
+    if m.t_reg_s is not None:
+        key.insert(0, Key("t_reg"))
+    if m.restarts:
+        key.append(Key("restarts", "none"))
     return Result(
         name="start-up",
         formula="t_reg = last time |Vout - Vtarget| > 2 percent; overshoot = max(Vout)/Vtarget - 1",
-        inputs={"V_target": Quantity(v_target_v, "V"), "overshoot_max": Quantity(overshoot_max_pct, "%")},
-        outputs={"t_reg": Quantity(m.t_reg_s if m.t_reg_s is not None else float("nan"), "s"),
-                 "overshoot": Quantity(m.overshoot_pct, "%"), "restarts": Quantity(m.restarts, ""),
-                 "V_final": Quantity(m.final_v, "V"), "Vin_min_after_ramp": Quantity(m.vin_min_after_ramp_v, "V")},
+        inputs={"V_target": Quantity(v_target_v, "V", label="Target output"),
+                "overshoot_max": Quantity(overshoot_max_pct, "%", label="Overshoot limit")},
+        outputs={"t_reg": Quantity(m.t_reg_s if m.t_reg_s is not None else float("nan"), "s",
+                                   label="Time to regulation"),
+                 "overshoot": Quantity(m.overshoot_pct, "%", label="Overshoot"),
+                 "restarts": Quantity(m.restarts, "", label="Restarts"),
+                 "V_final": Quantity(m.final_v, "V", label="Final output"),
+                 "Vin_min_after_ramp": Quantity(m.vin_min_after_ramp_v, "V", label="Lowest input after the ramp")},
         verdict=verdict,
         reason=reason,
         plots=(plot,) if plot is not None else (),
+        summary=" ".join(said),
+        key=tuple(key),
     )
 
 
@@ -858,7 +922,8 @@ class ImpedanceResult:
         s = self.summary
         if s is None:
             return [Result(name="rail impedance peak", formula="Z = V(rail) / I_inj with I_inj = 1 A AC", inputs={},
-                           outputs={}, verdict=Verdict.UNKNOWN, reason="no data: the run failed")]
+                           outputs={}, verdict=Verdict.UNKNOWN, reason="no data: the run failed",
+                           summary="The run failed, so there is no impedance data to read.")]
         plots = [measure.impedance_plot(self.f_hz, self.z, s)]
         if self.transfer is not None:
             plots.append(transfer_plot(self.f_hz, self.transfer))
@@ -898,24 +963,38 @@ def transfer_plot(f_hz: np.ndarray, transfer: np.ndarray, title: str = "Transfer
     f = np.asarray(f_hz, dtype=float)
     mark = Marker(f"peak {round(float(g[k]), 1) + 0.0:.1f} dB at {si_text(float(f[k]), 'Hz')}", x=float(f[k]),
                   y=float(g[k]), unit="dB")
-    return plot_from_arrays(title, "Frequency", "Hz", f, [("Transfer", "dB", g)], x_log=True, markers=[mark])
+    caption = (f"Read the peak: {fmt(float(g[k]), 'dB')} at {fmt(float(f[k]), 'Hz')}. Above 0 dB the filter passes "
+               "more source noise to the rail than it gets.")
+    return plot_from_arrays(title, "Frequency", "Hz", f, [("Transfer", "dB", g)], x_log=True, markers=[mark],
+                            caption=caption)
 
 
 def impedance_result(z_target_ohm: float | None, peak_z_ohm: float, f_hz: float,
                      plots: tuple[Plot, ...] = ()) -> Result:
     """Peak rail impedance against a target impedance (V ripple allowed / transient current)."""
+    said = f"The rail impedance peaks at {fmt(peak_z_ohm, 'ohm')} at {fmt(f_hz, 'Hz')}."
     if z_target_ohm is None:
         verdict, reason = Verdict.INFO, "no target given"
+        summary, want = f"{said} No target impedance was given.", ""
     else:
+        target_s = fmt(z_target_ohm, "ohm")
         verdict = Verdict.PASS if peak_z_ohm <= z_target_ohm else Verdict.FAIL
         reason = f"{peak_z_ohm * 1e3:.1f} mOhm at {f_hz / 1e3:.4g} kHz against {z_target_ohm * 1e3:.1f} mOhm"
+        summary = (f"{said} That is under the {target_s} target." if verdict is Verdict.PASS else
+                   f"{said} That is above the {target_s} target, so a load current at that frequency moves the rail "
+                   "more than budgeted.")
+        want = f"{target_s} or less"
     return Result(
         name="rail impedance peak", formula="Z = V(rail) / I_inj with I_inj = 1 A AC",
-        inputs={"Z_target": Quantity(z_target_ohm if z_target_ohm is not None else float("nan"), "ohm")},
-        outputs={"Z_peak": Quantity(peak_z_ohm, "ohm"), "f_peak": Quantity(f_hz, "Hz")},
+        inputs={"Z_target": Quantity(z_target_ohm if z_target_ohm is not None else float("nan"), "ohm",
+                                     label="Target impedance")},
+        outputs={"Z_peak": Quantity(peak_z_ohm, "ohm", label="Peak impedance"),
+                 "f_peak": Quantity(f_hz, "Hz", label="Frequency of the peak")},
         verdict=verdict,
         reason=reason,
         plots=plots,
+        summary=summary,
+        key=(Key("Z_peak", want), Key("f_peak")),
     )
 
 

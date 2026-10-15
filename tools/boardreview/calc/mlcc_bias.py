@@ -6,7 +6,7 @@ import re
 
 import numpy as np
 
-from boardreview.calc.base import Marker, Quantity, Result, Verdict, plot_from_arrays, si_text
+from boardreview.calc.base import Key, Marker, Quantity, Result, Verdict, fmt, plot_from_arrays, si_text
 from boardreview.calc.curves import find_column, parse_csv_table, unit_scale
 
 CLASS2_CODES = (
@@ -106,10 +106,10 @@ def mlcc_effective(
         ratio = float(np.interp(v_bias_v, curve_v, curve_ratio))
         k = int(np.clip(np.searchsorted(curve_v, v_bias_v), 1, len(curve_v) - 1))
         bracket = {
-            "curve_v_lo": Quantity(float(curve_v[k - 1]), "V"),
-            "curve_k_lo": Quantity(float(curve_ratio[k - 1]), "", "C/Cnom"),
-            "curve_v_hi": Quantity(float(curve_v[k]), "V"),
-            "curve_k_hi": Quantity(float(curve_ratio[k]), "", "C/Cnom"),
+            "curve_v_lo": Quantity(float(curve_v[k - 1]), "V", label="Curve point below the bias"),
+            "curve_k_lo": Quantity(float(curve_ratio[k - 1]), "", "C/Cnom", "Capacitance ratio below the bias"),
+            "curve_v_hi": Quantity(float(curve_v[k]), "V", label="Curve point above the bias"),
+            "curve_k_hi": Quantity(float(curve_ratio[k]), "", "C/Cnom", "Capacitance ratio above the bias"),
         }
         if v_bias_v > float(np.max(curve_v)):
             notes.append(f"bias {v_bias_v:g} V beyond the curve ({np.max(curve_v):g} V)")
@@ -134,18 +134,53 @@ def mlcc_effective(
     else:
         verdict, reason = Verdict.PASS, f"worst-case {c_lo * 1e9:.4g} nF meets {c_required_f * 1e9:.4g} nF"
     inputs = {
-        "c_nom": Quantity(c_nom_f, "F"),
-        "dc_temp_low": Quantity(dc_lo, "", f"{dielectric}, rated {t_lo_rated:g} to {t_hi_rated:g} C"),
-        "dc_temp_high": Quantity(dc_hi, ""),
-        "tol": Quantity(tol_frac, ""),
-        "v_bias": Quantity(v_bias_v, "V"),
-        "aging": Quantity(aging_frac, ""),
-        "t_min": Quantity(t_lo, "C", "operating"),
-        "t_max": Quantity(t_hi, "C", "operating"),
+        "c_nom": Quantity(c_nom_f, "F", label="Rated capacitance"),
+        "dc_temp_low": Quantity(dc_lo, "", f"{dielectric}, rated {t_lo_rated:g} to {t_hi_rated:g} C",
+                                "Temperature change, low side"),
+        "dc_temp_high": Quantity(dc_hi, "", label="Temperature change, high side"),
+        "tol": Quantity(tol_frac, "", label="Tolerance"),
+        "v_bias": Quantity(v_bias_v, "V", label="DC bias"),
+        "aging": Quantity(aging_frac, "", label="Aging loss"),
+        "t_min": Quantity(t_lo, "C", "operating", "Lowest operating temperature"),
+        "t_max": Quantity(t_hi, "C", "operating", "Highest operating temperature"),
         **bracket,
     }
     if c_required_f is not None:
-        inputs["c_required"] = Quantity(c_required_f, "F")
+        inputs["c_required"] = Quantity(c_required_f, "F", label="Capacitance required")
+    part = f"{fmt(c_nom_f, 'F')} {dielectric}"
+    beyond = bool(bracket) and v_bias_v > float(np.max(curve_v))
+    if beyond:
+        text = [f"This {part} part keeps {ratio:.0%} of its value at {fmt(float(np.max(curve_v)), 'V')}, where its "
+                f"DC bias curve ends, {fmt(c_nom_f * ratio, 'F')} on a nominal part."]
+    elif bracket:
+        text = [f"This {part} part keeps {ratio:.0%} of its value at {fmt(v_bias_v, 'V')} DC bias, "
+                f"{fmt(c_nom_f * ratio, 'F')} on a nominal part."]
+    elif class1:
+        text = [f"This {part} part barely changes with bias or temperature."]
+    elif v_bias_v > 0:
+        text = [f"No DC bias curve was given for this {part} part at {fmt(v_bias_v, 'V')}."]
+    else:
+        text = [f"This {part} part runs with no DC bias."]
+    text.append(f"With tolerance{', temperature and aging' if aging_frac else ' and temperature'} it can be as low as "
+                f"{fmt(c_lo, 'F')} and as high as {fmt(c_hi, 'F')}.")
+    key = [Key("c_low", f"{fmt(c_required_f, 'F')} or more" if c_required_f is not None else "")]
+    if bracket:
+        key.append(Key("c_at_bias_nom"))
+    if out_of_range:
+        text.append(f"The board runs from {fmt(t_lo, 'C')} to {fmt(t_hi, 'C')}, outside the {dielectric} rating of "
+                    f"{fmt(t_lo_rated, 'C')} to {fmt(t_hi_rated, 'C')}, so the capacitance there is not specified.")
+        key.append(Key("t_max", f"{fmt(t_hi_rated, 'C')} or less") if t_hi > t_hi_rated
+                   else Key("t_min", f"{fmt(t_lo_rated, 'C')} or more"))
+    elif notes:
+        if beyond:
+            text.append(f"At {fmt(v_bias_v, 'V')} the part keeps less than this, and how much less is not known.")
+        else:
+            text.append("Class II parts lose much of their value under bias, so the real capacitance is lower than "
+                        "this and not known until the vendor curve is loaded.")
+    elif c_required_f is not None and c_lo < c_required_f:
+        text.append(f"The circuit needs {fmt(c_required_f, 'F')}, so this part is short of it in the worst case.")
+    elif c_required_f is not None:
+        text.append(f"The circuit needs {fmt(c_required_f, 'F')}, and the worst case still covers it.")
     plots = ()
     if curve_v is not None and curve_ratio is not None:
         v = np.asarray(curve_v, dtype=float)
@@ -155,19 +190,23 @@ def mlcc_effective(
                  Marker(f"C low {si_text(c_lo, 'F')}", x=v_bias_v, y=c_lo, unit="F")]
         if c_required_f is not None:
             marks.append(Marker(f"required {si_text(c_required_f, 'F')}", y=c_required_f, unit="F"))
+        caption = (f"Read the worst-case low curve at the {fmt(v_bias_v, 'V')} bias line: {fmt(c_lo, 'F')}"
+                   + (f", against the {fmt(c_required_f, 'F')} required line." if c_required_f is not None else "."))
         plots = (plot_from_arrays("Capacitance against DC bias", "DC bias", "V", v,
                                   [("nominal part, 25 C", "F", c_nom_f * k), ("worst-case low", "F", low)],
-                                  markers=marks),)
+                                  markers=marks, caption=caption),)
     return Result(
         name="MLCC effective capacitance",
         formula="C_low = Cnom*(1 - tol)*k_bias(V)*(1 + dC_T,low)*(1 - aging); C_high = Cnom*(1 + tol)*k_bias(V)*(1 + dC_T,high)",
         inputs=inputs,
         outputs={
-            "k_bias": Quantity(ratio, "", bias_note),
-            "c_low": Quantity(c_lo, "F"),
-            "c_high": Quantity(c_hi, "F"),
-            "c_at_bias_nom": Quantity(c_nom_f * ratio, "F", "25 C, nominal part"),
+            "k_bias": Quantity(ratio, "", bias_note, "Capacitance ratio at the bias"),
+            "c_low": Quantity(c_lo, "F", label="Capacitance, worst-case low"),
+            "c_high": Quantity(c_hi, "F", label="Capacitance, worst-case high"),
+            "c_at_bias_nom": Quantity(c_nom_f * ratio, "F", "25 C, nominal part", "Capacitance at the bias, nominal part"),
         },
+        summary=" ".join(text),
+        key=tuple(key),
         verdict=verdict,
         reason=reason,
         refs=(CLASS2_CODES,) + tuple(refs),
