@@ -1,6 +1,12 @@
 import importlib.util
 import json
+from dataclasses import fields
 from pathlib import Path
+
+import pytest
+
+from boardreview.calc.base import Quantity, Result
+from boardreview.calc.divider import enable_thresholds
 
 ROOT = Path(__file__).resolve().parent.parent
 SCHEMAS = ROOT / "skill" / "schemas"
@@ -51,11 +57,45 @@ def test_unverifiable_requires_bench_test():
     assert score.validate(_finding(not_published=[]), FINDING) == []
 
 
-def test_calculation_mirrors_result_type():
-    calc = {"calculator": "calc.divider", "formula": "v = vin * r2 / (r1 + r2)",
-            "inputs": {"vin": {"value": 12.0, "unit": "V"}}, "outputs": {"v": {"value": 0.0012, "unit": "V"}},
-            "verdict": "fail"}
+def _quantity(q: Quantity) -> dict:
+    return {"value": q.value, "unit": q.unit} | ({"note": q.note} if q.note else {})
+
+
+def _calculation(result: Result, calculator: str) -> dict:
+    return {
+        "calculator": calculator, "formula": result.formula,
+        "inputs": {k: _quantity(q) for k, q in result.inputs.items()},
+        "outputs": {k: _quantity(q) for k, q in result.outputs.items()},
+        "verdict": result.verdict.value, "reason": result.reason,
+        "assumptions": list(result.assumptions), "refs": list(result.refs),
+    }
+
+
+def test_result_fields_map_onto_the_calculation_schema():
+    calc_def = FINDING["$defs"]["calculation"]["properties"]
+    assert {f.name for f in fields(Result)} - {"name"} <= set(calc_def)
+    assert {f.name for f in fields(Quantity)} <= set(FINDING["$defs"]["quantity"]["properties"])
+
+
+def test_real_result_serializes_to_a_valid_calculation():
+    r = enable_thresholds(1.15, 1.20, 1.25, 1.05, 1.10, 1.15, 100e3, 10.0, r_tol=0.01, i_leak_a=1e-6,
+                          vin_min_v=10.8, refs=("synthetic U1 datasheet rev A p.5",))
+    calc = json.loads(json.dumps(_calculation(r, enable_thresholds.__module__.removeprefix("boardreview."))))
+    assert calc["calculator"] == "calc.divider"
     assert score.validate(_finding(calculations=[calc]), FINDING) == []
+    ins, outs = calc["inputs"], calc["outputs"]
+    assert (ins["r_top"], ins["r_bot"]) == ({"value": 100e3, "unit": "ohm"}, {"value": 10.0, "unit": "ohm"})
+    assert ins["v_rise"] == {"value": 1.20, "unit": "V", "note": "1.15 to 1.25"}
+    assert (ins["r_tol"]["value"], ins["i_leak"]["value"], ins["vin_min"]["value"]) == (0.01, 1e-6, 10.8)
+    # 1.20 V * (1 + 100k / 10) and 1.10 V * (1 + 100k / 10).
+    assert outs["enable_nom"] == {"value": pytest.approx(12001.2, abs=1e-9), "unit": "V"}
+    assert outs["disable_nom"]["value"] == pytest.approx(11001.1, abs=1e-9)
+    # 1.25 V * (1 + 101k / 9.9) + 1 uA * 101k = 1262623.75 / 99 + 0.101.
+    assert outs["enable_max"]["value"] == pytest.approx(12753.876253, abs=1e-6)
+    # 1.15 V * (1 + 99k / 10.1) - 1 uA * 99k = 1138616.15 / 101 - 0.099.
+    assert outs["enable_min"]["value"] == pytest.approx(11273.328228, abs=1e-6)
+    assert calc["verdict"] == "fail" and "12753.876 V" in calc["reason"]
+    assert calc["refs"][-1] == "synthetic U1 datasheet rev A p.5"
     calc["verdict"] = "bad"
     assert score.validate(_finding(calculations=[calc]), FINDING)
 
