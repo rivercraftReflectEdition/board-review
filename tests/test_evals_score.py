@@ -37,9 +37,19 @@ def test_refdes_range_expands_and_pins_add_parts():
     assert score.finding_parts({"parts": ["L3"], "pins": ["U9.26"]}) == {"L3", "U9"}
 
 
-def test_net_names_normalize_case_separators_and_hierarchy():
-    assert score.norm_net("/Power/1v8_sw1 filt") == "1V8-SW1-FILT"
+def test_net_names_normalize_case_and_separators_and_keep_hierarchy():
+    assert score.norm_net("/Power/1v8_sw1 filt") == "POWER/1V8-SW1-FILT"
     assert score.norm_net("+3V3") == "3V3"
+
+
+def test_hierarchical_nets_with_the_same_leaf_are_different_nets():
+    exp = {"block": "io_levels_and_domains", "nets": ["/SensorA/I2C_SDA"], "failure_mode": "missing_pullup",
+           "keywords": ["pull up|pullup"]}
+    f = _finding(block="io_levels_and_domains", failure_mode="missing_pullup", claim="No pull-up on SDA.")
+    assert not score.evaluate(exp, dict(f, nets=["/SensorB/I2C_SDA"]), BLOCKS, MODES)[0]
+    assert score.evaluate(exp, dict(f, nets=["/sensora/i2c sda"]), BLOCKS, MODES)[0]
+    assert score.evaluate(exp, dict(f, nets=["I2C_SDA"]), BLOCKS, MODES)[0]
+    assert score.evaluate(dict(exp, nets=["I2C_SDA"]), dict(f, nets=["/SensorB/I2C_SDA"]), BLOCKS, MODES)[0]
 
 
 def test_block_aliases_and_mode_synonyms():

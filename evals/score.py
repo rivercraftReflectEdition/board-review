@@ -204,8 +204,24 @@ def norm_parts(items) -> set[str]:
 
 
 def norm_net(s) -> str:
-    s = str(s).strip().upper().rsplit("/", 1)[-1].lstrip("+")
-    return re.sub(r"[\s_]+", "-", s)
+    """Upper case, '_' and spaces as '-', hierarchy path kept as '/'-separated segments."""
+    segs = [re.sub(r"[\s_]+", "-", p.strip()) for p in str(s).strip().upper().split("/") if p.strip()]
+    if segs:
+        segs[-1] = segs[-1].lstrip("+")
+    return "/".join(segs)
+
+
+def same_net(a: str, b: str) -> bool:
+    """Equal names; a name without a path also equals any hierarchical name with that last segment."""
+    if a == b:
+        return True
+    if "/" in a and "/" in b:
+        return False
+    return a.rsplit("/", 1)[-1] == b.rsplit("/", 1)[-1]
+
+
+def shared_nets(e_nets: set[str], r_nets: set[str]) -> int:
+    return sum(any(same_net(e, r) for r in r_nets) for e in e_nets)
 
 
 def finding_parts(f: dict) -> set[str]:
@@ -213,7 +229,7 @@ def finding_parts(f: dict) -> set[str]:
 
 
 def finding_nets(f: dict) -> set[str]:
-    return {norm_net(n) for n in f.get("nets", []) if str(n).strip()}
+    return {m for n in f.get("nets", []) if (m := norm_net(n))}
 
 
 def norm_text(s: str) -> str:
@@ -268,7 +284,7 @@ def evaluate(exp: dict, rev: dict, blocks: set[str], modes: set[str]) -> tuple[b
     """Match rule: block, location and stated mechanism must agree, and the finding must not assert a pass."""
     ok_block = canon_block(rev.get("block", ""), blocks) in accepted_blocks(exp, blocks, modes)
     e_parts, e_nets = norm_parts(exp.get("parts")), finding_nets(exp)
-    overlap = len(e_parts & finding_parts(rev)) + len(e_nets & finding_nets(rev))
+    overlap = len(e_parts & finding_parts(rev)) + shared_nets(e_nets, finding_nets(rev))
     ok_loc = overlap > 0 or not (e_parts or e_nets)
     rm = canon_mode(rev.get("failure_mode", ""), modes)
     ok_tag = rm == canon_mode(exp.get("failure_mode", ""), modes) or rm in {

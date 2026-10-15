@@ -48,8 +48,9 @@ A review finding R matches an expected finding E when all four hold:
    of the equivalence table below with E's block, in the row for E's `failure_mode`.
 2. **Location.** R's parts (plus the parts in its pins) or nets share at least one entry with
    E's. Designator ranges such as `R14-R22` expand. Net names compare without case, with `_` and
-   spaces read as `-`, and with any hierarchy path dropped. An E with no parts and no nets
-   matches any location.
+   spaces read as `-`. A hierarchy path is kept: `/SensorA/I2C_SDA` and `/SensorB/I2C_SDA` are
+   different nets. A name with no path equals any hierarchical name with the same last segment,
+   so `I2C_SDA` matches both. An E with no parts and no nets matches any location.
 3. **Mechanism.** R's text hits at least half of E's `keywords`, rounded up, minimum one. The
    text is R's title, claim, mechanism, fix, instance and check, plus the reason of every
    calculation whose verdict is `fail` or `marginal`. Each keyword is a group of `|`
