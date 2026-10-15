@@ -104,6 +104,11 @@ whose real compensation is unknown; that stays unknown with a bench test.
 4. Model limits written in the finding: ideal comparators, missing parasitics, typical silicon.
 5. Corners run, not only nominal.
 
+Every `sim` result carries two verdicts: the setup (netlist, run, injection, settling) and the
+measured result (margins, ring, settling, overshoot, impedance). Quote the measured verdict only
+when the setup verdict is pass; a marginal or unknown setup makes the result unknown. A ring-down
+PM estimate is informational; quote PM from the loop gain.
+
 See [simulation setup errors](../../docs/lessons/simulation-setup-errors.md).
 
 ## Candidate findings
