@@ -1,0 +1,253 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "board-review/datasheet_digest.schema.json",
+  "title": "Datasheet digest",
+  "description": "Facts from one datasheet, read from page images. Every entry cites a page. Values the documents do not give are listed under not_published. Values in SI units.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "mpn", "manufacturer", "document", "read_from", "pins", "abs_max",
+    "recommended_operating", "electrical", "equations", "layout_rules", "errata",
+    "example_envelope", "not_published"
+  ],
+  "properties": {
+    "mpn": {"type": "string", "minLength": 2},
+    "manufacturer": {"type": "string"},
+    "function": {"type": "string", "description": "One line, for example 'dual 3 A synchronous buck, valley current mode'."},
+    "status": {"enum": ["draft", "reviewed"]},
+    "reviewed_by": {"type": "string"},
+    "document": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["number", "revision"],
+      "properties": {
+        "number": {"type": "string"},
+        "revision": {"type": "string"},
+        "date": {"type": "string"},
+        "title": {"type": "string"},
+        "url": {"type": "string"},
+        "page_count": {"type": "integer", "minimum": 1}
+      }
+    },
+    "related_documents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "number"],
+        "properties": {
+          "kind": {"enum": ["errata", "app_note", "reference_design", "eval_board", "user_manual", "model", "reliability"]},
+          "number": {"type": "string"},
+          "revision": {"type": "string"},
+          "title": {"type": "string"}
+        }
+      }
+    },
+    "read_from": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method", "pages_read"],
+      "properties": {
+        "method": {"const": "page_images", "description": "Text extraction may locate a value; the digest records it only after reading the page image."},
+        "pages_read": {"type": "array", "minItems": 1, "items": {"type": "integer", "minimum": 1}},
+        "notes": {"type": "string"}
+      }
+    },
+    "orderable_variants": {
+      "type": "array",
+      "description": "Suffixes that change behavior (mode, voltage code, threshold, grade).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["mpn", "difference", "page"],
+        "properties": {
+          "mpn": {"type": "string"},
+          "difference": {"type": "string"},
+          "page": {"$ref": "#/$defs/page"}
+        }
+      }
+    },
+    "pins": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/pin"}},
+    "straps": {"type": "array", "items": {"$ref": "#/$defs/strap"}},
+    "abs_max": {"type": "array", "items": {"$ref": "#/$defs/spec"}},
+    "recommended_operating": {"type": "array", "items": {"$ref": "#/$defs/spec"}},
+    "electrical": {"type": "array", "items": {"$ref": "#/$defs/spec"}, "description": "Thresholds, leakage, timing, drive. Keep the test conditions."},
+    "equations": {"type": "array", "items": {"$ref": "#/$defs/equation"}},
+    "layout_rules": {"type": "array", "items": {"$ref": "#/$defs/rule"}},
+    "errata": {"type": "array", "items": {"$ref": "#/$defs/erratum"}},
+    "example_envelope": {
+      "type": "array",
+      "description": "One entry per example or typical-application circuit. Required for regulators; empty for parts with no example circuit.",
+      "items": {"$ref": "#/$defs/example"}
+    },
+    "curves": {"type": "array", "items": {"$ref": "#/$defs/curve"}},
+    "not_published": {"type": "array", "items": {"$ref": "#/$defs/not_published"}}
+  },
+  "$defs": {
+    "page": {"type": ["integer", "string"], "description": "Page number, or 'Table 26 p.33'."},
+    "range": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "min": {"type": "number"},
+        "typ": {"type": "number"},
+        "max": {"type": "number"}
+      }
+    },
+    "pin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pin", "name", "type", "page"],
+      "properties": {
+        "pin": {"type": "string"},
+        "name": {"type": "string"},
+        "type": {"enum": ["power", "ground", "input", "output", "io", "analog", "open_drain", "config", "nc", "dnc", "other"]},
+        "domain": {"type": "string", "description": "Supply pin that sets this pin's levels."},
+        "function": {"type": "string"},
+        "internal_pull": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["direction"],
+          "properties": {
+            "direction": {"enum": ["up", "down", "none", "unknown"]},
+            "min_ohm": {"type": "number"},
+            "typ_ohm": {"type": "number"},
+            "max_ohm": {"type": "number"}
+          }
+        },
+        "unused": {"type": "string", "description": "What the datasheet says to do with the pin when unused."},
+        "page": {"$ref": "#/$defs/page"}
+      }
+    },
+    "strap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pin", "levels", "page"],
+      "properties": {
+        "pin": {"type": "string"},
+        "sampled_when": {"type": "string", "description": "For example 'rising edge of RESET_N'."},
+        "levels": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["level", "setting"],
+            "properties": {
+              "level": {"type": "string", "description": "For example 'high', 'low', 'mode_2'."},
+              "setting": {"type": "string"},
+              "network": {"type": "string", "description": "Resistor network the datasheet gives for this level."},
+              "v_min": {"type": "number"},
+              "v_max": {"type": "number"}
+            }
+          }
+        },
+        "software_override": {"type": "string", "description": "Whether a register can change it later, with page."},
+        "page": {"$ref": "#/$defs/page"}
+      }
+    },
+    "spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["parameter", "unit", "page"],
+      "properties": {
+        "parameter": {"type": "string"},
+        "symbol": {"type": "string"},
+        "min": {"type": "number"},
+        "typ": {"type": "number"},
+        "max": {"type": "number"},
+        "unit": {"type": "string"},
+        "conditions": {"type": "string"},
+        "guaranteed": {"type": "boolean", "description": "False when the value is typical only or 'guaranteed by design'."},
+        "page": {"$ref": "#/$defs/page"}
+      }
+    },
+    "equation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "expression", "page"],
+      "properties": {
+        "name": {"type": "string"},
+        "expression": {"type": "string"},
+        "variables": {"type": "object", "additionalProperties": {"type": "string"}},
+        "valid_range": {"type": "string"},
+        "page": {"$ref": "#/$defs/page"}
+      }
+    },
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule", "page"],
+      "properties": {
+        "rule": {"type": "string"},
+        "page": {"$ref": "#/$defs/page"}
+      }
+    },
+    "erratum": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "page"],
+      "properties": {
+        "id": {"type": "string"},
+        "title": {"type": "string"},
+        "affects": {"type": "string"},
+        "workaround": {"type": "string"},
+        "document": {"type": "string"},
+        "page": {"$ref": "#/$defs/page"}
+      }
+    },
+    "example": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "vin_v", "vout_v", "fsw_hz", "compensation", "page"],
+      "properties": {
+        "source": {"type": "string", "description": "Figure or typical-application title."},
+        "vin_v": {"$ref": "#/$defs/range"},
+        "vout_v": {"type": "number"},
+        "iout_a": {"type": "number"},
+        "fsw_hz": {"type": "number"},
+        "l_h": {"type": "number"},
+        "cout_f": {"type": "number", "description": "Nominal output capacitance as drawn."},
+        "cout_note": {"type": "string", "description": "Part types and whether bias derating applies."},
+        "compensation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode"],
+          "properties": {
+            "mode": {"enum": ["internal", "external", "fixed", "unknown"]},
+            "values": {"type": "string", "description": "For example 'RITH 6.04k, CITH 1 nF, Cff none'."}
+          }
+        },
+        "operating_mode": {"type": "string", "description": "For example 'forced continuous', 'pulse skipping', 'burst'."},
+        "slew_a_per_s": {"type": "number", "description": "(VIN*Dmax - VOUT)/L at this example, computed."},
+        "page": {"$ref": "#/$defs/page"}
+      }
+    },
+    "curve": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "x", "y", "page", "csv"],
+      "properties": {
+        "name": {"type": "string"},
+        "x": {"type": "string", "description": "Quantity and unit."},
+        "y": {"type": "string", "description": "Quantity and unit."},
+        "conditions": {"type": "string"},
+        "csv": {"type": "string", "description": "Path of the digitized CSV next to the digest."},
+        "method": {"type": "string", "description": "How it was digitized and the read error."},
+        "page": {"$ref": "#/$defs/page"}
+      }
+    },
+    "not_published": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["item", "consequence"],
+      "properties": {
+        "item": {"type": "string"},
+        "why_needed": {"type": "string"},
+        "searched": {"type": "string"},
+        "consequence": {"enum": ["footprint", "bench_test", "vendor_question", "model"]},
+        "action": {"type": "string"}
+      }
+    }
+  }
+}
