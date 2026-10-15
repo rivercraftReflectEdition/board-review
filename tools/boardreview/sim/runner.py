@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import signal
 import string
 import subprocess
 import time
@@ -356,15 +357,20 @@ def run(
     t0 = time.monotonic()
     timed_out = False
     returncode: int | None
+    proc = subprocess.Popen(cmd, cwd=path.parent, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            env=backend.env(ascii_raw), start_new_session=os.name != "nt")
     try:
-        proc = subprocess.run(cmd, cwd=path.parent, capture_output=True, timeout=timeout_s,
-                              env=backend.env(ascii_raw))
+        out, err = proc.communicate(timeout=timeout_s)
         returncode = proc.returncode
-        console = (proc.stdout + proc.stderr).decode("utf-8", errors="replace")
+        console = (out + err).decode("utf-8", errors="replace")
     except subprocess.TimeoutExpired:
+        kill_tree(proc)
         timed_out = True
         returncode = None
         console = ""
+    except BaseException:
+        kill_tree(proc)
+        raise
     wall = time.monotonic() - t0
     text = read_text_any(log_path.read_bytes()) if log_path.exists() else ""
     if console.strip():
@@ -380,6 +386,22 @@ def run(
         timed_out=timed_out,
         log=parse_log(text),
     )
+
+
+def kill_tree(proc: subprocess.Popen) -> None:
+    """Kill a simulator and every process it started, then reap it without waiting on its pipes for long."""
+    if os.name == "nt":
+        subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)], capture_output=True, timeout=30)
+    else:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            pass
+    proc.kill()
+    try:
+        proc.communicate(timeout=10)
+    except subprocess.TimeoutExpired:
+        pass
 
 
 def run_many(netlists: list[str | Path], workdir: str | Path | None = None, names: list[str] | None = None,

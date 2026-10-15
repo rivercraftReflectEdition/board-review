@@ -1,4 +1,8 @@
+import os
 import shutil
+import subprocess
+import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -65,6 +69,47 @@ def test_parse_log_stepped_meas_table():
     rep = parse_log(LOG_STEPPED_MEAS)
     assert rep.steps == ({"c": 1e-6}, {"c": 2e-6})
     assert rep.measurements["vpk"] == [1.75, 1.62]
+
+
+class _SleepyBackend:
+    """A stand-in simulator that starts a grandchild, records its PID, and outlives any timeout."""
+
+    name = "sleepy"
+
+    def __init__(self, pid_file: Path):
+        self.pid_file = pid_file
+
+    def command(self, netlist: Path, ascii_raw: bool = False, solver: str | None = None) -> list[str]:
+        child = "import time; time.sleep(30)"
+        code = (f"import subprocess, sys, time; p = subprocess.Popen([sys.executable, '-c', {child!r}]); "
+                f"open({str(self.pid_file)!r}, 'w').write(str(p.pid)); time.sleep(30)")
+        return [sys.executable, "-c", code]
+
+    def outputs(self, netlist: Path) -> tuple[Path, Path]:
+        return netlist.with_suffix(".raw"), netlist.with_suffix(".log")
+
+    def env(self, ascii_raw: bool) -> dict[str, str] | None:
+        return None
+
+
+def _alive(pid: int) -> bool:
+    if os.name == "nt":
+        out = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/NH"], capture_output=True, text=True).stdout
+        return str(pid) in out.split()
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    return True
+
+
+def test_timeout_kills_the_simulator_and_its_children(tmp_path):
+    pid_file = tmp_path / "child.pid"
+    t0 = time.monotonic()
+    res = run("* t\nR1 a 0 1\n.op\n", tmp_path, "sleepy", timeout_s=3, backend=_SleepyBackend(pid_file))
+    assert res.timed_out and not res.ok
+    assert time.monotonic() - t0 < 20
+    assert not _alive(int(pid_file.read_text()))
 
 
 def test_render_refuses_missing_values():
