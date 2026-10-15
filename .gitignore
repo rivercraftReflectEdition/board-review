@@ -1,0 +1,15 @@
+# Board data and vendor documents stay local.
+*.SchDoc
+*.PcbDoc
+*.PrjPcb
+*.kicad_sch
+*.kicad_pcb
+*.pdf
+*.zip
+evals/**/sources.local.json
+evals/**/local/
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
