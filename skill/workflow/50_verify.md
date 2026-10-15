@@ -34,7 +34,7 @@ it must reach the facts on its own.
 
 ## Passes are claims too
 
-Give the verifier a sample of high-risk passes, written as claims: "U9 channel 1 loop passes
+Give the verifier a sample of high-risk passes, written as claims: "the 3.3 V buck loop passes
 because ...". A wrong pass costs more than a wrong finding, because nobody looks again. See
 [loop out of example envelope](../../docs/lessons/loop-out-of-example-envelope.md).
 

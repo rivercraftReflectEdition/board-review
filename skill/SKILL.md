@@ -40,7 +40,7 @@ the calculator, the pass criterion, and what to do when the data is not publishe
 1. **Facts before judgment.** Build the board model, run the 3-way netlist compare and lint, and
    write the datasheet digests before any finding. A finding drawn from memory of a part is not a
    finding.
-2. **Cite everything.** Every claim names a pin (`U9.26`), a net, a schematic page, a datasheet
+2. **Cite everything.** Every claim names a pin (`U4.12`), a net, a schematic page, a datasheet
    document with revision and page, or a calculator result. No citation, no claim.
 3. **Show the math.** Every number comes from a calculator in `tools/boardreview/calc` and the
    report prints its formula, inputs and outputs (`Result.to_markdown()`). Use worst-case

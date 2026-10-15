@@ -57,6 +57,19 @@ def test_every_item_has_check_why_compute_pass():
                 assert field in item, (p.name, head, field)
 
 
+def test_item_references_resolve():
+    ref = re.compile(r"\b(BR|LDO|FLT|PDN|CR|EN|RST|CLK|IO|STR|ETH|CSI|MEM|PROT|TH|LAY|NET)-(\d+)\b")
+    headings = set()
+    for p in (SKILL / "checklists").glob("*.md"):
+        headings |= set(re.findall(r"^## ([A-Z]+-\d+) ", p.read_text(encoding="utf-8"), re.M))
+    missing = []
+    for doc in _docs():
+        for prefix, num in ref.findall(doc.read_text(encoding="utf-8")):
+            if f"{prefix}-{num}" not in headings:
+                missing.append(f"{doc.name}: {prefix}-{num}")
+    assert missing == []
+
+
 def test_no_em_or_en_dashes():
     for doc in _docs():
         text = doc.read_text(encoding="utf-8")
