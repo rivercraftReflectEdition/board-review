@@ -14,6 +14,30 @@ def _ic_pins(g: Graph, net: str) -> list[Pin]:
     return [p for p in g.net_pins.get(net, []) if g.kind(p.refdes) == "ic"]
 
 
+def _fitted_caps_to_ground(g: Graph, net: str) -> list[str]:
+    return [c for c in g.caps_to_ground(net) if g.fitted(c)]
+
+
+def _private_boot(g: Graph, sw: str, ic: str) -> bool:
+    """True when a cap joins the node to a net holding only it and one controller pin, directly or via one resistor."""
+    for cap in g.refs_on(sw, {"capacitor"}):
+        node = g.other_net(cap, sw)
+        if node is None or g.is_ground(node) or is_supply(g, node):
+            continue
+        if len(g.pins_on(node, ic)) == 1 and set(g.refs_on(node)) == {cap, ic}:
+            return True
+        for res, far in g.resistors_to(node):
+            if set(g.refs_on(node)) == {cap, res} and far and len(g.pins_on(far, ic)) == 1 \
+                    and set(g.refs_on(far)) == {res, ic}:
+                return True
+    return False
+
+
+def _converter_structure(g: Graph, sw: str, pins: list[Pin]) -> bool:
+    """True when a node that is not a rail has a private bootstrap cap to a controller pin."""
+    return not is_supply(g, sw) and any(_private_boot(g, sw, ic) for ic in {p.refdes for p in pins})
+
+
 def _orient(g: Graph, ind: str) -> tuple[str, str, list[Pin], bool] | None:
     """Pick (switch node, output, controller pins, named) for an inductor, or None if it is not a converter."""
     nets = g.nets_of(ind)
@@ -25,9 +49,11 @@ def _orient(g: Graph, ind: str) -> tuple[str, str, list[Pin], bool] | None:
         if not pins:
             continue
         named = any(naming.pin_is(p.name, "sw") for p in pins)
-        caps_on_sw = bool(g.caps_to_ground(sw))
+        caps_on_sw = bool(_fitted_caps_to_ground(g, sw))
         if named or (not caps_on_sw and g.caps_to_ground(out)):
             options.append((0 if named else 1, sw, out, pins, named))
+        elif g.caps_to_ground(out) and _converter_structure(g, sw, pins):
+            options.append((2, sw, out, pins, named))
     if not options:
         return None
     _, sw, out, pins, named = min(options, key=lambda o: o[0])
@@ -124,7 +150,8 @@ def find_switching_regulators(g: Graph) -> list[Block]:
         if out_caps:
             score += 1
             evidence.append(f"{len(out_caps)} caps from {out} to ground")
-        if not g.caps_to_ground(sw):
+        sw_caps, sw_caps_dnp = fitted_split(g, g.caps_to_ground(sw))
+        if not sw_caps:
             score += 1
             evidence.append(f"no caps to ground on {sw}, as a switch node should be")
         boot, boot_pins, boot_dnp = _bootstrap(g, sw, ic)
@@ -155,10 +182,15 @@ def find_switching_regulators(g: Graph) -> list[Block]:
             "controller_pins_on_output": on_out,
             "enable_pins": [p.key for p in g.comp_pins[ic] if naming.pin_is(p.name, "en")],
             "power_good_pins": [p.key for p in g.comp_pins[ic] if naming.pin_is(p.name, "pg")],
+            "switch_node_caps": sw_caps,
             "output_caps_dnp": out_caps_dnp, "bootstrap_dnp": boot_dnp, "catch_diode_dnp": catch_dnp,
-            "input_caps_dnp": in_caps_dnp,
+            "input_caps_dnp": in_caps_dnp, "switch_node_caps_dnp": sw_caps_dnp,
         }
         notes = ["topology assumed buck (caps on the far side of the inductor); boost and inverting parts need a look"]
+        if sw_caps:
+            notes.append(f"caps to ground on the switch node {sw}: {', '.join(describe(g, c) for c in sw_caps)}; "
+                         "a switch node should carry none, so check for a snubber, a misplaced part or a wrong "
+                         "orientation")
         for ref in (ind, ic):
             if not g.fitted(ref):
                 notes.append(f"{ref} is DNP: this converter is not in the build")

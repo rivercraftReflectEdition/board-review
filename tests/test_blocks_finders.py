@@ -82,6 +82,28 @@ def test_adi_buck_found_by_structure_alone():
     assert b.roles["input"] == ["VIN"]
 
 
+def test_unnamed_buck_with_a_cap_on_the_switch_node_is_kept_and_the_cap_reported():
+    model = _adi()
+    model.add_pin("C9", "1", "NetL1_1")
+    model.add_pin("C9", "2", "GND")
+    model.finalize()
+    b = _only(regulators.find_switching_regulators(Graph(model)), "switching_regulator")
+    assert b.roles["switch_node"] == ["NetL1_1"] and b.roles["output"] == ["+3V3"]
+    assert b.roles["switch_node_caps"] == ["C9"]
+    assert any("C9" in n and "switch node" in n for n in b.notes)
+    assert not any(e.startswith("no caps to ground") for e in b.evidence)
+
+
+@pytest.mark.parametrize("filtered", ["12V_FILT", "NetL7_2"])
+def test_input_filter_into_an_ic_with_caps_on_both_sides_stays_a_filter(filtered):
+    rows = _two("L7", "VIN", filtered) + _two("C1", filtered, "GND") + _two("C2", filtered, "GND")
+    rows += _two("C5", "VIN", "GND") + _two("C18", filtered, "N_X") + _two("R2", "N_X", "N_INT")
+    rows += [("U13", "1", filtered, ""), ("U13", "2", filtered, ""), ("U13", "3", "GND", ""),
+             ("U13", "4", "N_INT", ""), ("U13", "5", "N_INT", ""), ("U13", "6", "N_INT", "")]
+    found = blocks.find_all(_board(rows))
+    assert [b.kind for b in found if b.kind in ("switching_regulator", "lc_filter")] == ["lc_filter"]
+
+
 def test_regulator_with_lx_vfb_pgood_run_names_and_no_bootstrap():
     rows = [("U7", "1", "VIN", "VIN"), ("U7", "2", "LX_1V2", "LX"), ("U7", "3", "GND", "GND"),
             ("U7", "4", "FB_1V2", "VFB"), ("U7", "5", "EN_1V2", "RUN"), ("U7", "6", "PG_1V2", "PGOOD")]
