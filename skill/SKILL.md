@@ -25,7 +25,7 @@ Run the stages in order. Each stage has a page in `workflow/`. Do not judge befo
 | Stage | Page | Output (in the review's local folder, never in this repo) |
 |---|---|---|
 | 0 Intake | workflow/00_intake.md | intake.md: scope, revision, variant, requirements, prior findings |
-| 1 Extract | workflow/10_extract.md | board_model.json, netlists, BOM with variant, compare and lint results |
+| 1 Extract | workflow/10_extract.md | facts/ from `python -m boardreview prep`: board model, compare, lint, block candidates, facts.md |
 | 2 Datasheets | workflow/20_datasheets.md | one digest per MPN (schemas/datasheet_digest.schema.json), curve CSVs |
 | 3 Blocks | workflow/30_blocks.md | blocks.json and the power tree, each block mapped to a checklist |
 | 4 Checks | workflow/40_checks.md | per-item results with calculator output; candidate findings |
@@ -92,6 +92,8 @@ verification. Severity:
 Python names in this skill are relative to the `boardreview` package in `tools/boardreview`:
 `calc.buck.current_slew` is `boardreview.calc.buck.current_slew`.
 
+- `python -m boardreview prep`: board model, staging views, lint, block candidates and the
+  netlist compare in one folder, indexed by `facts.md` (workflow/10_extract.md).
 - `model`: board model from IPC-D-356, KiCad XML, Protel .NET, eda-agent JSON and a BOM;
   `model.compare` for the 3-way compare and the snapshot diff.
 - `lint`: single-pin nets, unconnected IC pins, ground and supply pins on the wrong net,

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "boardreview/board_model/1",
   "title": "Board model",
-  "description": "Components, pins and nets of one board from one netlist source plus an optional BOM. Written by python -m boardreview.model build. Scripts produce it; reviewers read it.",
+  "description": "Components, pins and nets of one board from one netlist source plus an optional BOM. Written by python -m boardreview prep, which calls python -m boardreview.model build. Scripts produce it; reviewers read it.",
   "type": "object",
   "required": ["schema", "sources", "pin_list_complete", "stats", "components", "pins", "nets", "warnings"],
   "additionalProperties": false,

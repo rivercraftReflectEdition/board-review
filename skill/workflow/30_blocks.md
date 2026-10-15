@@ -5,13 +5,19 @@ Goal: every part belongs to a block, every block has a checklist, and the cross-
 
 ## Detect
 
-`blocks` proposes candidates from the board model and digests: regulators (by part class and
-pin names), bead and LC filters (an inductor or bead followed by capacitance on a rail),
-interfaces (PHY, camera, memory), clocks, resets and supervisors, straps (resistors on pins the
-digests mark as sampled at reset), protection parts.
+Start from `blocks.md` and `blocks.json`, which `python -m boardreview prep` wrote in stage 1
+(`blocks.find_all`; rerun alone with `python -m boardreview.blocks <facts>/board_model.json
+--json blocks.json`). It proposes candidates from the board model only: switching regulators
+(an IC pin and an inductor on a switch node), bead and LC filters (an inductor or bead followed
+by capacitance on a rail), crystals and oscillators, reset nets with their supervisors, I2C
+buses, and straps (pull resistors that set one IC pin). Each candidate carries its evidence and
+a confidence; a low-confidence block is a lead, not a fact.
 
-The agent confirms each candidate, adds what the detector missed, and lists every part with no
-block and why (for example mounting holes, fiducials, test points).
+It does not find LDOs, interfaces (PHY, camera, memory) or protection parts, and it does not
+read the datasheet digests, so it cannot tell which pins are sampled at reset. The agent
+confirms each candidate, adds what the detector missed from `nets_by_component.md` and the
+digests, and lists every part with no block and why (for example mounting holes, fiducials, test
+points).
 
 ## Record each block instance
 
@@ -20,7 +26,9 @@ point (VIN, VOUT, load, fsw), mode settings decoded from straps, and digest refe
 
 ## Power tree
 
-Nodes are rails; edges are regulators, load switches and filters. For each edge: source part,
+Start from `power_tree.md` from stage 1: rails with their evidence, the converters and
+filters `blocks` found, and every pin per rail. Nodes are rails; edges are regulators, load
+switches and filters. For each edge: source part,
 mode (forced continuous, pulse skip, burst), whether it can sink, soft-start and enable source.
 For each rail: every load with its abs max and recommended range, total capacitance, and every
 part that can return current. The power tree drives cascaded_rails, enable_uvlo_sequencing and
