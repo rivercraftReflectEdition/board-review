@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import math
 
-from boardreview.calc.base import Quantity, Result, Verdict
+import numpy as np
+
+from boardreview.calc.base import Marker, Quantity, Result, Verdict, plot_from_arrays
 
 AN2867 = "ST AN2867 Rev 24 (February 2026), Guidelines for oscillator design on STM8AF/AL/S and STM32 MCUs/MPUs"
 AN2867_CL = f"{AN2867} sec. 3.3 p. 12 (CL = CL1*CL2/(CL1 + CL2) + Cs)"
@@ -99,6 +101,15 @@ def oscillation_margin(
             verdict, reason = Verdict.FAIL, f"gain margin {margin:.2f} under {min_gain_margin:g}"
         elif verdict is not Verdict.FAIL:
             verdict, reason = Verdict.PASS, f"gain margin {margin:.2f}"
+    cl_axis = np.linspace(0.25 * cl_f, 2.5 * cl_f, 181)
+    marks = [Marker(f"this design {gm_crit * 1e3:.3g} mA/V", x=cl_f, y=gm_crit, unit="A/V")]
+    if gm_crit_max_a_per_v is not None:
+        marks.append(Marker(f"Gmcritmax {gm_crit_max_a_per_v * 1e3:.3g} mA/V", y=gm_crit_max_a_per_v, unit="A/V"))
+    if gm_a_per_v is not None:
+        marks.append(Marker(f"gm / {min_gain_margin:g}", y=gm_a_per_v / min_gain_margin, unit="A/V"))
+    plot = plot_from_arrays("Critical gm against load capacitance", "Load capacitance CL", "F", cl_axis,
+                            [("gm_crit", "A/V", 4.0 * esr_ohm * (2.0 * math.pi * f_hz) ** 2 * (c0_f + cl_axis) ** 2)],
+                            markers=marks)
     return Result(
         name="crystal oscillation margin",
         formula="gm_crit = 4*ESR*(2*pi*f)^2*(C0 + CL)^2; gain margin = gm/gm_crit >= 5; or gm_crit <= Gmcritmax",
@@ -108,6 +119,7 @@ def oscillation_margin(
         reason=reason,
         refs=(AN2867_GM,) + tuple(refs),
         assumptions=("ESR at its datasheet maximum", "C0 includes the package shunt capacitance only"),
+        plots=(plot,),
     )
 
 

@@ -8,7 +8,7 @@ from typing import Protocol, Sequence
 
 import numpy as np
 
-from boardreview.calc.base import Quantity, Result, Verdict
+from boardreview.calc.base import Marker, Quantity, Result, Verdict, plot_from_arrays, si_text
 from boardreview.calc.curves import find_column, parse_csv_table, unit_scale
 
 TWO_PI = 2.0 * math.pi
@@ -287,6 +287,21 @@ def lc_filter(
     ]
     if bead.note:
         assumptions.insert(0, bead.note)
+    fsw_marks = [Marker(f"fsw {si_text(fs, 'Hz')}", x=fs) for fs in f_switch_hz]
+    h_marks = [Marker(f"limit {peak_limit_db:g} dB", y=peak_limit_db, unit="dB"),
+               Marker(f"peak {h_db[i_pk]:.1f} dB", x=float(f[i_pk]), y=float(h_db[i_pk]), unit="dB")]
+    if worst is not None and worst[2] != f[i_pk]:
+        h_marks.append(Marker(f"{worst[0]:.1f} dB at harmonic {worst[3]}", x=float(worst[2]), y=float(worst[0]),
+                              unit="dB"))
+    z_mag = np.abs(zout)
+    plots = (
+        plot_from_arrays("Filter transfer, source to load", "Frequency", "Hz", f, [("Transfer", "dB", h_db)],
+                         x_log=True, markers=fsw_marks + h_marks),
+        plot_from_arrays("Impedance seen from the load", "Frequency", "Hz", f, [("|Zout|", "ohm", z_mag)],
+                         x_log=True, y_log=True,
+                         markers=fsw_marks + [Marker(f"peak {si_text(float(z_mag[i_z]), 'ohm')}", x=float(f[i_z]),
+                                                     y=float(z_mag[i_z]), unit="ohm")]),
+    )
     return Result(
         name="bead + capacitor filter",
         formula=(
@@ -300,4 +315,5 @@ def lc_filter(
         reason=reason,
         refs=(ERICKSON,) + tuple(refs),
         assumptions=tuple(assumptions),
+        plots=plots,
     )

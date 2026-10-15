@@ -8,7 +8,7 @@ from dataclasses import dataclass
 import numpy as np
 from scipy import signal
 
-from boardreview.calc.base import Quantity, Result, Verdict
+from boardreview.calc.base import Marker, Plot, Quantity, Result, Verdict, plot_from_arrays, si_text
 
 MAX_POINTS = 1 << 22
 _trapz = getattr(np, "trapezoid", None) or np.trapz
@@ -461,8 +461,56 @@ def _wrap180(deg: float) -> float:
     return (deg + 180.0) % 360.0 - 180.0
 
 
-def margins_result(m: LoopMargins, pm_min_deg: float = 45.0, gm_min_db: float = 6.0, source: str = "") -> Result:
-    """Loop margins as a Result with a verdict against the PM and GM targets."""
+def loop_gain_plot(f_hz: np.ndarray, t_loop: np.ndarray, m: LoopMargins | None = None,
+                   title: str = "Measured loop gain") -> Plot:
+    """Gain and phase of measured T with the crossover, PM, phase crossover and GM marked."""
+    f = np.asarray(f_hz, dtype=float)
+    order = np.argsort(f)
+    f = f[order]
+    tl = np.asarray(t_loop, dtype=complex)[order]
+    mag = 20 * np.log10(np.abs(tl))
+    ph = np.degrees(np.unwrap(np.angle(tl)))
+    ph -= 360.0 * np.round(ph[0] / 360.0)
+    lf = np.log(f)
+    marks = [Marker("-180 deg", y=-180.0, unit="deg")]
+    if m is not None and m.crossover_hz is not None:
+        fc = m.crossover_hz
+        marks += [Marker(f"fc {si_text(fc, 'Hz')}", x=fc),
+                  Marker(f"PM {m.phase_margin_deg:.0f} deg", x=fc, y=float(np.interp(math.log(fc), lf, ph)),
+                         unit="deg")]
+    if m is not None and m.phase_crossover_hz is not None and m.gain_margin_db is not None:
+        marks += [Marker(f"f180 {si_text(m.phase_crossover_hz, 'Hz')}", x=m.phase_crossover_hz),
+                  Marker(f"GM {m.gain_margin_db:.1f} dB", x=m.phase_crossover_hz, y=-m.gain_margin_db, unit="dB")]
+    return plot_from_arrays(title, "Frequency", "Hz", f, [("Gain", "dB", mag), ("Phase", "deg", ph)], x_log=True,
+                            markers=marks)
+
+
+def step_plot(t: np.ndarray, y: np.ndarray, sr: StepResponse, t_end_s: float | None = None,
+              smooth_period_s: float | None = None, title: str = "Load step") -> Plot:
+    """Output around one step: raw and one-period average, with the step, the peak and the settling band marked."""
+    t = np.asarray(t, dtype=float)
+    y = np.asarray(y, dtype=float)
+    t_end = float(t[-1]) if t_end_s is None else t_end_s
+    t0 = max(float(t[0]), sr.t_step_s - 0.25 * (t_end - sr.t_step_s))
+    tw, yw = window(t, y, t0, t_end)
+    marks = [Marker("step", x=sr.t_step_s),
+             Marker(f"peak {sr.peak_dev * 1e3:+.1f} mV", x=sr.t_peak_s, y=sr.final + sr.peak_dev, unit="V"),
+             Marker(f"band +{sr.band * 1e3:.3g} mV", y=sr.final + sr.band, unit="V"),
+             Marker(f"band -{sr.band * 1e3:.3g} mV", y=sr.final - sr.band, unit="V")]
+    if sr.settle_s:
+        marks.append(Marker(f"settled {si_text(sr.settle_s, 's')}", x=sr.t_step_s + sr.settle_s))
+    if smooth_period_s:
+        ta, ya = box_average(t, y, smooth_period_s)
+        ta, ya = window(ta, ya, t0, t_end)
+        raw = np.interp(ta, tw, yw)
+        series = [("one-period average", "V", ya), ("raw", "V", raw)]
+        return plot_from_arrays(title, "Time", "s", ta, series, markers=marks)
+    return plot_from_arrays(title, "Time", "s", tw, [("output", "V", yw)], markers=marks)
+
+
+def margins_result(m: LoopMargins, pm_min_deg: float = 45.0, gm_min_db: float = 6.0, source: str = "",
+                   f_hz: np.ndarray | None = None, t_loop: np.ndarray | None = None) -> Result:
+    """Loop margins as a Result with a verdict against the PM and GM targets; T, when given, adds the Bode plot."""
     outputs = {}
     if m.crossover_hz is not None:
         outputs["f_c"] = Quantity(m.crossover_hz, "Hz", "|T| = 0 dB")
@@ -494,6 +542,7 @@ def margins_result(m: LoopMargins, pm_min_deg: float = 45.0, gm_min_db: float = 
         verdict=verdict,
         reason=reason,
         refs=(source,) if source else (),
+        plots=(loop_gain_plot(f_hz, t_loop, m),) if f_hz is not None and t_loop is not None and len(f_hz) > 1 else (),
     )
 
 
@@ -533,6 +582,20 @@ def impedance_summary(f_hz: np.ndarray, z: np.ndarray, z_target_ohm: float | Non
         starts, ends = np.nonzero(d == 1)[0], np.nonzero(d == -1)[0] - 1
         bands = [(float(f[a]), float(f[b])) for a, b in zip(starts, ends)]
     return ImpedanceSummary(float(mag[k]), float(f[k]), peaks, z_target_ohm, tuple(bands))
+
+
+def impedance_plot(f_hz: np.ndarray, z: np.ndarray, summary: ImpedanceSummary | None = None,
+                   title: str = "Rail impedance") -> Plot:
+    """|Z| against frequency on log axes, with the target line and the three largest peaks marked."""
+    f = np.asarray(f_hz, dtype=float)
+    mag = np.abs(np.asarray(z))
+    marks = []
+    if summary is not None:
+        if summary.z_target_ohm is not None:
+            marks.append(Marker(f"target {si_text(summary.z_target_ohm, 'ohm')}", y=summary.z_target_ohm, unit="ohm"))
+        for p in sorted(summary.peaks, key=lambda p: -p.z_ohm)[:3]:
+            marks.append(Marker(f"peak {si_text(p.z_ohm, 'ohm')}", x=p.f_hz, y=p.z_ohm, unit="ohm"))
+    return plot_from_arrays(title, "Frequency", "Hz", f, [("|Z|", "ohm", mag)], x_log=True, y_log=True, markers=marks)
 
 
 def _half_power_q(f: np.ndarray, mag: np.ndarray, i: int) -> float | None:

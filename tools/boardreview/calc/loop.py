@@ -9,7 +9,7 @@ from typing import Protocol, Sequence
 import numpy as np
 from scipy.optimize import brentq
 
-from boardreview.calc.base import Quantity, Result, Verdict
+from boardreview.calc.base import Marker, Plot, Quantity, Result, Verdict, plot_from_arrays, si_text
 
 TWO_PI = 2.0 * math.pi
 
@@ -334,6 +334,30 @@ def _db(x: float) -> float:
     return 20.0 * math.log10(x) if math.isfinite(x) else math.inf
 
 
+def bode_plot(
+    blocks: Sequence[Block],
+    f_start_hz: float = 10.0,
+    f_stop_hz: float = 10e6,
+    fc_hz: float | None = None,
+    f180_hz: float | None = None,
+    points_per_decade: int = 50,
+    title: str = "Loop gain",
+) -> Plot:
+    """Gain and phase of T on a log grid, with the crossover, PM, phase crossover and GM marked."""
+    f, mag, ph = bode(blocks, f_start_hz, f_stop_hz, points_per_decade)
+    markers = [Marker("-180 deg", y=-180.0, unit="deg")]
+    if fc_hz is not None and math.isfinite(fc_hz):
+        mag_c, ph_c = loop_response(blocks, fc_hz)
+        markers += [Marker(f"fc {si_text(fc_hz, 'Hz')}", x=fc_hz),
+                    Marker(f"PM {180.0 + float(ph_c[0]):.0f} deg", x=fc_hz, y=float(ph_c[0]), unit="deg")]
+    if f180_hz is not None and math.isfinite(f180_hz):
+        mag_p, _ = loop_response(blocks, f180_hz)
+        markers += [Marker(f"f180 {si_text(f180_hz, 'Hz')}", x=f180_hz),
+                    Marker(f"GM {-float(mag_p[0]):.1f} dB", x=f180_hz, y=float(mag_p[0]), unit="dB")]
+    return plot_from_arrays(title, "Frequency", "Hz", f, [("Gain", "dB", mag), ("Phase", "deg", ph)],
+                            x_log=True, markers=markers)
+
+
 def _gm_above(blocks: Sequence[Block], f_hz: float) -> float:
     """Lowest GM any phase crossing above f_hz can have, from per-block phase and gain bounds; -inf when unbounded."""
     lo = hi = n = 0.0
@@ -393,7 +417,8 @@ def margins(
         "at f180, |1 + T| = 1 - |T|, so |1/(1+T)| = 1/(1 - 10^(-GM/20))",
     ) + tuple(refs)
     if not gc:
-        return Result(name, formula, inputs, {}, Verdict.UNKNOWN, "no 0 dB crossing in the swept range", base_refs)
+        return Result(name, formula, inputs, {}, Verdict.UNKNOWN, "no 0 dB crossing in the swept range", base_refs,
+                      plots=(bode_plot(blocks, f_start_hz, f_stop_hz),))
     fc_min = min(f for f, _ in gc)
     fc_worst, pm = min(gc, key=lambda c: c[1])
     relevant = [(f, g) for f, g in pc if not (pm > 0 and f < fc_min and g < 0)]
@@ -447,6 +472,7 @@ def margins(
             "phase is the sum of block phases, so it is continuous",
             "above f_stop, phase and gain are bounded from each block's limits, not swept",
         ),
+        plots=(bode_plot(blocks, f_start_hz, f_stop_hz, fc_worst, f180 if known else None),),
     )
 
 

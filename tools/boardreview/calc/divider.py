@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from boardreview.calc.base import Quantity, Result, Verdict
+import numpy as np
+
+from boardreview.calc.base import Marker, Plot, Quantity, Result, Verdict, plot_from_arrays
 
 
 def _input_referred(v_pin_v: float, r_top_ohm: float, r_bot_ohm: float, i_in_a: float) -> float:
@@ -137,6 +139,7 @@ def enable_thresholds(
     if vin_min_v is not None:
         inputs["vin_min"] = Quantity(vin_min_v, "V")
         inputs["margin_min"] = Quantity(margin_frac, "", "fraction of VIN min")
+    plot = enable_plot(v_rise_min_v, v_rise_max_v, r_top_ohm, r_bot_ohm, r_tol, i_leak_a, on_hi, vin_min_v)
     return Result(
         name="enable threshold from divider",
         formula="VIN_th = Vth*(1 + R1/R2) + I*R1; high corner: Vth max, R1 high, R2 low, I into pin",
@@ -154,4 +157,28 @@ def enable_thresholds(
         reason=reason,
         refs=("Kirchhoff current law at the RUN/EN node",) + tuple(refs),
         assumptions=("nominal values use zero leakage", "tolerances are worst-case extremes"),
+        plots=(plot,),
     )
+
+
+def _pin_v(vin: np.ndarray, r_top_ohm: float, r_bot_ohm: float, i_in_a: float) -> np.ndarray:
+    return np.maximum((vin - i_in_a * r_top_ohm) * r_bot_ohm / (r_top_ohm + r_bot_ohm), 0.0)
+
+
+def enable_plot(v_rise_min_v: float, v_rise_max_v: float, r_top_ohm: float, r_bot_ohm: float, r_tol: float,
+                i_leak_a: float, enable_max_v: float, vin_min_v: float | None = None) -> Plot:
+    """Pin voltage against input voltage at nominal and both corners, with the rising threshold band marked."""
+    span = max(enable_max_v, vin_min_v or 0.0) * 1.25 or 1.0
+    vin = np.linspace(0.0, span, 241)
+    i = abs(i_leak_a)
+    series = [
+        ("pin, nominal", "V", _pin_v(vin, r_top_ohm, r_bot_ohm, 0.0)),
+        ("pin, low corner", "V", _pin_v(vin, r_top_ohm * (1 + r_tol), r_bot_ohm * (1 - r_tol), i)),
+        ("pin, high corner", "V", _pin_v(vin, r_top_ohm * (1 - r_tol), r_bot_ohm * (1 + r_tol), -i)),
+    ]
+    marks = [Marker(f"rising max {v_rise_max_v:g} V", y=v_rise_max_v, unit="V"),
+             Marker(f"rising min {v_rise_min_v:g} V", y=v_rise_min_v, unit="V"),
+             Marker(f"enable worst {enable_max_v:.3f} V", x=enable_max_v, y=v_rise_max_v, unit="V")]
+    if vin_min_v is not None:
+        marks.append(Marker(f"VIN min {vin_min_v:g} V", x=vin_min_v))
+    return plot_from_arrays("Enable pin against input voltage", "Input voltage", "V", vin, series, markers=marks)

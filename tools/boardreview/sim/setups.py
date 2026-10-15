@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 
-from boardreview.calc.base import Quantity, Result, Verdict
+from boardreview.calc.base import Marker, Plot, Quantity, Result, Verdict, plot_from_arrays, si_text
 from boardreview.sim import measure
 from boardreview.sim.netlist import GROUND, Element, norm_name, parse_netlist, read_netlist_text
 from boardreview.sim.runner import RunResult, run, run_many
@@ -288,7 +288,9 @@ class LoopGainResult:
         if self.margins is None:
             return None
         return measure.margins_result(self.margins, pm_min_deg, gm_min_db,
-                                      f"{len(self.points)} injection points, transient")
+                                      f"{len(self.points)} injection points, transient",
+                                      f_hz=self.f_hz if len(self.points) > 1 else None,
+                                      t_loop=self.t if len(self.points) > 1 else None)
 
     @property
     def results(self) -> list[Result]:
@@ -533,10 +535,12 @@ class LoadStepSetup:
 
 
 def step_results(sr: measure.StepResponse, dev_max_v: float | None = None,
-                 settle_max_s: float | None = None) -> list[Result]:
-    """Measured results of one edge: peak deviation, settling and ring-down."""
-    return [measure.deviation_result(sr, dev_max_v), measure.settling_result(sr, settle_max_s),
-            measure.ring_result(sr)]
+                 settle_max_s: float | None = None, plot: Plot | None = None) -> list[Result]:
+    """Measured results of one edge: peak deviation (carrying the waveform plot when given), settling and ring-down."""
+    dev = measure.deviation_result(sr, dev_max_v)
+    if plot is not None:
+        dev = replace(dev, plots=(plot,))
+    return [dev, measure.settling_result(sr, settle_max_s), measure.ring_result(sr)]
 
 
 @dataclass
@@ -575,15 +579,19 @@ def run_load_step(setup: LoadStepSetup, workdir: str | Path, name: str = "load_s
     r = run(setup.netlist(), workdir, name, **run_kwargs)
     report.extend(check_run(r, setup.sw_node, setup.fsw_hz, t_start_s=0.5 * setup.t_step_s))
     steps = []
+    plots = []
     if r.ok:
         raw = r.raw()
         t, v = raw.axis(), raw[setup.out_node]
         smooth = 1.0 / setup.fsw_hz if setup.fsw_hz else None
         edges = [setup.t_step_s] + ([setup.t_back_s] if setup.t_back_s is not None else [])
         ends = edges[1:] + [t[-1]]
-        for t0, t1 in zip(edges, ends):
-            steps.append(measure.step_response(t, v, t0, t_end_s=t1, smooth_period_s=smooth))
-    results = [x for sr in steps for x in step_results(sr, setup.dev_max_v, setup.settle_max_s)]
+        for k, (t0, t1) in enumerate(zip(edges, ends)):
+            sr = measure.step_response(t, v, t0, t_end_s=t1, smooth_period_s=smooth)
+            steps.append(sr)
+            plots.append(measure.step_plot(t, v, sr, t_end_s=t1, smooth_period_s=smooth,
+                                           title=f"Load step, edge {k + 1}: {setup.out_node}"))
+    results = [x for sr, p in zip(steps, plots) for x in step_results(sr, setup.dev_max_v, setup.settle_max_s, p)]
     return LoadStepResult(r, report, steps, results)
 
 
@@ -660,7 +668,23 @@ def startup_metrics(t: np.ndarray, vout: np.ndarray, vin: np.ndarray, v_target_v
                    monotonic)
 
 
-def startup_result(m: Startup, v_target_v: float, overshoot_max_pct: float = 10.0) -> Result:
+def startup_plot(t: np.ndarray, vout: np.ndarray, vin: np.ndarray, m: Startup, v_target_v: float,
+                 title: str = "Start-up") -> Plot:
+    """Output and input during the ramp, with the target, the regulation time and the overshoot peak marked."""
+    t = np.asarray(t, dtype=float)
+    vout = np.asarray(vout, dtype=float)
+    marks = [Marker(f"target {v_target_v:g} V", y=v_target_v, unit="V")]
+    if m.t_reg_s is not None:
+        marks.append(Marker(f"in regulation {si_text(m.t_reg_s, 's')}", x=m.t_reg_s))
+    if m.overshoot_pct > 0.5:
+        k = int(np.argmax(vout))
+        marks.append(Marker(f"overshoot {m.overshoot_pct:.0f} %", x=float(t[k]), y=float(vout[k]), unit="V"))
+    return plot_from_arrays(title, "Time", "s", t, [("output", "V", vout), ("input", "V", np.asarray(vin, float))],
+                            markers=marks)
+
+
+def startup_result(m: Startup, v_target_v: float, overshoot_max_pct: float = 10.0,
+                   plot: Plot | None = None) -> Result:
     """Start-up verdict: in regulation at the end, no restarts, overshoot within the limit, monotonic rise."""
     fails = []
     if m.t_reg_s is None:
@@ -685,6 +709,7 @@ def startup_result(m: Startup, v_target_v: float, overshoot_max_pct: float = 10.
                  "V_final": Quantity(m.final_v, "V"), "Vin_min_after_ramp": Quantity(m.vin_min_after_ramp_v, "V")},
         verdict=verdict,
         reason=reason,
+        plots=(plot,) if plot is not None else (),
     )
 
 
@@ -730,7 +755,9 @@ def run_startup(setup: StartupSetup, workdir: str | Path, name: str = "startup",
         smooth = 1.0 / setup.fsw_hz if setup.fsw_hz else None
         metrics = startup_metrics(raw.axis(), raw[setup.out_node], raw[setup.in_node], setup.v_target_v,
                                   setup.ramp_s, smooth_period_s=smooth)
-        results.append(startup_result(metrics, setup.v_target_v, setup.overshoot_max_pct))
+        plot = startup_plot(raw.axis(), raw[setup.out_node], raw[setup.in_node], metrics, setup.v_target_v,
+                            title=f"Start-up: {setup.out_node} and {setup.in_node}")
+        results.append(startup_result(metrics, setup.v_target_v, setup.overshoot_max_pct, plot))
     return StartupResult(r, report, metrics, results)
 
 
@@ -832,7 +859,10 @@ class ImpedanceResult:
         if s is None:
             return [Result(name="rail impedance peak", formula="Z = V(rail) / I_inj with I_inj = 1 A AC", inputs={},
                            outputs={}, verdict=Verdict.UNKNOWN, reason="no data: the run failed")]
-        return [impedance_result(s.z_target_ohm, s.max_z_ohm, s.f_at_max_hz)]
+        plots = [measure.impedance_plot(self.f_hz, self.z, s)]
+        if self.transfer is not None:
+            plots.append(transfer_plot(self.f_hz, self.transfer))
+        return [impedance_result(s.z_target_ohm, s.max_z_ohm, s.f_at_max_hz, tuple(plots))]
 
     @property
     def measured(self) -> Verdict:
@@ -861,7 +891,18 @@ class ImpedanceResult:
         return "\n".join(lines)
 
 
-def impedance_result(z_target_ohm: float | None, peak_z_ohm: float, f_hz: float) -> Result:
+def transfer_plot(f_hz: np.ndarray, transfer: np.ndarray, title: str = "Transfer, source to rail") -> Plot:
+    """Source-to-rail transfer in dB with its peak marked."""
+    g = 20 * np.log10(np.abs(np.asarray(transfer)))
+    k = int(np.argmax(g))
+    f = np.asarray(f_hz, dtype=float)
+    mark = Marker(f"peak {round(float(g[k]), 1) + 0.0:.1f} dB at {si_text(float(f[k]), 'Hz')}", x=float(f[k]),
+                  y=float(g[k]), unit="dB")
+    return plot_from_arrays(title, "Frequency", "Hz", f, [("Transfer", "dB", g)], x_log=True, markers=[mark])
+
+
+def impedance_result(z_target_ohm: float | None, peak_z_ohm: float, f_hz: float,
+                     plots: tuple[Plot, ...] = ()) -> Result:
     """Peak rail impedance against a target impedance (V ripple allowed / transient current)."""
     if z_target_ohm is None:
         verdict, reason = Verdict.INFO, "no target given"
@@ -874,6 +915,7 @@ def impedance_result(z_target_ohm: float | None, peak_z_ohm: float, f_hz: float)
         outputs={"Z_peak": Quantity(peak_z_ohm, "ohm"), "f_peak": Quantity(f_hz, "Hz")},
         verdict=verdict,
         reason=reason,
+        plots=plots,
     )
 
 

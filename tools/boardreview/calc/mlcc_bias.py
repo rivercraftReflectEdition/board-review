@@ -6,7 +6,7 @@ import re
 
 import numpy as np
 
-from boardreview.calc.base import Quantity, Result, Verdict
+from boardreview.calc.base import Marker, Quantity, Result, Verdict, plot_from_arrays, si_text
 from boardreview.calc.curves import find_column, parse_csv_table, unit_scale
 
 CLASS2_CODES = (
@@ -146,6 +146,18 @@ def mlcc_effective(
     }
     if c_required_f is not None:
         inputs["c_required"] = Quantity(c_required_f, "F")
+    plots = ()
+    if curve_v is not None and curve_ratio is not None:
+        v = np.asarray(curve_v, dtype=float)
+        k = np.asarray(curve_ratio, dtype=float)
+        low = c_nom_f * (1 - tol_frac) * k * (1 + dc_lo) * (1 - aging_frac)
+        marks = [Marker(f"bias {v_bias_v:g} V", x=v_bias_v),
+                 Marker(f"C low {si_text(c_lo, 'F')}", x=v_bias_v, y=c_lo, unit="F")]
+        if c_required_f is not None:
+            marks.append(Marker(f"required {si_text(c_required_f, 'F')}", y=c_required_f, unit="F"))
+        plots = (plot_from_arrays("Capacitance against DC bias", "DC bias", "V", v,
+                                  [("nominal part, 25 C", "F", c_nom_f * k), ("worst-case low", "F", low)],
+                                  markers=marks),)
     return Result(
         name="MLCC effective capacitance",
         formula="C_low = Cnom*(1 - tol)*k_bias(V)*(1 + dC_T,low)*(1 - aging); C_high = Cnom*(1 + tol)*k_bias(V)*(1 + dC_T,high)",
@@ -164,4 +176,5 @@ def mlcc_effective(
             "class II band applied in full over the operating range (conservative inside the rated range)",
             "C0G: 30 ppm/C from 25 C",
         ),
+        plots=plots,
     )
