@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from boardreview.__main__ import main
-from boardreview.model import kicad_pcb
+from boardreview.model import kicad_pcb, placement
 from kicad_env import demos_dir, kicad_cli
 
 CLI = kicad_cli()
@@ -58,7 +58,7 @@ def _pair(facts: Path, a: str, b: str) -> dict:
 @pytest.mark.parametrize("name", sorted(BOARDS))
 def test_demo_board_file_reads_with_placement(name):
     m = kicad_pcb.read_kicad_pcb(_demo(name) / f"{BOARDS[name]}.kicad_pcb")
-    assert m.pins and kicad_pcb.has_placement(m)
+    assert m.pins and placement.from_board(m, name) is not None
     assert not [w for w in m.warnings if "seen on" in w]
 
 
@@ -72,7 +72,7 @@ def test_unmodified_demo_compares_clean(name, tmp_path):
     for a, b in (("schematic", "pcb"), ("schematic", "fab"), ("pcb", "fab")):
         pair = _pair(facts, a, b)
         assert {k: pair[k] for k in CONNECTIVITY if pair[k]} == {}, (a, b)
-    assert (facts / "placement.md").exists()
+    assert placement.for_facts(facts)[0].kind == "kicad_pcb"
     if name == "royalblue54L_feather":
         blocks = json.loads((facts / "blocks.json").read_text(encoding="utf-8"))
         assert any(b["kind"] == "switching_regulator" and b["confidence"] == "high" for b in blocks)

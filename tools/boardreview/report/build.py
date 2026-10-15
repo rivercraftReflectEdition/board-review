@@ -162,7 +162,8 @@ def add_parsers(sub) -> None:
     r.add_argument("--status", help="status.json exported from the page, merged into each finding's status")
     r.add_argument("--checks", help="checks.json from stage 4; default: checks.json next to --findings")
     r.add_argument("--placement", nargs="+", default=[], metavar="FILE",
-                   help="IPC-D-356 or kicad-cli position files; the facts folder is searched too")
+                   help="a .kicad_pcb, IPC-D-356 or kicad-cli position files; prep's placement.json and the facts"
+                        " folder are searched too")
     r.add_argument("--pos-units", choices=["mm", "in"], default="", help="units of a position CSV that does not say")
     r.add_argument("--detail", choices=["short", "full"], default="short",
                    help="full also writes analysis.html with every check")

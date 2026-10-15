@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from boardreview.__main__ import main
+from boardreview.model import placement
 
 ROOT = Path(__file__).resolve().parent.parent
 FIX = Path(__file__).parent / "fixtures" / "model"
@@ -93,14 +94,24 @@ def test_prep_compares_against_a_kicad_board_and_writes_placement(tmp_path):
     assert main(["prep", str(FIX / "ti_buck_board.kicad.xml"), "--compare", str(pcb), "--out", str(out)]) == 0
     facts = (out / "facts.md").read_text(encoding="utf-8")
     assert "| compare (pcb) | board.kicad_pcb | kicad_pcb |" in facts
-    assert "| placement.md | footprint side, position and rotation from board.kicad_pcb | 3 footprints |" in facts
-    assert "| R7 | bottom | 10 | 20 | 180 |" in (out / "placement.md").read_text(encoding="utf-8")
+    assert "| placement.md, placement.json | part side, position and rotation from board.kicad_pcb | 3 parts |" in facts
+    assert "| R7 | bottom | 10 | -20 | 180 |" in (out / "placement.md").read_text(encoding="utf-8")
+    assert placement.for_facts(out)[0].kind == "kicad_pcb"
 
 
 def test_prep_without_a_board_file_says_where_placement_comes_from(tmp_path):
     out = tmp_path / "f"
     assert main(["prep", str(FIX / "ti_buck_board.kicad.xml"), "--out", str(out)]) == 0
-    assert "- placement: no .kicad_pcb given" in (out / "facts.md").read_text(encoding="utf-8")
+    assert "- placement: no .kicad_pcb or IPC-D-356 given" in (out / "facts.md").read_text(encoding="utf-8")
+    assert not (out / "placement.json").exists()
+
+
+def test_prep_takes_placement_from_ipc356_without_a_board_file(tmp_path):
+    out = tmp_path / "f"
+    assert main(["prep", str(FIX / "ti_buck_board.kicad.xml"), "--compare", str(FIX / "kicad_d356_aliases.ipc"),
+                 "--out", str(out)]) == 0
+    assert placement.for_facts(out)[0].kind == "ipc356"
+    assert "pad centres" in (out / "placement.md").read_text(encoding="utf-8")
 
 
 def test_prep_names_the_bom_when_the_bom_fails(tmp_path):

@@ -112,3 +112,49 @@ def test_facts_folder_prefers_a_position_file(tmp_path):
     empty.mkdir()
     p, _, notes = placement.for_facts(empty)
     assert p is None and "not shown" in notes[0]
+
+
+def _board_file(tmp_path):
+    from test_model_kicad_pcb import KICAD9_PCB
+    path = tmp_path / "board.kicad_pcb"
+    path.write_text(KICAD9_PCB, encoding="utf-8")
+    return path
+
+
+def test_kicad_board_file_positions_read_like_the_position_file(tmp_path):
+    p = placement.read_placement(_board_file(tmp_path))
+    assert p.kind == "kicad_pcb" and p.units == "mm"
+    # Board Y grows downward; kicad-cli pcb export pos writes the negated Y, and so does this.
+    assert (p.parts["R7"].x_mm, p.parts["R7"].y_mm, p.parts["R7"].side, p.parts["R7"].rotation_deg) == (
+        10.0, -20.0, "bottom", 180.0)
+    assert p.parts["U1"].pads == 4 and p.parts["LOGO1"].pads == 0
+    assert "footprint positions" in p.caption()
+
+
+def test_board_file_wins_over_a_position_file_and_ipc356(tmp_path):
+    board = _board_file(tmp_path)
+    p, _, notes = placement.for_facts(tmp_path, [BOARD / "board-pos.csv", BOARD / "board.d356"], "mm")
+    assert p.kind == "kicad_pcb" and p.source == board.name
+    assert any("own origin" in n for n in notes)
+
+
+def test_saved_placement_in_the_facts_folder_is_read_back(tmp_path):
+    p = placement.read_placement(_board_file(tmp_path))
+    facts = tmp_path / "facts"
+    facts.mkdir()
+    (facts / "placement.json").write_text(p.to_json(), encoding="utf-8")
+    back, _, notes = placement.for_facts(facts)
+    assert back.kind == "kicad_pcb" and back.parts["R7"].y_mm == -20.0 and back.parts["R7"].rotation_deg == 180.0
+    assert not any("own origin" in n for n in notes)
+
+
+def test_placement_table_with_part_data(tmp_path):
+    from boardreview.model import kicad_pcb
+    board = _board_file(tmp_path)
+    model = kicad_pcb.read_kicad_pcb(board)
+    text = placement.to_markdown(placement.from_board(model, board.name), model)
+    assert "| R7 | bottom | 10 | -20 | 180 | Resistor_SMD:R_0402 | 4k7 | no |" in text
+    assert "| U1 | top | 100.5 | -80.25 | 90 |" in text
+    assert "2 top, 1 bottom" in text and "footprint positions" in text
+    ipc = placement.to_markdown(placement.read_placement(BOARD / "board.d356"))
+    assert "| J1 | through |" in ipc and "pad centres" in ipc

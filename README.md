@@ -31,7 +31,8 @@ skill/                    installable skill (see Install)
 tools/boardreview/        Python package the skill calls (python -m boardreview prep, report,
                           verify-fixes, validate)
   model/                  netlist, BOM and pin map from Altium, KiCad and IPC-D-356; 3-way compare;
-                          part position, side and sheet from IPC-D-356, KiCad position files and XML
+                          part position, side and sheet from .kicad_pcb, IPC-D-356, KiCad position
+                          files and XML
   lint/                   deterministic checks: single-pin nets, open IC pins, floating grounds, names
   blocks/                 find regulators, filters, clocks, resets, I2C buses and straps in the netlist
   calc/                   calculators: buck, loop (Bode, PM/GM, Cff), lc_tank, mlcc_bias, divider,

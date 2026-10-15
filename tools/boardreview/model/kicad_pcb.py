@@ -149,24 +149,3 @@ def read_kicad_pcb(path: str | Path) -> BoardModel:
     path = Path(path)
     return parse_kicad_pcb(path.read_text(encoding="utf-8"), str(path))
 
-
-def has_placement(model: BoardModel) -> bool:
-    """True when the model carries footprint positions."""
-    return any("x_mm" in c.attrs for c in model.components.values())
-
-
-def placement_markdown(model: BoardModel, source: str) -> str:
-    """Placement table: side, position and rotation of every footprint."""
-    comps = sorted((c for c in model.components.values() if "x_mm" in c.attrs), key=lambda c: natural_key(c.refdes))
-    sides = Counter(c.attrs.get("side", "unknown") for c in comps)
-    lines = ["# Placement", "",
-             f"From `{source}`: {len(comps)} footprints, "
-             + ", ".join(f"{sides[s]} {s}" for s in ("top", "bottom", "unknown") if sides[s]) + ".",
-             "KiCad board coordinates in mm (y grows downward), rotation in degrees. `kicad-cli pcb export pos`"
-             " reports the same X and the negated Y.", "",
-             "| Ref | Side | X mm | Y mm | Rot deg | Footprint | Value | Fitted |", "|---|---|---|---|---|---|---|---|"]
-    for c in comps:
-        a = c.attrs
-        lines.append(f"| {c.refdes} | {a.get('side', '')} | {a['x_mm']} | {a.get('y_mm', '')} | {a.get('rot_deg', '')}"
-                     f" | {c.footprint} | {c.value} | {'yes' if c.fitted else 'no'} |")
-    return "\n".join(lines) + "\n"

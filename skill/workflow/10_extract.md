@@ -10,7 +10,8 @@ buses), stop and report that first; every later stage would review the wrong cir
 KiCad board (`.kicad_pcb`), Protel `.NET`, eda-agent JSON or an earlier `board_model.json`, and
 BOMs as CSV or XLSX. It does not read PADS or tabular netlists, KiCad s-expression netlists,
 ODB++, IPC-2581, pick-and-place files or PDFs. Placement comes from a `.kicad_pcb` given to prep
-(`placement.md`); otherwise, and for stackup, rules, polygons and page references, from the CAD
+(`placement.md`, and `placement.json` for the report), or from an IPC-D-356 file when there is no
+board file; otherwise, and for stackup, rules, polygons and page references, from the CAD
 tool or the PDF by hand.
 
 ## Altium through the eda-agent MCP tools
@@ -110,8 +111,8 @@ python -m boardreview prep SCH_NETLIST --bom BOM --compare PCB_NETLIST FAB_NETLI
 1. Board model (`model.loaders.load_with_bom`): `board_model.json` with parts (designator, MPN,
    value, fitted, variant, kind), pins (number, name, net), nets and warnings; `bom_check.json`
    with parts only in the BOM, only in the netlist, or excluded from the BOM by the schematic.
-   Pages are not in the model; position and side are in `placement.md` when a `.kicad_pcb` is
-   given.
+   Pages are not in the model; position and side are in `placement.md` and `placement.json`,
+   from a `.kicad_pcb` when given, else from IPC-D-356 pad centres.
 2. 3-way compare (NET-1, `model.compare`): the first netlist is the naming reference; default
    labels are schematic, pcb, fab (`--labels` to change). Writes `compare.md` and
    `compare.json`. Connectivity differences come first; format limits (IPC-D-356 field cuts),
@@ -126,7 +127,8 @@ python -m boardreview prep SCH_NETLIST --bom BOM --compare PCB_NETLIST FAB_NETLI
    prior fix:
    `python -m boardreview.model compare <review folder>/facts/board_model.json <previous>/facts/board_model.json --labels current,previous --out <review folder>/snapshot_diff`
 5. Staging views, small and one per purpose: `nets_by_net.md`, `nets_by_component.md` (with pin
-   names), `power_tree.md`, `pinmaps/<REF>.md`, and `placement.md` from a `.kicad_pcb`. A BOM
+   names), `power_tree.md`, `pinmaps/<REF>.md`, and `placement.md` (from the `.kicad_pcb`, or
+   IPC-D-356 pad centres without one). A BOM
    table with variant is not generated; make it by hand when a check needs it. Agents read
    slices, not dumps.
 6. Block candidates for stage 3 (`blocks.find_all`): `blocks.md` and `blocks.json`.

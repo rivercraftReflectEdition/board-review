@@ -14,7 +14,8 @@ from xml.etree.ElementTree import ParseError
 
 from boardreview import schema
 from boardreview.lint import Finding, to_findings
-from boardreview.model import compare, digest, kicad_pcb, loaders, serialize
+from boardreview.model import compare, digest, loaders, placement, serialize
+from boardreview.model.board import BoardModel
 from boardreview.model.__main__ import main as model_main
 from boardreview.model.__main__ import write_compare
 from boardreview.report import build as report_build
@@ -104,8 +105,8 @@ def _written(out: Path, has_bom: bool, compared: bool, placed: tuple[str, int] |
             text += f"; {len(cmp['disagreements'])} pins where the three disagree"
         rows.append(("compare.md, compare.json", f"connectivity compare, {' / '.join(cmp['labels'])}", text))
     if placed:
-        rows.append(("placement.md", f"footprint side, position and rotation from {placed[0]}",
-                     f"{placed[1]} footprints"))
+        rows.append(("placement.md, placement.json", f"part side, position and rotation from {placed[0]}",
+                     f"{placed[1]} parts"))
     return [f"| {f} | {what} | {n} |" for f, what, n in rows]
 
 
@@ -129,13 +130,38 @@ def _facts(args: argparse.Namespace, out: Path, skipped: dict[str, str], compare
     return "\n".join(lines)
 
 
+def _placement(out: Path, inputs: list[tuple[str, BoardModel]], own: BoardModel,
+               skipped: dict[str, str]) -> tuple[str, int] | None:
+    """placement.md and placement.json from a .kicad_pcb among the inputs, else from IPC-D-356."""
+    places: list[tuple[placement.Placement, BoardModel]] = []
+    for path, model in inputs:
+        board = placement.from_board(model, Path(path).name)
+        try:
+            if board is None and placement.sniff(path) == "ipc356":
+                board, model = placement.read_placement(path), own
+        except (OSError, ValueError) as exc:
+            skipped[f"placement from {Path(path).name}"] = str(exc)
+        if board is not None:
+            places.append((board, model))
+    chosen, notes = placement.choose([p for p, _ in places])
+    if chosen is None:
+        skipped["placement"] = ("no .kicad_pcb or IPC-D-356 given; side, position and rotation come from the CAD"
+                                " tool or the pick-and-place file, by hand")
+        return None
+    chosen.notes += notes
+    model = next(m for p, m in places if p is chosen)
+    (out / placement.SAVED).write_text(chosen.to_json(), encoding="utf-8", newline="\n")
+    (out / "placement.md").write_text(placement.to_markdown(chosen, model), encoding="utf-8", newline="\n")
+    return chosen.source, len(chosen.parts)
+
+
 def _prep(args: argparse.Namespace) -> int:
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     skipped: dict[str, str] = {}
     compared = False
     # Compare first so a previous board_model.json named as an input is read before build replaces it.
-    boards: list[tuple[str, object]] = []
+    loaded: list[tuple[str, BoardModel]] = []
     if args.compare:
         labels = args.labels.split(",") if args.labels else DEFAULT_LABELS[: 1 + len(args.compare)]
         try:
@@ -143,7 +169,7 @@ def _prep(args: argparse.Namespace) -> int:
             models += [(lab, loaders.load(p)) for lab, p in zip(labels[1:], args.compare)]
             write_compare(compare.compare(models), out)
             compared = True
-            boards = [(p, m) for p, (_, m) in zip([args.netlist, *args.compare], models) if kicad_pcb.has_placement(m)]
+            loaded = list(zip([args.netlist, *args.compare], [m for _, m in models]))
         except (ValueError, OSError, ParseError) as exc:
             skipped["compare (NET-1)"] = f"could not load a netlist: {exc}"
         if len(args.compare) == 1:
@@ -162,16 +188,7 @@ def _prep(args: argparse.Namespace) -> int:
     findings = to_findings([Finding(**f) for f in lint["findings"]])
     (out / "lint_findings.json").write_text(json.dumps(findings, indent=1) + "\n", encoding="utf-8", newline="\n")
     own = serialize.read_json(out / "board_model.json")
-    boards += [(args.netlist, own)] if kicad_pcb.has_placement(own) else []
-    placed = None
-    if boards:
-        name = Path(boards[0][0]).name
-        text = kicad_pcb.placement_markdown(boards[0][1], name)
-        (out / "placement.md").write_text(text, encoding="utf-8", newline="\n")
-        placed = (name, sum(1 for c in boards[0][1].components.values() if "x_mm" in c.attrs))
-    else:
-        skipped["placement"] = ("no .kicad_pcb given; side, position and rotation come from the CAD tool or the"
-                                " pick-and-place file, by hand")
+    placed = _placement(out, loaded or [(args.netlist, own)], own, skipped)
     text = _facts(args, out, skipped, compared, placed)
     (out / "facts.md").write_text(text, encoding="utf-8", newline="\n")
     sys.stdout.write(text)

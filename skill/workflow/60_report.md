@@ -10,7 +10,7 @@ Write findings.json, the bench plan and the known-good list, then run:
 ```
 python -m boardreview report --findings findings.json --facts facts/ --bench bench.json \
   --known-good known_good.json [--previous OLD/findings.json] [--status status.json] \
-  [--checks checks.json] [--placement board.d356 | board-pos.csv] [--pos-units mm] \
+  [--checks checks.json] [--placement board.kicad_pcb | board.d356 | board-pos.csv] [--pos-units mm] \
   [--detail full] --out report/
 ```
 
@@ -37,10 +37,11 @@ Inputs:
   from the block). `parts` may hold ranges such as `R14-R22`. Write the title as what breaks.
 - **facts/**: the prep folder. Part values, MPNs, DNP state, pins and nets come from
   board_model.json; the power tree from blocks.json.
-- **Placement**: an IPC-D-356 file or a `kicad-cli pcb export pos` file, passed with
-  `--placement` or dropped in facts/. The netlist sources named in board_model.json are read
-  too. A position file wins over IPC-D-356; the two are never mixed because their origins
-  differ. A position CSV does not state its units: pass `--pos-units`. The schematic sheet per
+- **Placement**: `placement.json`, which prep writes in facts/ from a `.kicad_pcb` or an
+  IPC-D-356 file it was given; or a KiCad board file, an IPC-D-356 file or a
+  `kicad-cli pcb export pos` file, passed with `--placement` or dropped in facts/. The netlist
+  sources named in board_model.json are read too. A board file wins over a position file, which
+  wins over IPC-D-356; sources are never mixed because their origins differ. A position CSV does not state its units: pass `--pos-units`. The schematic sheet per
   part comes from a KiCad XML netlist when one is found. The board map is drawn from pad or part
   positions, not the board outline, and says so.
 - **bench.json**: a list of steps, or `{"steps": [...]}`. Each step: `id` (b1, b2, ...),

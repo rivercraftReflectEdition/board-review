@@ -119,10 +119,3 @@ def test_board_model_from_a_board_file_matches_the_schema():
     data = serialize.to_dict(kicad_pcb.parse_kicad_pcb(KICAD9_PCB))
     assert schema.validate(data, schema.load("board_model")) == []
 
-
-def test_placement_table():
-    text = kicad_pcb.placement_markdown(kicad_pcb.parse_kicad_pcb(KICAD9_PCB), "board.kicad_pcb")
-    assert "| R7 | bottom | 10 | 20 | 180 | Resistor_SMD:R_0402 | 4k7 | no |" in text
-    assert "| U1 | top | 100.5 | 80.25 | 90 |" in text
-    assert "2 top, 1 bottom" in text
-    assert "same X and the negated Y" in text

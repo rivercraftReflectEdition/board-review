@@ -1,4 +1,4 @@
-"""Part positions, board side and schematic sheet from IPC-D-356, a KiCad position file and KiCad XML."""
+"""Part positions, board side and sheet from a KiCad board, a KiCad position file, IPC-D-356 and KiCad XML."""
 
 from __future__ import annotations
 
@@ -10,13 +10,16 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from boardreview.model.board import natural_key
+from boardreview.model import kicad_pcb
+from boardreview.model.board import BoardModel, natural_key
 
 INCH_MM = 25.4
 IPC_SUFFIXES = (".ipc", ".d356", ".356", ".ipc356")
 _UNITS = re.compile(r"^P\s+UNITS\s+(\S+)(?:\s+(\S+))?", re.I)
 _COORD = re.compile(r"A(\d{2})X([+\- ]?\d+)Y([+\- ]?\d+)")
 _RECORDS = ("317", "327", "367")
+PREFERENCE = ("kicad_pcb", "kicad_pos", "ipc356")
+SAVED = "placement.json"
 _SIDES = {"top": "top", "front": "top", "f": "top", "toplayer": "top", "t": "top",
           "bottom": "bottom", "back": "bottom", "b": "bottom", "bottomlayer": "bottom", "bot": "bottom"}
 _COLS = {"ref": ("ref", "designator", "refdes", "reference"),
@@ -51,7 +54,7 @@ class Placement:
     def caption(self) -> str:
         """One line for the board map: what the extent and positions come from."""
         what = "pad positions" if self.extent_from == "pads" else "part positions"
-        pos = "pad centres" if self.kind == "ipc356" else "part centroids"
+        pos = {"ipc356": "pad centres", "kicad_pcb": "footprint positions"}.get(self.kind, "part centroids")
         return f"Top view from {self.source}. Points are {pos}; extent from {what}, not the board outline."
 
     def to_dict(self) -> dict:
@@ -64,6 +67,26 @@ class Placement:
             "parts": {r: [round(p.x_mm, 3), round(p.y_mm, 3), code.get(p.side, "")]
                       for r, p in sorted(self.parts.items(), key=lambda kv: natural_key(kv[0]))},
         }
+
+    def to_json(self) -> str:
+        """Full form, as prep saves it in the facts folder."""
+        data = {"kind": self.kind, "source": self.source, "units": self.units,
+                "extent_mm": list(self.extent_mm) if self.extent_mm else None, "extent_from": self.extent_from,
+                "notes": list(self.notes),
+                "parts": {r: {"x_mm": p.x_mm, "y_mm": p.y_mm, "side": p.side, "rotation_deg": p.rotation_deg,
+                              "pads": p.pads}
+                          for r, p in sorted(self.parts.items(), key=lambda kv: natural_key(kv[0]))}}
+        return json.dumps(data, indent=1) + "\n"
+
+    @classmethod
+    def from_json(cls, text: str) -> "Placement":
+        """Read the form to_json writes."""
+        d = json.loads(text)
+        out = cls(d["kind"], d["source"], d["units"], extent_from=d.get("extent_from", ""), notes=d.get("notes", []))
+        out.extent_mm = tuple(d["extent_mm"]) if d.get("extent_mm") else None
+        out.parts = {r: Place(r, p["x_mm"], p["y_mm"], p.get("side", ""), p.get("rotation_deg"), p.get("pads", 0))
+                     for r, p in d.get("parts", {}).items()}
+        return out
 
 
 def ipc356_units(text: str) -> tuple[float, str, list[str]]:
@@ -202,6 +225,25 @@ def parse_kicad_pos(text: str, path: str = "", units: str = "") -> Placement:
     return out
 
 
+def from_board(model: BoardModel, source: str) -> Placement | None:
+    """Footprint positions from a model read from a .kicad_pcb, with Y negated as the position file writes it."""
+    comps = [c for c in model.components.values() if "x_mm" in c.attrs]
+    if not comps:
+        return None
+    out = Placement("kicad_pcb", source, "mm")
+    for c in comps:
+        side = c.attrs.get("side", "")
+        out.parts[c.refdes] = Place(c.refdes, float(c.attrs["x_mm"]), -float(c.attrs.get("y_mm", 0)),
+                                    "" if side == "unknown" else side, float(c.attrs.get("rot_deg", 0)),
+                                    len(model.pins_of(c.refdes)))
+    px = [p.x_mm for p in out.parts.values()]
+    py = [p.y_mm for p in out.parts.values()]
+    out.extent_mm = (min(px), min(py), max(px), max(py))
+    out.extent_from = "parts"
+    out.notes.append("Board file positions with Y negated, the same numbers kicad-cli pcb export pos writes.")
+    return out
+
+
 def parse_kicad_sheets(text: str) -> dict[str, str]:
     """Schematic sheet per refdes from a KiCad XML netlist's sheetpath names; '/' is the root sheet."""
     root = ET.fromstring(text)
@@ -215,9 +257,11 @@ def parse_kicad_sheets(text: str) -> dict[str, str]:
 
 
 def sniff(path: str | Path) -> str:
-    """ipc356, kicad_pos or kicad_xml, or '' when the file is none of them."""
+    """kicad_pcb, ipc356, kicad_pos or kicad_xml, or '' when the file is none of them."""
     path = Path(path)
     head = path.read_bytes()[:4096].decode("latin-1", errors="replace").lstrip("﻿\xef\xbb\xbf \r\n\t")
+    if head.startswith("(kicad_pcb"):
+        return "kicad_pcb"
     if head.startswith("<"):
         return "kicad_xml" if "<export" in head else ""
     if path.suffix.lower() in IPC_SUFFIXES or any(ln[:3] in _RECORDS for ln in head.splitlines()):
@@ -229,35 +273,54 @@ def sniff(path: str | Path) -> str:
 
 
 def read_placement(path: str | Path, units: str = "") -> Placement:
-    """Read an IPC-D-356 file or a KiCad position file."""
+    """Read a KiCad board file, an IPC-D-356 file or a KiCad position file."""
     path = Path(path)
     kind = sniff(path)
+    if kind == "kicad_pcb":
+        found = from_board(kicad_pcb.read_kicad_pcb(path), path.name)
+        if found is None:
+            raise ValueError(f"{path.name}: no footprint positions")
+        return found
     text = path.read_text(encoding="latin-1" if kind == "ipc356" else "utf-8-sig")
     if kind == "ipc356":
         return parse_ipc356_places(text, str(path))
     if kind == "kicad_pos":
         return parse_kicad_pos(text, str(path), units)
-    raise ValueError(f"{path.name}: not an IPC-D-356 or KiCad position file")
+    raise ValueError(f"{path.name}: not a KiCad board, IPC-D-356 or KiCad position file")
 
 
 def _candidates(facts: Path) -> list[Path]:
     """Placement and sheet files in the facts folder, then the sources board_model.json names that still exist."""
     found = [p for p in sorted(facts.iterdir()) if p.is_file() and (
-        p.suffix.lower() in IPC_SUFFIXES + (".pos", ".xml") or (p.suffix.lower() == ".csv" and "pos" in p.stem.lower()))]
+        p.suffix.lower() in IPC_SUFFIXES + (".pos", ".xml", ".kicad_pcb") or (p.suffix.lower() == ".csv" and "pos" in p.stem.lower()))]
     model = facts / "board_model.json"
     if model.exists():
         for s in json.loads(model.read_text(encoding="utf-8")).get("sources", []):
             p = Path(s.get("path", ""))
-            if s.get("kind") in ("ipc356", "kicad_xml") and p.is_file() and p not in found:
+            if s.get("kind") in ("ipc356", "kicad_xml", "kicad_pcb") and p.is_file() and p not in found:
                 found.append(p)
     return found
 
 
+def choose(places: list[Placement]) -> tuple[Placement | None, list[str]]:
+    """One placement: a board file wins over a position file, which wins over IPC-D-356; sources are never mixed."""
+    ranked = sorted(places, key=lambda p: PREFERENCE.index(p.kind))
+    chosen = ranked[0] if ranked else None
+    if chosen is None:
+        return None, ["No board file, IPC-D-356 or position file found: board side and X/Y are not shown."]
+    others = {(p.kind, p.source) for p in places} - {(chosen.kind, chosen.source)}
+    notes = [f"Positions from {chosen.source} only; other placement files use their own origin."] if others else []
+    return chosen, notes
+
+
 def for_facts(facts: str | Path, extra: list[str | Path] = (), units: str = "") -> tuple[Placement | None, dict[str, str], list[str]]:
-    """Placement, sheets and notes for a review: a position file wins over IPC-D-356; sources are never mixed."""
-    files = [Path(p) for p in extra] + (_candidates(Path(facts)) if Path(facts).is_dir() else [])
-    pos: list[Placement] = []
-    ipc: list[Placement] = []
+    """Placement, sheets and notes for a review, from extra files, the facts folder and prep's saved placement."""
+    facts = Path(facts)
+    saved = facts / SAVED if facts.is_dir() else None
+    places: list[Placement] = []
+    if saved is not None and saved.is_file():
+        places.append(Placement.from_json(saved.read_text(encoding="utf-8")))
+    files = [Path(p) for p in extra] + (_candidates(facts) if facts.is_dir() else [])
     sheets: dict[str, str] = {}
     notes: list[str] = []
     for p in files:
@@ -266,15 +329,27 @@ def for_facts(facts: str | Path, extra: list[str | Path] = (), units: str = "") 
             if kind == "kicad_xml":
                 for ref, name in parse_kicad_sheets(p.read_text(encoding="utf-8")).items():
                     sheets.setdefault(ref, name)
-            elif kind == "kicad_pos":
-                pos.append(read_placement(p, units))
-            elif kind == "ipc356":
-                ipc.append(read_placement(p, units))
+            elif kind and not any(q.kind == kind and q.source == p.name for q in places):
+                places.append(read_placement(p, units))
         except (OSError, ValueError, ET.ParseError) as exc:
             notes.append(f"Skipped {p.name}: {exc}")
-    chosen = (pos or ipc or [None])[0]
-    if chosen is not None and len(pos) + len(ipc) > 1:
-        notes.append(f"Positions from {chosen.source} only; other placement files use their own origin.")
-    if chosen is None:
-        notes.append("No IPC-D-356 or position file found: board side and X/Y are not shown.")
-    return chosen, sheets, notes
+    chosen, more = choose(places)
+    return chosen, sheets, notes + more
+
+
+def to_markdown(place: Placement, model: BoardModel | None = None) -> str:
+    """Placement table, one row per part; footprint, value and fitted state come from model when given."""
+    parts = sorted(place.parts.values(), key=lambda p: natural_key(p.refdes))
+    sides = {s: sum(1 for p in parts if p.side == s) for s in ("top", "bottom", "through", "inner", "")}
+    counts = ", ".join(f"{n} {s or 'unknown side'}" for s, n in sides.items() if n)
+    head = "| Ref | Side | X mm | Y mm | Rot deg |" + (" Footprint | Value | Fitted |" if model else "")
+    lines = ["# Placement", "", f"{place.caption()} {len(parts)} parts: {counts}.", "X and Y in mm seen from the top,"
+             " Y up.", *[f"- {n}" for n in place.notes], "", head, "|" + "---|" * (head.count("|") - 1)]
+    for p in parts:
+        rot = "" if p.rotation_deg is None else f"{p.rotation_deg:g}"
+        row = f"| {p.refdes} | {p.side} | {p.x_mm:g} | {p.y_mm:g} | {rot} |"
+        c = model.components.get(p.refdes) if model else None
+        if model:
+            row += f" {c.footprint} | {c.value} | {'yes' if c.fitted else 'no'} |" if c else " | | |"
+        lines.append(row)
+    return "\n".join(lines) + "\n"
