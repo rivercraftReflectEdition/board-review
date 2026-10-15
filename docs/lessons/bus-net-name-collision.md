@@ -30,5 +30,5 @@ Status: caught in the July schematic review, before PCB sync.
 
 - [NET-2](../../skill/checklists/netlist_integrity.md): duplicate names across hierarchy.
 - [NET-1](../../skill/checklists/netlist_integrity.md): schematic, PCB and fab netlists agree.
-- [MEM-1](../../skill/checklists/xspi_memory.md): two memories, separate nets.
+- [MEM-1](../../skill/checklists/xspi_memory.md): memory nets match the intended bus topology.
 - [NET-4](../../skill/checklists/netlist_integrity.md): diff after every fix.

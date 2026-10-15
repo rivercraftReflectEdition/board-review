@@ -3,12 +3,18 @@
 Applies to serial and octal flash, PSRAM and similar memories on xSPI-class controllers.
 Missing data: follow the not-published rule in workflow/40_checks.md unless the item says more.
 
-## MEM-1 Two memories, separate nets
-- Check: when two memories share signal names (DQ0..7, CS, CK) through harnesses, buses or
-  hierarchical sheets, confirm they stay separate nets on the PCB. Run netlist_integrity NET-2.
-- Why: nets keyed by name merge at PCB transfer even when the schematic kept them apart.
-- Compute: none; 3-way compare.
-- Pass: each memory's pins on its own nets in the schematic, PCB and fab netlists.
+## MEM-1 Memory nets match the intended bus topology
+- Check: write down the intended topology first: separate buses, or one bus shared by several
+  devices. Then confirm the schematic, PCB and fab netlists match it. Signal names shared through
+  harnesses, buses or hierarchical sheets must not merge buses meant to be separate (run
+  netlist_integrity NET-2), and a shared bus must give each device the chip select the
+  controller mode expects (one per device, or one shared select in a documented dual-memory
+  mode).
+- Why: nets keyed by name merge at PCB transfer even when the schematic kept them apart. A
+  shared bus is legitimate when it is the intent; a merge by name is not.
+- Compute: none; `model.compare` 3-way compare.
+- Pass: every memory signal is on the net the intended topology puts it on, in all three
+  netlists, and the chip selects match the controller mode.
 - Example: [bus net name collision](../../docs/lessons/bus-net-name-collision.md)
 
 ## MEM-2 Every signal reaches the right controller port pin

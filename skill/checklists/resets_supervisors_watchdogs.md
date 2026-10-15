@@ -80,5 +80,7 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
   Compare the library symbol and footprint pin mapping with the package marking.
 - Why: a reversed diode in a reset-OR holds a reset net at the wrong rail.
 - Compute: none; library and footprint check.
-- Pass: pin 1 of the footprint matches the cathode marking in the library and on the part.
+- Pass: the symbol's cathode pin maps to the footprint pad under the package's cathode marking
+  in the datasheet drawing, and the silkscreen polarity mark is at that pad. Libraries number
+  diode pads differently; check the mapping, not the pad number.
 - Example: [reset diode-OR margins](../../docs/lessons/reset-diode-or-margins.md)

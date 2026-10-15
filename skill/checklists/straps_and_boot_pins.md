@@ -21,10 +21,12 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 
 ## STR-2 Fitted state from the released variant
 - Check: read fitted and DNP state from the BOM variant that goes to assembly, not from design
-  notes. A pull-up and pull-down both fitted on a two-level pin is a finding.
+  notes, and compute the level those parts give (STR-1). A pull-up and pull-down both fitted on
+  a two-level pin is a finding unless STR-1 shows the divider lands inside the intended window.
 - Why: a fix that lives only in notes or in an unreleased variant reaches no board.
-- Compute: none; variant table against the netlist.
-- Pass: exactly one side fitted per two-level strap, or the level table needs the divider.
+- Compute: variant table against the netlist; STR-1 for the level.
+- Pass: in the released variant, the fitted parts (or the internal pull alone, where the
+  datasheet gives its range) set the intended level with the STR-1 margin.
 - Example: [strap pairs fitted on both sides](../../docs/lessons/strap-pairs-fitted-both-sides.md)
 
 ## STR-3 Trace through series resistors and other loads
