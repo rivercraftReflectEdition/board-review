@@ -41,7 +41,7 @@ def tvs_standoff(
         outputs={"v_peak": Quantity(v_peak, "V"), "margin": Quantity(margin, "V")},
         verdict=verdict,
         reason=reason,
-        refs=tuple(refs),
+        refs=("TVS data sheet: VRWM, VBR(min) and IR at VRWM; pass the part, revision and page in refs",) + tuple(refs),
         assumptions=(
             f"MARGINAL below {margin_frac:.0%} of VRWM",
             "VRWM is the voltage at which the vendor specifies leakage; leakage rises with temperature",
@@ -85,7 +85,7 @@ def tvs_clamp(
         outputs={"v_clamp": Quantity(vc, "V"), "r_dyn": Quantity(r_dyn, "ohm"), "margin": Quantity(margin, "V")},
         verdict=verdict,
         reason=reason,
-        refs=tuple(refs),
+        refs=("TVS data sheet: VC at IPP for the stated pulse; pass the part, revision and page in refs",) + tuple(refs),
         assumptions=(
             "trace inductance between TVS and the protected pin adds L*di/dt on top of Vc",
             "clamp points are for the same pulse shape as the expected surge",
