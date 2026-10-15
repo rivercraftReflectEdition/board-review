@@ -11,6 +11,7 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+from boardreview.lint import Finding, to_findings
 from boardreview.model import digest, loaders, serialize
 from boardreview.model.__main__ import main as model_main
 
@@ -73,6 +74,8 @@ def _written(out: Path, has_bom: bool, compared: bool) -> list[str]:
          f"{len(pinmaps)} files"),
         ("lint.md, lint.json", "deterministic netlist and BOM checks",
          f"{sev['error']} errors, {sev['warning']} warnings, {sev['info']} info from {len(lint['ran'])} checks"),
+        ("lint_findings.json", "lint results as candidate findings, verification PENDING",
+         f"{len(lint['findings'])} findings"),
         ("blocks.md, blocks.json", "candidate blocks for stage 3",
          (", ".join(f"{n} {k.replace('_', ' ')}" for k, n in sorted(kinds.items())) or "none")
          + f"; {low} low confidence"),
@@ -135,6 +138,9 @@ def _prep(args: argparse.Namespace) -> int:
         _quiet(build)
     except ValueError as exc:
         raise SystemExit(f"prep: cannot build the model from {args.netlist}: {exc}") from exc
+    lint = _read(out / "lint.json")
+    findings = to_findings([Finding(**f) for f in lint["findings"]])
+    (out / "lint_findings.json").write_text(json.dumps(findings, indent=1) + "\n", encoding="utf-8", newline="\n")
     text = _facts(args, out, skipped, compared)
     (out / "facts.md").write_text(text, encoding="utf-8", newline="\n")
     sys.stdout.write(text)

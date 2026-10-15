@@ -98,7 +98,7 @@ Python names in this skill are relative to the `boardreview` package in `tools/b
   `model.compare` for the 3-way compare and the snapshot diff.
 - `lint`: single-pin nets, unconnected IC pins, ground and supply pins on the wrong net,
   floating protection grounds, near-duplicate rail names, parts without MPN, DNP-only links,
-  BOM against netlist.
+  BOM against netlist. `lint.to_findings` writes results as PENDING candidate findings.
 - `blocks`: candidate switching regulators, bead and LC filters, crystals, oscillators, resets,
   I2C buses, straps.
 - `calc`: `buck`, `loop`, `lc_tank`, `mlcc_bias`, `divider`, `timing`, `protection`, `i2c`,

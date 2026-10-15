@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Callable
 
 from boardreview.lint.base import SEVERITY_ORDER, Finding, LintReport, Skip
+from boardreview.lint.convert import to_finding, to_findings
 from boardreview.lint.nets import dnp_only_link, near_duplicate_rails, single_pin_nets
 from boardreview.lint.parts import bom_netlist_mismatch, fitted_without_mpn
 from boardreview.lint.pins import ground_pin_off_ground, protection_ground_floating, unconnected_ic_pins
@@ -41,4 +42,4 @@ def run_all(model: BoardModel, only: list[str] | None = None) -> LintReport:
     return LintReport(findings, ran, skipped)
 
 
-__all__ = ["CHECKS", "Finding", "LintReport", "Skip", "run_all"]
+__all__ = ["CHECKS", "Finding", "LintReport", "Skip", "run_all", "to_finding", "to_findings"]

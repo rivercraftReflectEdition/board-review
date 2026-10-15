@@ -81,9 +81,10 @@ python -m boardreview prep SCH_NETLIST --bom BOM --compare PCB_NETLIST FAB_NETLI
 2. 3-way compare (NET-1, `model.compare`): the first netlist is the naming reference; default
    labels are schematic, pcb, fab (`--labels` to change). Writes `compare.md` and
    `compare.json`.
-3. Lint (NET-2, NET-5, NET-7, `lint.run_all`): `lint.md` and `lint.json`. Floating inputs
-   (NET-5), value outliers (NET-6) and symbol pins against digests (NET-8) have no lint check
-   yet; do them from the staging views, and re-run NET-8 after stage 2.
+3. Lint (NET-2, NET-5, NET-7, `lint.run_all`): `lint.md`, `lint.json`, and `lint_findings.json`
+   with each result as a candidate finding (`lint.to_findings`, verification PENDING). Floating
+   inputs (NET-5), value outliers (NET-6) and symbol pins against digests (NET-8) have no lint
+   check yet; do them from the staging views, and re-run NET-8 after stage 2.
 4. Snapshot diff (NET-3, NET-4) against the previous review's snapshot, then re-verify every
    prior fix:
    `python -m boardreview.model compare <review folder>/facts/board_model.json <previous>/facts/board_model.json --labels current,previous --out <review folder>/snapshot_diff`
