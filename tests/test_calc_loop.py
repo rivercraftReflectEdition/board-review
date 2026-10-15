@@ -102,6 +102,47 @@ def test_integrator_loop_has_90_deg_margin():
     assert r.verdict is Verdict.PASS
 
 
+def test_sweep_ending_before_the_phase_crossing_is_unknown():
+    # Phase = -90 - 360 f Td reaches -180 at f = 90/(360 Td) = 2250 Hz, past the 2 kHz sweep.
+    r = margins([Integrator(1000), Delay(1 / 9000)], 10, 2e3)
+    assert r.outputs["pm"].value == pytest.approx(50.0, abs=1e-6)
+    assert r.verdict is Verdict.UNKNOWN
+    assert "f_stop" in r.reason
+
+
+def test_integrator_with_delay_gain_margin_worked():
+    # |T(2250 Hz)| = 1000/2250, so GM = 20 log10(2.25) = 7.044 dB: under 10 dB, over 6 dB.
+    r = margins([Integrator(1000), Delay(1 / 9000)], 10, 10e3)
+    assert r.outputs["f180"].value == pytest.approx(2250.0, rel=1e-6)
+    assert r.outputs["gm"].value == pytest.approx(20 * math.log10(2.25), abs=1e-6)
+    assert r.verdict is Verdict.MARGINAL
+
+
+def test_gain_margin_bounded_above_the_sweep_can_pass():
+    # No crossing below 1 MHz; above it |T| <= 1000/1e6, so any phase crossing there has GM >= 60 dB.
+    r = margins([Integrator(1000), Delay(1e-9)], 10, 1e6)
+    assert r.outputs["n_phase_crossings"].value == 0
+    assert r.outputs["gm"].value == pytest.approx(60.0, abs=1e-9)
+    assert r.verdict is Verdict.PASS
+
+
+def test_block_without_bounds_and_no_phase_crossing_is_unknown():
+    class Opaque:
+        def response(self, f_hz):
+            return Integrator(1000).response(f_hz)
+
+        def phase_deg(self, f_hz):
+            return Integrator(1000).phase_deg(f_hz)
+
+        def params(self):
+            return {}
+
+        def text(self):
+            return "opaque"
+
+    assert margins([Opaque()], 10, 1e6).verdict is Verdict.UNKNOWN
+
+
 def test_three_poles_gain_margin_worked():
     # T = K/(1+s/w)^3 crosses -180 at w*sqrt(3), where |T| = K/8; K = 4 gives GM = 6.02 dB.
     r = margins([Gain(4.0), Pole(1e3), Pole(1e3), Pole(1e3)], 1, 1e6, gm_fail_db=3)

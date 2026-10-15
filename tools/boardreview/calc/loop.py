@@ -23,6 +23,8 @@ class Block(Protocol):
 
     def text(self) -> str: ...
 
+    def tail_bounds(self, f_hz: float) -> tuple[float, float, float, float]: ...
+
 
 @dataclass(frozen=True)
 class Gain:
@@ -41,6 +43,10 @@ class Gain:
     def text(self):
         return f"{self.k:g} {self.unit}".strip()
 
+    def tail_bounds(self, f_hz):
+        ph = 0.0 if self.k >= 0 else -180.0
+        return ph, ph, abs(self.k), 0.0
+
 
 @dataclass(frozen=True)
 class Integrator:
@@ -58,6 +64,9 @@ class Integrator:
     def text(self):
         return f"wi/s (fi = {self.f_unity_hz:g} Hz)"
 
+    def tail_bounds(self, f_hz):
+        return -90.0, -90.0, self.f_unity_hz / f_hz, -1.0
+
 
 @dataclass(frozen=True)
 class Pole:
@@ -74,6 +83,12 @@ class Pole:
 
     def text(self):
         return f"1/(1 + s/wp) (fp = {self.f_hz:g} Hz)"
+
+    def tail_bounds(self, f_hz):
+        ph = -math.degrees(math.atan(f_hz / self.f_hz))
+        if f_hz >= self.f_hz:
+            return -90.0, ph, self.f_hz / f_hz, -1.0
+        return -90.0, ph, 1.0 / math.hypot(1.0, f_hz / self.f_hz), 0.0
 
 
 @dataclass(frozen=True)
@@ -95,6 +110,11 @@ class Zero:
     def text(self):
         return f"(1 {'-' if self.rhp else '+'} s/wz) (fz = {self.f_hz:g} Hz{', RHP' if self.rhp else ''})"
 
+    def tail_bounds(self, f_hz):
+        ph = math.degrees(math.atan(f_hz / self.f_hz))
+        lo, hi = (-90.0, -ph) if self.rhp else (ph, 90.0)
+        return lo, hi, math.hypot(1.0, f_hz / self.f_hz), 1.0
+
 
 @dataclass(frozen=True)
 class IntegratorZero:
@@ -113,6 +133,9 @@ class IntegratorZero:
 
     def text(self):
         return f"(1 + wz/s) (fz = {self.f_hz:g} Hz)"
+
+    def tail_bounds(self, f_hz):
+        return -math.degrees(math.atan(self.f_hz / f_hz)), 0.0, math.hypot(1.0, self.f_hz / f_hz), 0.0
 
 
 @dataclass(frozen=True)
@@ -138,6 +161,15 @@ class DoublePole:
     def text(self):
         return f"1/(1 + s/(Q*w0) + s^2/w0^2) (f0 = {self.f_hz:g} Hz, Q = {self.q:g})"
 
+    def tail_bounds(self, f_hz):
+        x = f_hz / self.f_hz
+        ph = -math.degrees(math.atan2(x / self.q, 1.0 - x * x))
+        if x >= 2.0:
+            return -180.0, ph, 1.0 / (x * x - 1.0), -2.0
+        if self.q > math.sqrt(0.5) and x < math.sqrt(1.0 - 0.5 / self.q**2):
+            return -180.0, ph, self.q / math.sqrt(1.0 - 0.25 / self.q**2), 0.0
+        return -180.0, ph, 1.0 / math.hypot(1.0 - x * x, x / self.q), 0.0
+
 
 @dataclass(frozen=True)
 class Delay:
@@ -154,6 +186,9 @@ class Delay:
 
     def text(self):
         return f"exp(-s*Td) (Td = {self.t_s:g} s)"
+
+    def tail_bounds(self, f_hz):
+        return -math.inf, -360.0 * f_hz * self.t_s, 1.0, 0.0
 
 
 @dataclass(frozen=True)
@@ -191,6 +226,13 @@ class Divider:
         dc = "R2/(R1+R2)*" if self.include_dc else ""
         return f"{dc}(1 + s*R1*Cff)/(1 + s*(R1||R2)*Cff) (R1 = {self.r_top_ohm:g}, R2 = {self.r_bot_ohm:g}, Cff = {self.cff_f:g})"
 
+    def tail_bounds(self, f_hz):
+        dc = self.r_bot_ohm / (self.r_top_ohm + self.r_bot_ohm) if self.include_dc else 1.0
+        if self.cff_f == 0.0:
+            return 0.0, 0.0, dc, 0.0
+        tz, tp = self._w()
+        return 0.0, 90.0, dc * tz / tp, 0.0
+
 
 @dataclass(frozen=True)
 class ParallelRC:
@@ -213,6 +255,11 @@ class ParallelRC:
 
     def text(self):
         return f"R || (ESR + 1/sC) (R = {self.r_ohm:g} ohm, C = {self.c_f:g} F, ESR = {self.esr_ohm:g} ohm)"
+
+    def tail_bounds(self, f_hz):
+        if self.esr_ohm == 0.0 and TWO_PI * f_hz * self.r_ohm * self.c_f >= 1.0:
+            return -90.0, 0.0, 1.0 / (TWO_PI * f_hz * self.c_f), -1.0
+        return -90.0, 0.0, float(abs(self.response(np.array([f_hz]))[0])), 0.0
 
 
 def loop_response(blocks: Sequence[Block], f_hz) -> tuple[np.ndarray, np.ndarray]:
@@ -287,6 +334,36 @@ def _db(x: float) -> float:
     return 20.0 * math.log10(x) if math.isfinite(x) else math.inf
 
 
+def _gm_above(blocks: Sequence[Block], f_hz: float) -> float:
+    """Lowest GM any phase crossing above f_hz can have, from per-block phase and gain bounds; -inf when unbounded."""
+    lo = hi = n = 0.0
+    c = 1.0
+    for b in blocks:
+        bounds = getattr(b, "tail_bounds", None)
+        if bounds is None:
+            return -math.inf
+        a, z, cb, nb = bounds(f_hz)
+        lo, hi, c, n = lo + a, hi + z, c * cb, n + nb
+    if math.isfinite(lo) and math.ceil((-180.0 - hi) / 360.0) > math.floor((-180.0 - lo) / 360.0):
+        return math.inf
+    if n > 0 or not math.isfinite(c):
+        return -math.inf
+    return -20.0 * math.log10(c) if c > 0 else math.inf
+
+
+def _grade(pm, gm, conditional, pm_min, pm_fail, gm_min, gm_fail):
+    if pm <= 0 or gm <= 0:
+        return Verdict.FAIL, f"unstable: PM {pm:.1f} deg, GM {gm:.1f} dB"
+    if pm < pm_fail or gm < gm_fail:
+        return Verdict.FAIL, f"PM {pm:.1f} deg or GM {gm:.1f} dB below {pm_fail:g} deg / {gm_fail:g} dB"
+    if pm < pm_min or gm < gm_min or conditional:
+        reason = f"PM {pm:.1f} deg, GM {gm:.1f} dB against {pm_min:g} deg / {gm_min:g} dB"
+        if conditional:
+            reason += "; conditionally stable (phase crosses -180 below fc with gain above 0 dB)"
+        return Verdict.MARGINAL, reason
+    return Verdict.PASS, ""
+
+
 def margins(
     blocks: Sequence[Block],
     f_start_hz: float = 10.0,
@@ -316,17 +393,34 @@ def margins(
     fc_min = min(f for f, _ in gc)
     fc_worst, pm = min(gc, key=lambda c: c[1])
     relevant = [(f, g) for f, g in pc if not (pm > 0 and f < fc_min and g < 0)]
-    f180, gm = min(relevant, key=lambda c: c[1]) if relevant else (math.nan, math.inf)
+    f180, gm_swept = min(relevant, key=lambda c: c[1]) if relevant else (math.nan, math.inf)
     conditional = len(relevant) < len(pc)
+    gm_above = _gm_above(blocks, f_stop_hz)
+    known = gm_above >= gm_swept
+    gm = gm_swept if known else gm_above
+    limits = (pm_min_deg, pm_fail_deg, gm_min_db, gm_fail_db)
+    verdict, reason = _grade(pm, gm_swept, conditional, *limits)
+    if not known and verdict is not Verdict.FAIL:
+        low, _ = _grade(pm, gm_above, conditional, *limits)
+        if low is not verdict:
+            bound = f"at least {gm_above:.1f} dB" if math.isfinite(gm_above) else "unbounded by the model"
+            verdict = Verdict.UNKNOWN
+            reason = (
+                f"PM {pm:.1f} deg; phase may reach -180 deg above f_stop = {f_stop_hz:g} Hz, where GM is {bound}; "
+                "extend f_stop past the phase crossing"
+            )
+    if verdict is Verdict.PASS:
+        reason = f"PM {pm:.1f} deg at {fc_worst / 1e3:.1f} kHz, GM {'at least ' if not known else ''}{gm:.1f} dB"
     pk_fc = peaking_at_crossover(pm)
     pk_180 = peaking_at_f180(gm)
     outputs = {
         "fc": Quantity(fc_worst, "Hz", "crossover with the lowest PM"),
         "pm": Quantity(pm, "deg"),
-        "f180": Quantity(f180, "Hz"),
-        "gm": Quantity(gm, "dB"),
+        "f180": Quantity(f180 if known else math.nan, "Hz"),
+        "gm": Quantity(gm, "dB", "" if known else "lower bound: phase may cross -180 above f_stop"),
+        "gm_above_f_stop": Quantity(gm_above, "dB", "lowest GM any phase crossing above f_stop can have"),
         "peak_fc": Quantity(pk_fc, "", f"{_db(pk_fc):.2f} dB"),
-        "peak_f180": Quantity(pk_180, "", f"{_db(pk_180):.2f} dB"),
+        "peak_f180": Quantity(pk_180, "", f"{_db(pk_180):.2f} dB" + ("" if known else ", upper bound")),
         "n_gain_crossings": Quantity(len(gc), "count"),
         "n_phase_crossings": Quantity(len(pc), "count"),
     }
@@ -334,17 +428,6 @@ def margins(
         outputs[f"fc_{i + 1}"] = Quantity(f, "Hz", f"PM {p:.2f} deg")
     for i, (f, g) in enumerate(pc):
         outputs[f"f180_{i + 1}"] = Quantity(f, "Hz", f"GM {g:.2f} dB")
-    if pm <= 0 or gm <= 0:
-        verdict, reason = Verdict.FAIL, f"unstable: PM {pm:.1f} deg, GM {gm:.1f} dB"
-    elif pm < pm_fail_deg or gm < gm_fail_db:
-        verdict, reason = Verdict.FAIL, f"PM {pm:.1f} deg or GM {gm:.1f} dB below {pm_fail_deg:g} deg / {gm_fail_db:g} dB"
-    elif pm < pm_min_deg or gm < gm_min_db or conditional:
-        verdict = Verdict.MARGINAL
-        reason = f"PM {pm:.1f} deg, GM {gm:.1f} dB against {pm_min_deg:g} deg / {gm_min_db:g} dB"
-        if conditional:
-            reason += "; conditionally stable (phase crosses -180 below fc with gain above 0 dB)"
-    else:
-        verdict, reason = Verdict.PASS, f"PM {pm:.1f} deg at {fc_worst / 1e3:.1f} kHz, GM {gm:.1f} dB"
     if len(gc) > 1:
         reason += f"; {len(gc)} gain crossings"
     return Result(
@@ -355,7 +438,11 @@ def margins(
         verdict=verdict,
         reason=reason,
         refs=base_refs,
-        assumptions=("linear small-signal model", "phase is the sum of block phases, so it is continuous"),
+        assumptions=(
+            "linear small-signal model",
+            "phase is the sum of block phases, so it is continuous",
+            "above f_stop, phase and gain are bounded from each block's limits, not swept",
+        ),
     )
 
 
