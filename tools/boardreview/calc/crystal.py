@@ -6,7 +6,16 @@ import math
 
 from boardreview.calc.base import Quantity, Result, Verdict
 
-AN2867 = "ST AN2867 Oscillator design guide for STM8 and STM32 (gm_crit, gain margin >= 5); revision and page UNSURE, not fetched"
+AN2867 = "ST AN2867 Rev 24 (February 2026), Guidelines for oscillator design on STM8AF/AL/S and STM32 MCUs/MPUs"
+AN2867_CL = f"{AN2867} sec. 3.3 p. 12 (CL = CL1*CL2/(CL1 + CL2) + Cs)"
+AN2867_GM = (
+    f"{AN2867} sec. 3.4 pp. 13 to 14 (gmcrit = 4*ESR*(2*pi*F)^2*(C0 + CL)^2; gainmargin = gm/gmcrit > 5; "
+    "or gmcrit below Gm_crit_max)"
+)
+AN2867_DL = (
+    f"{AN2867} sec. 3.5.1 pp. 14 to 15 (DL = ESR*IQ^2) and sec. 3.5.2 p. 16 "
+    "(IQ = 2*pi*F*Vrms*Ctot, Vrms = Vpp/(2*sqrt(2)), Ctot = CL1 + Cs/2 + Cprobe)"
+)
 STM32N6_HSE = "ST DS14791 Rev 9 (STM32N6x5xx/x7xx) p. 160 Table 49, HSE Gmcritmax 1.95 mA/V"
 
 
@@ -46,7 +55,7 @@ def load_capacitance(
         outputs=outputs,
         verdict=verdict,
         reason=reason,
-        refs=("series combination of C1 and C2 through ground, plus pin and trace stray", AN2867),
+        refs=("series combination of C1 and C2 through ground, plus pin and trace stray", AN2867_CL),
         assumptions=("Cstray includes both oscillator pins and the traces; 2 to 5 pF is typical, measure if it matters",),
     )
 
@@ -97,7 +106,7 @@ def oscillation_margin(
         outputs=outputs,
         verdict=verdict,
         reason=reason,
-        refs=(AN2867,) + tuple(refs),
+        refs=(AN2867_GM,) + tuple(refs),
         assumptions=("ESR at its datasheet maximum", "C0 includes the package shunt capacitance only"),
     )
 
@@ -124,7 +133,7 @@ def drive_level(
         inputs = {
             "esr": Quantity(esr_ohm, "ohm"),
             "f": Quantity(f_hz, "Hz"),
-            "c_tot": Quantity(c_tot_f, "F", "input-side load capacitor plus stray"),
+            "c_tot": Quantity(c_tot_f, "F", "CL1 + Cs/2 + Cprobe at the amplifier input"),
             "v_pp": Quantity(v_pp_v, "V"),
         }
     inputs["dl_max"] = Quantity(dl_max_w, "W")
@@ -141,6 +150,6 @@ def drive_level(
         outputs={"dl": Quantity(dl, "W")},
         verdict=verdict,
         reason=reason,
-        refs=("P = I^2*R in the motional resistance; current through the input capacitor is the crystal current", AN2867),
+        refs=("P = I^2*R in the motional resistance; current through the input capacitor is the crystal current", AN2867_DL),
         assumptions=("sinusoidal swing", "ESR at its datasheet maximum"),
     )

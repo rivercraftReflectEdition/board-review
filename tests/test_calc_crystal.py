@@ -35,6 +35,26 @@ def test_gain_margin_with_oscillator_gm():
     assert r.verdict is Verdict.FAIL
 
 
+def test_an2867_worked_example_8mhz():
+    # AN2867 Rev 24 p. 14: 8 MHz, C0 7 pF, CL 10 pF, ESR 80 ohm give gmcrit 0.23 mA/V and gain margin 107 at gm 25 mA/V.
+    r = oscillation_margin(80.0, 8e6, 7e-12, 10e-12, gm_a_per_v=25e-3)
+    assert r.outputs["gm_crit"].value == pytest.approx(0.23e-3, abs=0.005e-3)
+    assert r.outputs["gain_margin"].value == pytest.approx(107, abs=0.5)
+    assert r.verdict is Verdict.PASS
+
+
+def test_crystal_refs_cite_an2867_rev24_sections():
+    refs = {
+        "cl": load_capacitance(12e-12, 12e-12, 3e-12).refs,
+        "gm": oscillation_margin(50.0, 24e6, 3e-12, 9e-12).refs,
+        "dl": drive_level(50.0, 100e-6, i_rms_a=1e-3).refs,
+    }
+    assert any("AN2867 Rev 24" in r and "3.3 p. 12" in r for r in refs["cl"])
+    assert any("AN2867 Rev 24" in r and "3.4 pp. 13 to 14" in r for r in refs["gm"])
+    assert any("AN2867 Rev 24" in r and "3.5.2 p. 16" in r for r in refs["dl"])
+    assert not any("UNSURE" in r for rs in refs.values() for r in rs)
+
+
 def test_no_gm_data_is_unknown():
     assert oscillation_margin(50.0, 24e6, 3e-12, 9e-12).verdict is Verdict.UNKNOWN
 

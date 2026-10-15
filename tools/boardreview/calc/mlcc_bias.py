@@ -9,7 +9,10 @@ import numpy as np
 from boardreview.calc.base import Quantity, Result, Verdict
 from boardreview.calc.curves import find_column, parse_csv_table, unit_scale
 
-EIA_REF = "EIA-198-1 Class II temperature characteristic codes, from memory; page not checked (UNSURE)"
+CLASS2_CODES = (
+    "Analog Devices technical article, Temperature and Voltage Variation of Ceramic Capacitors, or Why Your 4.7uF "
+    "Capacitor Becomes a 0.33uF Capacitor (4 Dec 2012), Table 1 (Class II and III codes: low temp, high temp, change)"
+)
 _LOW_T = {"X": -55.0, "Y": -30.0, "Z": 10.0}
 _HIGH_T = {"2": 45.0, "4": 65.0, "5": 85.0, "6": 105.0, "7": 125.0, "8": 150.0, "9": 200.0}
 _BAND = {
@@ -155,7 +158,7 @@ def mlcc_effective(
         },
         verdict=verdict,
         reason=reason,
-        refs=(EIA_REF,) + tuple(refs),
+        refs=(CLASS2_CODES,) + tuple(refs),
         assumptions=(
             "bias and temperature effects multiplied as independent factors",
             "class II band applied in full over the operating range (conservative inside the rated range)",

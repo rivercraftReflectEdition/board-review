@@ -23,6 +23,12 @@ ABSOLUTE = "Voltage (V)\tCapacitance (uF)\n0\t1.00\n2\t0.80\n4\t0.55\n"
 PCT_OF_NOM_LOW = "DC Bias [V],C/C0 [%]\n3.3,40\n5,30\n6.3,24\n"
 
 
+def test_class2_codes_cite_the_adi_table():
+    r = mlcc_effective(1e-6, "X7R", 0.1)
+    assert any("Table 1" in ref and "Ceramic Capacitors" in ref for ref in r.refs)
+    assert not any("UNSURE" in ref for ref in r.refs)
+
+
 def test_dielectric_codes():
     assert dielectric_band("X7R") == (-55.0, 125.0, -0.15, 0.15)
     assert dielectric_band("X5R") == (-55.0, 85.0, -0.15, 0.15)
