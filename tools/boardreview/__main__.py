@@ -138,8 +138,8 @@ def _prep(args: argparse.Namespace) -> int:
     build += (["--format", args.format] if args.format else []) + (["--variant", args.variant] if args.variant else [])
     try:
         _quiet(build)
-    except ValueError as exc:
-        raise SystemExit(f"prep: cannot build the model from {args.netlist}: {exc}") from exc
+    except (ValueError, OSError) as exc:
+        raise SystemExit(f"prep: cannot build the board model: {exc}") from exc
     lint = _read(out / "lint.json")
     findings = to_findings([Finding(**f) for f in lint["findings"]])
     (out / "lint_findings.json").write_text(json.dumps(findings, indent=1) + "\n", encoding="utf-8", newline="\n")

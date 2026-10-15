@@ -157,6 +157,26 @@ def test_bom_csv_title_rows_ranges_dnp_and_merge(tmp_path):
     assert cross["netlist_only"] == ["Q7"]
 
 
+def test_bom_kicad_default_export_with_grouped_refs_and_dnp(tmp_path):
+    path = tmp_path / "bom.csv"
+    path.write_text('"Refs","Value","Footprint","Qty","DNP"\n'
+                    '"C1,C12,C16","100nF","Capacitor_SMD:C_0402_1005Metric","3",""\n'
+                    '"R4-R6","10k","Resistor_SMD:R_0402_1005Metric","3",""\n'
+                    '"TP1","TestPoint","TestPoint:TestPoint_Pad_D2.0mm","1","DNP"\n', encoding="utf-8")
+    lines = bom.read_bom(path)
+    assert [ln.refdes for ln in lines] == [["C1", "C12", "C16"], ["R4", "R5", "R6"], ["TP1"]]
+    assert [ln.fitted for ln in lines] == [True, True, False]
+    assert lines[0].footprint == "Capacitor_SMD:C_0402_1005Metric" and lines[1].value == "10k"
+
+
+@pytest.mark.parametrize("header", ["${REFERENCE}", "Ref", "Refs", "Reference"])
+def test_bom_designator_header_variants(tmp_path, header):
+    path = tmp_path / "bom.csv"
+    path.write_text(f'"{header}","Value","${{DNP}}"\n"R1","10k","DNP"\n', encoding="utf-8")
+    line = bom.read_bom(path)[0]
+    assert line.refdes == ["R1"] and line.fitted is False
+
+
 def _write_xlsx(path: Path, rows: list[list[object]]) -> None:
     strings: list[str] = []
     cells_xml = []

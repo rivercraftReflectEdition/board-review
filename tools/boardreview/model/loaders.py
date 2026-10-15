@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from xml.etree.ElementTree import ParseError
 
 from boardreview.model import bom, eda_agent, ipc356, kicad, protel, serialize
 from boardreview.model.board import SCHEMA_ID, BoardModel
@@ -51,8 +52,15 @@ def load(path: str | Path, fmt: str = "", variant: str = "") -> BoardModel:
 
 def load_with_bom(netlist: str | Path, bom_path: str | Path | None = None, fmt: str = "",
                   variant: str = "") -> tuple[BoardModel, dict[str, list[str]]]:
-    """Load a netlist and merge a BOM when given; returns the model and the BOM cross-check lists."""
-    model = load(netlist, fmt, variant)
+    """Load a netlist and merge a BOM when given; errors name the file that failed."""
+    try:
+        model = load(netlist, fmt, variant)
+    except (ValueError, OSError, ParseError) as exc:
+        raise ValueError(f"netlist {netlist}: {exc}") from exc
     if not bom_path:
         return model, {}
-    return model, bom.apply_bom(model, bom.read_bom(bom_path), str(bom_path))
+    try:
+        lines = bom.read_bom(bom_path)
+    except (ValueError, OSError) as exc:
+        raise ValueError(f"BOM {bom_path}: {exc}") from exc
+    return model, bom.apply_bom(model, lines, str(bom_path))

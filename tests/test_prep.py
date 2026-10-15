@@ -74,6 +74,21 @@ def test_prep_records_a_compare_input_it_cannot_load(tmp_path):
     assert (out / "board_model.json").exists()
 
 
+def test_prep_names_the_bom_when_the_bom_fails(tmp_path):
+    bom = tmp_path / "bom.csv"
+    bom.write_text("Item,Value\n1,10k\n", encoding="utf-8")
+    with pytest.raises(SystemExit) as stop:
+        main(["prep", str(FIX / "ti_buck_board.kicad.xml"), "--bom", str(bom), "--out", str(tmp_path / "f")])
+    text = str(stop.value.code)
+    assert "bom.csv" in text and "BOM" in text and "ti_buck_board" not in text
+
+
+def test_prep_names_the_netlist_when_the_netlist_fails(tmp_path):
+    with pytest.raises(SystemExit) as stop:
+        main(["prep", str(FIX / "nope.xml"), "--out", str(tmp_path / "f")])
+    assert "nope.xml" in str(stop.value.code)
+
+
 @pytest.mark.parametrize("argv", [
     ["--compare", "a", "b", "c"],
     ["--compare", "a", "--labels", "x,y,z"],

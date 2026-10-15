@@ -6,11 +6,13 @@ import re
 
 
 def _norm(header: str) -> str:
-    return re.sub(r"\s+", " ", header.strip().lower().replace("_", " "))
+    bare = re.sub(r"^\$\{(.*)\}$", r"\1", header.strip())
+    return re.sub(r"\s+", " ", bare.strip().lower().replace("_", " "))
 
 
 _ALIASES = {
-    "refdes": ["designator", "designators", "reference", "references", "ref", "refdes", "ref des", "part reference",
+    "refdes": ["designator", "designators", "reference", "references", "ref", "refs", "refdes", "ref des",
+               "part reference",
                "reference designator", "reference designators", "ref designator", "parts", "position"],
     "mpn": ["mpn", "manufacturer part number", "manufacturer part number 1", "manufacturer part", "mfr part number",
             "mfr part #", "mfr. part #", "mfr pn", "mfg part number", "mfg pn", "manufacturer pn", "part number",
