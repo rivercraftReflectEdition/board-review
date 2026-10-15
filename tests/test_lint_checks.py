@@ -82,6 +82,13 @@ def test_unconnected_ic_pins_without_names_are_info_and_skip_on_protel():
     assert "unconnected_ic_pin" in report.skipped
 
 
+def test_bare_in_pin_is_not_treated_as_a_supply():
+    m = _board([("U1", "1", "VCC", "VCC"), ("U1", "2", None, "IN"), ("U1", "3", "GND", "GND"), ("U2", "1", "GND", "IN")])
+    found = _run(pins.unconnected_ic_pins, m)
+    assert [(f.severity, f.pins) for f in found] == [("warning", ["U1.2"])]
+    assert _run(pins.ground_pin_off_ground, m) == []
+
+
 def test_ground_pin_off_ground_and_reverse():
     m = _board([("U5", "1", "SENSE_RTN", "GND"), ("U5", "2", "VIN", "EP"), ("U5", "3", "GND", "VDD"),
                 ("U5", "4", "AGND", "AGND"), ("U5", "5", "GND", "PGND")])

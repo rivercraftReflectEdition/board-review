@@ -11,7 +11,7 @@ IC_KINDS = {"ic", "oscillator"}
 
 
 def _is_power_pin(p: Pin) -> bool:
-    return p.type in ("power_in", "power_out") or naming.pin_is(p.name, "ground") or naming.pin_is(p.name, "vin")
+    return p.type in ("power_in", "power_out") or naming.pin_is(p.name, "ground") or naming.pin_is_supply(p.name)
 
 
 def _deliberately_open(p: Pin) -> bool:
@@ -60,7 +60,7 @@ def ground_pin_off_ground(model: BoardModel, g: Graph) -> list[Finding]:
             out.append(Finding("ground_pin_off_ground", "info",
                                f"{p.key} exposed pad is on {p.net}; most parts want it on ground, some on VIN or open",
                                components=[p.refdes], nets=[p.net], pins=[p.key]))
-        elif naming.pin_is(p.name, "vin") and kind == "ground" and g.kind(p.refdes) in IC_KINDS:
+        elif naming.pin_is_supply(p.name) and kind == "ground" and g.kind(p.refdes) in IC_KINDS:
             out.append(Finding("ground_pin_off_ground", "warning", f"{p.key} is named {p.name} but is on {p.net}",
                                components=[p.refdes], nets=[p.net], pins=[p.key]))
     return out

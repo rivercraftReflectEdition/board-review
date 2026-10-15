@@ -81,7 +81,7 @@ class Graph:
         if naming.is_rail_name(net):
             ev.append("name")
         caps = self.caps_to_ground(net)
-        power_pins = [p for p in self.net_pins.get(net, []) if naming.pin_is(p.name, "vin") or p.type == "power_in"]
+        power_pins = [p for p in self.net_pins.get(net, []) if naming.pin_is_supply(p.name) or p.type == "power_in"]
         if len(caps) >= 3 and not naming.is_reset_name(net) and not naming.i2c_role(net):
             ev.append(f"{len(caps)} caps to ground")
         if power_pins and caps:

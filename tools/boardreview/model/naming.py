@@ -210,3 +210,8 @@ def pin_role(name: str) -> str:
         if pin_is(core, role):
             return role
     return ""
+
+
+def pin_is_supply(name: str) -> bool:
+    """Supply pin by name (VIN, VCC, VDD...), leaving out bare IN, which is often a logic input."""
+    return pin_is(name, "vin") and pin_core(name) != "IN"
