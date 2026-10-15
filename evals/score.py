@@ -98,7 +98,8 @@ PASS_PHRASE = re.compile(
     r"|\bno (?:issue|problem|concern|fault|violation)s?\b|\bno risk of\b|\bnone needed\b"
     r"|\bno (?:action|change)s? (?:needed|required)\b|\bnot an? (?:issue|problem|concern|bug|fault)\b")
 NEGATED = re.compile(r"\b(?:not|never|t)(?: \w+)? $")
-QUALIFIER = re.compile(r"\b(?:but|however|except|although|though|yet|until|unless|only)\b")
+QUALIFIER = re.compile(r"\b(?:but|however|except|although|though|whereas|while|yet|until|unless|only"
+                       r"|fails|failed|failing)\b")
 FAILING_VERDICTS = ("fail", "marginal")
 
 

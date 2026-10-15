@@ -116,6 +116,12 @@ def test_finding_that_asserts_a_pass_does_not_match():
     qualified = _finding(parts=["U2"], title="U2 is stable at full load but oscillates at light load",
                          claim="Outside the example envelope the internal compensation leaves no phase margin.")
     assert score.evaluate(e1, qualified, BLOCKS, MODES)[0]
+    corner = _finding(parts=["U2"], title="U2 loop is fine at 25 C, fails at -40 C",
+                      claim="Outside the example envelope the phase margin collapses at cold.")
+    assert score.evaluate(e1, corner, BLOCKS, MODES)[0]
+    assert score.asserts_pass(_finding(title="Check passed; no change needed"))
+    assert not score.asserts_pass(_finding(title="Inrush passes through D3 into the 3V3 rail"))
+    assert not score.asserts_pass(_finding(title="EN divider has not passed the corner check"))
 
 
 def test_failing_calculation_reason_counts_as_mechanism():

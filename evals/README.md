@@ -64,7 +64,8 @@ A review finding R matches an expected finding E when all four hold:
    carries (ignoring `info`) returns `pass`, or when its title or claim says the part is stable,
    fine, OK, correct, adequate, sufficient, safe or within limits, says it passes, or says there
    is no issue, unless the same text qualifies that with but, however, except, although, though,
-   yet, until, unless or only. "U2 is stable" never matches a loop finding.
+   whereas, while, yet, until, unless or only, or says something fails. "U2 is stable" never
+   matches a loop finding; "U2 is fine at 25 C, fails at -40 C" can.
 
 Equivalent blocks. Some failure modes are owned by more than one checklist, so a correct finding
 can be filed under any of them. Each row lists the checklist items that check that failure
