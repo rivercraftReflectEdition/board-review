@@ -12,7 +12,7 @@ PACKAGES = ("calc", "sim", "model", "lint", "blocks", "report")
 RELATIVE = re.compile(r"(?<![\w/.])((?:" + "|".join(PACKAGES) + r")(?:\.[A-Za-z_]\w*)+)")
 ABSOLUTE = re.compile(r"\bboardreview(?:\.[A-Za-z_]\w*)+")
 RESULT = re.compile(r"(?<![\w.])Result\.([A-Za-z_]\w*)")
-CLI = re.compile(r"python -m (boardreview(?:\.\w+)*)(?: ([a-z_]+)(?!\w|\.\w))?")
+CLI = re.compile(r"python -m (boardreview(?:\.\w+)*)(?: ([a-z_]+(?:-[a-z_]+)*)(?![\w-]|\.\w))?")
 PATH = re.compile(r"\btools/boardreview(?:/\w+)*")
 FILE_EXT = {"json", "md", "csv", "py", "txt", "net", "xml", "ipc", "raw", "log", "asc"}
 

@@ -1,0 +1,16 @@
+{
+ "board": "Synthetic node",
+ "revision": "B",
+ "findings_hash": "08a0d7213828",
+ "exported_at": "2026-10-14T12:00:00Z",
+ "items": {
+  "F-004": {
+   "done": true,
+   "at": "2026-10-14T10:00:00Z"
+  },
+  "b1": {
+   "done": true,
+   "at": "2026-10-14T11:00:00Z"
+  }
+ }
+}

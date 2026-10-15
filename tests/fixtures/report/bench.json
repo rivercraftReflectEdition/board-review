@@ -1,0 +1,68 @@
+{
+ "steps": [
+  {
+   "id": "b1",
+   "phase": "Unpowered",
+   "title": "Resistance to ground on VIN_24V, +5V, +3V3 and 3V3A",
+   "pass": "above 1 kOhm on each rail."
+  },
+  {
+   "id": "b2",
+   "phase": "First power, current limited",
+   "title": "24 V at a 100 mA limit; read +5V and +3V3",
+   "findings": [
+    "F-001"
+   ],
+   "pass": "+5V 4.9 to 5.1 V, +3V3 3.25 to 3.35 V."
+  },
+  {
+   "id": "b3",
+   "phase": "First power, current limited",
+   "title": "Read PHY MODE0 over MDIO",
+   "findings": [
+    "F-002"
+   ],
+   "pass": "the mode register reads RMII."
+  },
+  {
+   "id": "b4",
+   "phase": "Rails and loops",
+   "title": "+3V3 load step 50 to 500 mA, 1 us edges",
+   "findings": [
+    "F-003"
+   ],
+   "pass": "settles in 20 us with under 3 cycles of ring.",
+   "setup": "Probe at C5 with a spring ground; electronic load at J2.",
+   "procedure": "Step the load at 1 kHz; capture 50 us after each edge.",
+   "expected": "Peak deviation under 99 mV.",
+   "on_fail": "Fit Cff on the footprint across R20, 22 pF first."
+  },
+  {
+   "id": "b5",
+   "phase": "Rails and loops",
+   "title": "+3V3 loop gain at 5 mV injection",
+   "findings": [
+    "F-003"
+   ],
+   "pass": "PM at least 45 deg, GM at least 10 dB."
+  },
+  {
+   "id": "b6",
+   "phase": "Interfaces",
+   "title": "Read the U6 ID register over I2C2 at 400 kHz",
+   "findings": [
+    "F-004"
+   ],
+   "pass": "ten reads of ten return the ID."
+  },
+  {
+   "id": "b7",
+   "phase": "Temperature",
+   "title": "26.4 V input at 85 C for 1 h; D1 case temperature",
+   "findings": [
+    "F-005"
+   ],
+   "pass": "D1 under 60 C, input leakage under 1 mA."
+  }
+ ]
+}

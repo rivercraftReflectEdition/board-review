@@ -1,0 +1,18 @@
+[
+ {
+  "ref": "R30",
+  "note": "BOOT0 has a pull-down and no pull-up: boots from flash as intended.",
+  "source": "Synthetic MCU reference manual p.12",
+  "decided": "2026-10-01"
+ },
+ {
+  "ref": "Y1",
+  "note": "12 pF load capacitors for an 8 pF crystal: 2 pF stray per pin assumed.",
+  "source": "calc.crystal.load_capacitance"
+ },
+ {
+  "ref": "FB1",
+  "note": "Bead without a damping resistor: peaking is far from 500 kHz and 2.1 MHz.",
+  "source": "check FB1.FLT-1"
+ }
+]

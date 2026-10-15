@@ -11,6 +11,9 @@ test = ["pytest>=8"]
 [tool.setuptools.packages.find]
 where = ["tools"]
 
+[tool.setuptools.package-data]
+boardreview = ["report/*.css", "report/*.js"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["tools"]

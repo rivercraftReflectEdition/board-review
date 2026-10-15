@@ -1,4 +1,4 @@
-"""CLI: python -m boardreview prep NETLIST [--bom BOM] [--compare OTHER ...] --out DIR."""
+"""CLI: python -m boardreview prep | report | verify-fixes (see --help of each)."""
 
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ from pathlib import Path
 from boardreview.lint import Finding, to_findings
 from boardreview.model import digest, loaders, serialize
 from boardreview.model.__main__ import main as model_main
+from boardreview.report import build as report_build
 
 DEFAULT_LABELS = ["schematic", "pcb", "fab"]
 NOT_IN_PREP = [
@@ -159,7 +160,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--format", default="", help="netlist format when the file sniff gets it wrong")
     p.add_argument("--variant", default="", help="variant name for eda-agent JSON")
     p.add_argument("--out", required=True)
+    report_build.add_parsers(sub)
     args = ap.parse_args(argv)
+    if args.cmd == "report":
+        return report_build.run_report(args)
+    if args.cmd == "verify-fixes":
+        return report_build.run_verify(args)
     if len(args.compare) > 2:
         ap.error("--compare takes one or two netlists")
     if args.labels and len(args.labels.split(",")) != 1 + len(args.compare):

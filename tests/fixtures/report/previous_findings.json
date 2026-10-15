@@ -1,0 +1,115 @@
+{
+ "board": "Synthetic node",
+ "revision": "A",
+ "date": "2026-09-20",
+ "synthetic": true,
+ "findings": [
+  {
+   "id": "P-01",
+   "title": "PHY MODE0 strap fitted on both sides",
+   "severity": "blocker",
+   "block": "straps_and_boot_pins",
+   "failure_mode": "strap_conflict",
+   "parts": [
+    "R60",
+    "R61"
+   ],
+   "nets": [
+    "PHY_MODE0"
+   ],
+   "claim": "Both resistors fitted; MODE0 sits mid-rail.",
+   "evidence": [
+    {
+     "kind": "bom",
+     "ref": "rev A BOM"
+    }
+   ],
+   "fix": "DNP R61.",
+   "verification": {
+    "status": "CONFIRMED"
+   },
+   "status": {
+    "fixed": true,
+    "fixed_at": "2026-09-25T15:00:00Z"
+   }
+  },
+  {
+   "id": "P-02",
+   "title": "R32 pulls U6 ALERT to +5V, above its 3.6 V abs max",
+   "severity": "major",
+   "block": "io_levels_and_domains",
+   "failure_mode": "abs_max",
+   "parts": [
+    "R32",
+    "U6"
+   ],
+   "nets": [
+    "SENSOR_ALERT"
+   ],
+   "claim": "U6 ALERT sees 5 V through R32.",
+   "evidence": [
+    {
+     "kind": "netlist",
+     "ref": "SENSOR_ALERT"
+    }
+   ],
+   "fix": "DNP R32.",
+   "verification": {
+    "status": "CONFIRMED"
+   },
+   "status": {
+    "fixed": true
+   }
+  },
+  {
+   "id": "P-03",
+   "title": "U5 has one 100 nF for four supply pins",
+   "severity": "minor",
+   "block": "pdn_decoupling",
+   "failure_mode": "insufficient_capacitance",
+   "parts": [
+    "U5",
+    "C13"
+   ],
+   "nets": [
+    "+3V3"
+   ],
+   "claim": "Three supply pins have no local capacitor.",
+   "evidence": [
+    {
+     "kind": "netlist",
+     "ref": "+3V3"
+    }
+   ],
+   "fix": "Add three 100 nF capacitors at U5.",
+   "verification": {
+    "status": "CONFIRMED"
+   }
+  },
+  {
+   "id": "P-04",
+   "title": "R11 value stops U1 from enabling",
+   "severity": "blocker",
+   "block": "enable_uvlo_sequencing",
+   "failure_mode": "wrong_value",
+   "parts": [
+    "R11",
+    "R10"
+   ],
+   "nets": [
+    "U1_EN"
+   ],
+   "claim": "R11 10 ohm holds EN low.",
+   "evidence": [
+    {
+     "kind": "bom",
+     "ref": "R11"
+    }
+   ],
+   "fix": "R11 to 10k.",
+   "verification": {
+    "status": "CONFIRMED"
+   }
+  }
+ ]
+}
