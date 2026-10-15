@@ -1,92 +1,83 @@
-"""analysis.html: every check run, by block instance, with full Result tables, plots, digest values and sim sanity."""
+"""analysis.html: every check run, by block instance, explained in words first and with the math folded."""
 
 from __future__ import annotations
 
 import re
 
 from boardreview.model.board import natural_key
+from boardreview.report import plain
 from boardreview.report import review as rv
-from boardreview.report.html import FONTS, _VERDICT_CHIP, asset, calc_html, e, plural, table
+from boardreview.report.html import FONTS, asset, plural
+from boardreview.report.plain import e, word
 
-VERDICT_ORDER = ("fail", "marginal", "unknown", "pass", "not_applicable")
-VERDICT_TEXT = {"fail": "Fail", "marginal": "Marginal", "unknown": "Unknown", "pass": "Pass",
-                "not_applicable": "Not applicable"}
+ORDER = ("fail", "marginal", "unknown", "pass", "not_applicable")
+COUNT_WORD = {"fail": "fail", "marginal": "marginal", "unknown": "unknown", "pass": "pass",
+              "not_applicable": "not applicable"}
 
 
 def slug(text: str) -> str:
     return re.sub(r"[^A-Za-z0-9]+", "-", text).strip("-").lower()
 
 
-def chip(verdict: str) -> str:
-    return f'<span class="chip {_VERDICT_CHIP.get(verdict, "note")}">{e(VERDICT_TEXT.get(verdict, verdict))}</span>'
-
-
 def counts(checks: list[dict]) -> str:
-    n = {v: sum(1 for c in checks if c["verdict"] == v) for v in VERDICT_ORDER}
-    return " · ".join(f"{n[v]} {VERDICT_TEXT[v].lower()}" for v in VERDICT_ORDER if n[v])
+    n = {v: sum(1 for c in checks if c["verdict"] == v) for v in ORDER}
+    return ", ".join(f"{n[v]} {COUNT_WORD[v]}" for v in ORDER if n[v])
 
 
-def _digest(rows: list[dict]) -> str:
-    out = []
-    for d in rows:
-        src = ", ".join(x for x in (d.get("document", ""), f"p.{d['page']}") if x)
-        vals = [e(f"{d[k]:g}") if isinstance(d.get(k), (int, float)) else "" for k in ("min", "typ", "max")]
-        out.append([e(d.get("mpn", "")), e(d.get("parameter", "")), e(d.get("condition", "")), *vals,
-                    e(d.get("unit", "")), e(src)])
-    return table(out, ["MPN", "Parameter", "Condition", "Min", "Typ", "Max", "Unit", "Source"])
+def headline(c: dict) -> str:
+    return c.get("headline") or f"{c['instance']}: {c.get('title') or c['item']}"
 
 
-def _simulation(s: dict, uid: str) -> str:
-    trusted = s["setup_verdict"] == "pass"
-    head = (f'<p class="small">Setup {chip(s["setup_verdict"])} Measured {chip(s["measured_verdict"])} '
-            + ("The measured verdict counts: every setup check passed." if trusted
-               else "The measured verdict does not count until every setup check passes.") + "</p>")
+def lead(c: dict) -> str:
+    """The check's own summary, or its reason followed by the first calculation's summary."""
+    if c.get("summary"):
+        text = c["summary"]
+    else:
+        parts = [plain.sentence(c["reason"])] if c.get("reason") else []
+        first = next((r for r in c.get("results", []) if r.get("summary")), None)
+        if first:
+            parts.append(first["summary"])
+        text = " ".join(parts)
+    return f'<p class="lead">{e(text)}</p>' if text else ""
+
+
+def sim_fold(s: dict, uid: str) -> str:
+    checks = s.get("sanity", [])
+    passed = sum(1 for x in checks if x["verdict"] == "pass")
+    counted = ("The measured result counts: every setup check passed." if s["setup_verdict"] == "pass"
+               else "The measured result does not count until every setup check passes.")
+    body = [f'<p>Setup {word(s["setup_verdict"])}. Measured {word(s["measured_verdict"])}. {counted}</p>']
     if s.get("setup"):
-        head = f'<p class="small mono">{e(s["setup"])}</p>' + head
-    rows = [[e(x["check"]), chip(x["verdict"]), e(x.get("detail", ""))] for x in s.get("sanity", [])]
-    body = head + (table(rows, ["Sanity check", "Verdict", "Detail"]) if rows else "")
-    body += "".join(calc_html(c, f"{uid}-s{i}") for i, c in enumerate(s.get("results", [])))
+        body.append(f'<p class="small">Run: {e(s["setup"])}</p>')
+    if checks:
+        body.append('<ul class="plain">' + "".join(
+            f"<li>{word(x['verdict'])} {e(x['check'])}" + (f": {e(x['detail'])}" if x.get("detail") else "") + "</li>"
+            for x in checks) + "</ul>")
+    body += [plain.calc_block(r, f"{uid}-s{i}") for i, r in enumerate(s.get("results", []))]
     if s.get("limits"):
-        body += '<p class="small">Model limits: ' + e("; ".join(s["limits"])) + "</p>"
-    return f'<details open><summary>Simulation</summary><div class="stack">{body}</div></details>'
+        body.append(f'<p class="small">Model limits: {e("; ".join(s["limits"]))}.</p>')
+    title = f"Simulation checks ({passed} passed)" if passed == len(checks) else \
+        f"Simulation checks ({passed} of {len(checks)} passed)"
+    return f'<details class="sub"><summary>{e(title)}</summary>{"".join(body)}</details>'
 
 
 def check_html(c: dict, report_href: str, known: set[str]) -> str:
     cid = c["id"]
-    is_open = c["verdict"] in ("fail", "marginal", "unknown")
+    results = c.get("results", [])
+    flag = "".join(f'<p class="flagnote">{e(m)}</p>' for m in plain.check_problems(c, plain=True))
+    bench = f'<p>Bench test: {e(plain.sentence(c["bench_test"]))}</p>' if c.get("bench_test") else ""
     link = ""
     if c.get("finding"):
         where = f"{report_href}#{c['finding']}" if c["finding"] in known else report_href
-        link = f'<a href="{e(where)}">Finding {e(c["finding"])}</a>'
-    parts = []
-    if c.get("reason"):
-        parts.append(f'<p>{e(c["reason"])}</p>')
-    for i, r in enumerate(c.get("results", [])):
-        parts.append(calc_html(r, f"{cid}-r{i}"))
-    if c.get("digest_values"):
-        parts.append(f'<details open><summary>Datasheet values used</summary>{_digest(c["digest_values"])}</details>')
-    if c.get("not_published"):
-        rows = [[e(n["item"]), e(n.get("searched", "")), e(n["consequence"].replace("_", " ")), e(n.get("action", ""))]
-                for n in c["not_published"]]
-        parts.append(f'<details open><summary>Not published</summary>'
-                     f'{table(rows, ["Missing value", "Searched", "Became", "Action"])}</details>')
-    if c.get("simulation"):
-        parts.append(_simulation(c["simulation"], cid))
-    if c.get("assumptions"):
-        parts.append('<ul class="ev">' + "".join(f'<li><span class="ek">Assumes</span>{e(a)}</li>'
-                                                 for a in c["assumptions"]) + "</ul>")
-    if c.get("sources"):
-        parts.append('<ul class="ev">' + "".join(
-            f'<li><span class="ek">{e(s["kind"])}</span>{e(s["ref"])}' + (f": {e(s['detail'])}" if s.get("detail") else "")
-            + "</li>" for s in c["sources"]) + "</ul>")
-    if c.get("bench_test"):
-        parts.append(f'<p class="small"><b>Bench test:</b> {e(c["bench_test"])}</p>')
-    if link:
-        parts.append(f'<p class="small">{link} in the report.</p>')
-    by = f'<span class="fid">{e(c["by"])}</span>' if c.get("by") else ""
-    return (f'<details class="chk" id="chk-{e(cid)}"{" open" if is_open else ""}>'
-            f'<summary>{chip(c["verdict"])}<span class="fid">{e(c["item"])}</span>{e(c.get("title", ""))}'
-            f'{(" · " + link) if link else ""}{by}</summary><div class="body">{"".join(parts)}</div></details>')
+        link = f' · <a href="{e(where)}">Finding {e(c["finding"])} in the report</a>'
+    assumptions = list(c.get("assumptions", [])) + [a for r in results for a in r.get("assumptions", [])]
+    body = (lead(c) + plain.key_line(results) + flag + plain.sources(c) + plain.plots(results, cid) + bench
+            + plain.math_fold(results) + plain.assumptions_fold(assumptions)
+            + (sim_fold(c["simulation"], cid) if c.get("simulation") else "")
+            + f'<p class="small">Checklist item {e(c["item"])}{link}</p>')
+    is_open = c["verdict"] in ("fail", "marginal", "unknown")
+    return (f'<details class="chk" id="chk-{e(cid)}"{" open" if is_open else ""}><summary>{word(c["verdict"])} '
+            f'{e(headline(c))}</summary><div class="body">{body}</div></details>')
 
 
 def group(checks: list[dict]) -> list[tuple[str, str, list[dict]]]:
@@ -105,17 +96,20 @@ def render(ctx, report_href: str = "report.html") -> str:
     groups = group(ctx.checks)
     h1 = f"{ctx.board} · Rev {ctx.revision}" if ctx.revision else ctx.board
     meta = " · ".join(x for x in ("Full analysis", ctx.header.get("date", ""), ctx.header.get("scope", "")) if x)
-    toc = []
-    sections = []
+    toc, sections = [], []
     for block, inst, checks in groups:
         sid = "inst-" + slug(f"{block}-{inst}")
         name = rv.BLOCK_NAME.get(block, block)
-        worst = next((v for v in VERDICT_ORDER if any(c["verdict"] == v for c in checks)), "pass")
-        toc.append(f'<li>{chip(worst)}<a href="#{sid}">{e(inst)}</a><span class="fid">{e(name)} · '
+        worst = next((v for v in ORDER if any(c["verdict"] == v for c in checks)), "pass")
+        toc.append(f'<li>{word(worst)} <a href="#{sid}">{e(inst)}</a> <span class="small">{e(name)}, '
                    f'{e(counts(checks))}</span></li>')
-        sections.append(f'<section class="inst" id="{sid}"><header><h2>{e(inst)}</h2><span class="chip outline">'
-                        f'{e(name)}</span><span class="fid">{e(counts(checks))}</span></header>'
+        sections.append(f'<section class="inst" id="{sid}"><h2>{e(inst)}</h2><p class="small">{e(name)}, '
+                        f'{len(checks)} {plural(len(checks), "check")}: {e(counts(checks))}</p>'
                         + "".join(check_html(c, report_href, known) for c in checks) + "</section>")
+    flagged = [m for c in ctx.checks for m in plain.check_problems(c, plain=True)]
+    one = len(flagged) == 1
+    warn = (f'<p class="flagnote">{len(flagged)} {plural(len(flagged), "check")} {"reads" if one else "read"} better '
+            f'than {"its" if one else "their"} numbers without saying why. Look for the notes below.</p>') if flagged else ""
     total = len(ctx.checks)
     body = f"""<div class="page">
 <header class="head">
@@ -123,16 +117,16 @@ def render(ctx, report_href: str = "report.html") -> str:
   <span class="meta">{e(meta)}</span>
 </header>
 <section class="verdict" aria-labelledby="an-h">
-  <h2 id="an-h">{total} {plural(total, "check")} on {len(groups)} block {plural(len(groups), "instance")}</h2>
+  <h2 id="an-h">{total} {plural(total, "check")} on {len(groups)} {plural(len(groups), "part")} of the board</h2>
   <p class="small">{e(counts(ctx.checks))}. Failing, marginal and unknown checks are open; passes are folded.
   <a href="{e(report_href)}">Back to the report</a>.</p>
+  {warn}
   <ul class="toc">{"".join(toc)}</ul>
 </section>
 {"".join(sections) or '<p class="small">No checks.</p>'}
 <p class="small">Written by python -m boardreview report --detail full from {e(ctx.checks_name)}.</p>
 </div>"""
-    title = f"{ctx.board} Analysis"
     return (f'<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n'
             f'<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n'
-            f"<title>{e(title)}</title>\n{FONTS}\n<style>\n{asset('report.css')}</style>\n</head>\n<body>\n{body}\n"
-            f"</body>\n</html>\n")
+            f"<title>{e(ctx.board)} Analysis</title>\n{FONTS}\n<style>\n{asset('report.css')}</style>\n</head>\n<body>\n"
+            f"{body}\n</body>\n</html>\n")

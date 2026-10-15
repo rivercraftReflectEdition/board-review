@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from boardreview.__main__ import main
+from boardreview.report import plain
 
 ROOT = Path(__file__).resolve().parent.parent
 BOARD = Path(__file__).parent / "fixtures" / "report"
@@ -30,6 +31,37 @@ class Ids(HTMLParser):
     def handle_starttag(self, tag, attrs):
         self.tags += 1
         self.ids += [v for k, v in attrs if k == "id"]
+
+
+VOID = {"br", "img", "input", "meta", "link", "hr", "wbr"}
+
+
+def visible_text(text: str) -> str:
+    """Text a reader sees without opening anything: a closed details shows only its summary."""
+    out: list[str] = []
+    stack: list[tuple[str, bool, bool]] = []
+    for m in re.finditer(r"<(/?)([a-zA-Z][a-zA-Z0-9]*)([^>]*)>|([^<]+)", text):
+        close, tag, attrs, data = m.groups()
+        hidden = stack[-1][1] if stack else False
+        if data is not None:
+            if not hidden:
+                out.append(data)
+            continue
+        tag = tag.lower()
+        if tag in VOID or attrs.rstrip().endswith("/"):
+            continue
+        if close:
+            while stack and stack.pop()[0] != tag:
+                pass
+        elif tag in ("script", "style", "svg", "title", "head"):
+            stack.append((tag, True, True))
+        elif tag == "details":
+            stack.append((tag, hidden or not re.search(r"\sopen(?=[\s>]|$)", attrs), hidden))
+        elif tag == "summary" and stack and stack[-1][0] == "details":
+            stack.append((tag, stack[-1][2], stack[-1][2]))
+        else:
+            stack.append((tag, hidden, hidden))
+    return re.sub(r"\s+", " ", "".join(out))
 
 
 def ids_of(text: str) -> list[str]:
@@ -94,7 +126,7 @@ def test_element_and_checkbox_ids_are_unique(full):
         ids = ids_of((full / name).read_text(encoding="utf-8"))
         assert len(ids) == len(set(ids)), [i for i in ids if ids.count(i) > 1][:5]
     checks = [i for i in ids_of((full / "report.html").read_text(encoding="utf-8")) if i.startswith("chk-")]
-    assert len(checks) == 7 + 7
+    assert len(checks) == 8 + 7
 
 
 def test_artifact_variant_keeps_state_in_the_db(full):
@@ -145,7 +177,7 @@ def test_fixture_checks_validate():
 def test_what_changed_matches_old_and_new(full):
     text = (full / "report.html").read_text(encoding="utf-8")
     fold = re.search(r'<details class="fold" id="br-changes">(.*?)</details>', text, re.S).group(1)
-    assert "1 reopened · 5 new · 1 fixed · 1 not found again · 1 still open" in fold
+    assert "1 reopened · 6 new · 1 fixed · 1 not found again · 1 still open" in fold
     assert re.search(r"Reopened</span></td><td><a href=\"#F-002\">", fold)
     assert "P-02 R32 pulls U6 ALERT" in fold and "R32 is DNP in the new data" in fold
     assert "P-03" in fold and "not confirmed in the data" in fold
@@ -153,10 +185,14 @@ def test_what_changed_matches_old_and_new(full):
     assert '<span class="chip blocker">Reopened</span>' in row and "In the previous review of 2026-09-20 as P-01." in row
 
 
-def test_math_fold_shows_the_plot(full):
+def test_math_fold_reads_in_order(full):
     text = (full / "report.html").read_text(encoding="utf-8")
     row = text.split('<article class="item sev-major" id="F-003">')[1].split("</article>")[0]
-    assert "<summary>Math</summary>" in row and "<svg" in row and "Loop gain" in row
+    math = row.split("<summary>Math</summary>")[1]
+    order = [math.index(x) for x in ('class="vw v-', 'class="lead"', 'class="keyline"', "<svg", "<figcaption>",
+                                     "<summary>The math</summary>")]
+    assert order == sorted(order)
+    assert "Phase margin <b>30.2°</b> (want 45° or more)" in math
     assert 'href="analysis.html#chk-U2.BR-1"' in row
 
 
@@ -168,8 +204,35 @@ def test_analysis_has_every_check_and_links_back(full):
     assert 'href="report.html#F-003"' in text
     assert re.search(r'<details class="chk" id="chk-U1.BR-7">', text)
     assert re.search(r'<details class="chk" id="chk-U1.EN-1" open>', text)
-    assert "Measured loop gain" in text and "Datasheet values used" in text and "p.18" in text
+    assert "Measured loop gain" in text and "p.18" in text
+    assert "The datasheet says EN rising threshold is 1.15 to 1.25 V (synthetic U1 datasheet rev A, p.5)." in text
+    assert '<span class="vw v-fail">Fails</span> U1 enable: +5V never turns on' in text
+    assert 'class="chip' not in text and "checker 1" not in text
     assert text.count("<svg") >= 6
+
+
+def test_analysis_default_view_has_no_variable_names(full):
+    seen = visible_text((full / "analysis.html").read_text(encoding="utf-8"))
+    checks = json.loads((BOARD / "checks.json").read_text(encoding="utf-8"))["checks"]
+    calcs = [r for c in checks for r in c.get("results", []) + c.get("simulation", {}).get("results", [])]
+    names = {k for r in calcs for k in [*r.get("inputs", {}), *r.get("outputs", {})] if "_" in k or len(k) > 2}
+    assert len(names) > 20
+    leaked = sorted(n for n in names if re.search(rf"(?<![\w.]){re.escape(n)}(?![\w.])", seen) and "_" in n)
+    assert leaked == []
+    assert "calc." not in seen and "sim.measure" not in seen
+    assert "Fails" in seen and "Phase margin" in seen and "(want 45° or more)" in seen
+    assert "The math" in seen and "BR-1" in seen
+
+
+def test_a_check_better_than_its_calculation_is_flagged():
+    calc = {"calculator": "calc.lc_tank.lc_filter", "name": "LC filter", "verdict": "marginal"}
+    check = {"id": "FB1.FLT-1", "verdict": "pass", "results": [calc]}
+    assert plain.check_problems(check) and "calc.lc_tank.lc_filter" in plain.check_problems(check)[0]
+    assert plain.check_problems(check, plain=True)[0].startswith("This check says Passes")
+    assert plain.check_problems(check | {"summary": "No harmonic reaches 145 kHz."}) == []
+    assert plain.check_problems(check | {"verdict": "fail"}) == []
+    for c in json.loads((BOARD / "checks.json").read_text(encoding="utf-8"))["checks"]:
+        assert plain.check_problems(c) == [], c["id"]
 
 
 def test_markdown_report_and_tickets(full):
@@ -179,10 +242,11 @@ def test_markdown_report_and_tickets(full):
         assert head in md, head
     for f in findings():
         assert f["id"] in md
-    assert "calc.loop.margins" in md and "| out | pm | 30.19 deg |" in md
+    assert "calc.loop.margins" in md and "| out | Phase margin | 30.2° |" in md
+    assert "Phase margin 30.2° (want 45° or more)" in md
     ticket = (full / "tickets" / "F-002.md").read_text(encoding="utf-8")
     assert ticket.startswith("# No Ethernet link") and "Fix: DNP R61." in ticket and "Verify: Bench step 3." in ticket
-    assert "—" not in md + ticket
+    assert "\u2014" not in md + ticket
 
 
 def test_report_reads_ipc_in_the_facts_folder_and_builds_bench_from_findings(facts, tmp_path):
@@ -196,7 +260,7 @@ def test_report_reads_ipc_in_the_facts_folder_and_builds_bench_from_findings(fac
     text = (out / "report.html").read_text(encoding="utf-8")
     d = data_of(text)
     assert d["place"]["kind"] == "ipc356" and d["place"]["extent_from"] == "pads"
-    assert d["bench"] == ["b1"]
+    assert d["bench"] == ["b1", "b2"]
     assert "br-changes" not in ids_of(text) and "br-refuted" not in ids_of(text)
     assert "No checks.json was given" in text
     assert not (out / "analysis.html").exists()

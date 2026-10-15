@@ -4,22 +4,17 @@ from __future__ import annotations
 
 import html
 import json
-import math
 from pathlib import Path
 
 from boardreview.model.board import natural_key
+from boardreview.report import plain
 from boardreview.report import review as rv
-from boardreview.report import svgplot
 
 HERE = Path(__file__).parent
 FONTS = ('<link rel="preconnect" href="https://fonts.googleapis.com">\n'
          '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n'
          '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700'
          '&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">')
-_PREFIX = {-15: "f", -12: "p", -9: "n", -6: "µ", -3: "m", 0: "", 3: "k", 6: "M", 9: "G", 12: "T"}
-_SCALED = {"V", "A", "Hz", "F", "H", "ohm", "Ω", "s", "W", "S", "J", "C"}
-_VERDICT_CHIP = {"fail": "blocker", "marginal": "major", "pass": "passc", "info": "note", "unknown": "unk",
-                 "not_applicable": "na"}
 _WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"]
 CONSEQUENCE = {"footprint": "Footprint", "bench_test": "Bench test", "vendor_question": "Vendor question",
                "model": "Model"}
@@ -43,19 +38,6 @@ def words(n: int, cap: bool = False) -> str:
 
 def plural(n: int, word: str) -> str:
     return word if n == 1 else word + "s"
-
-
-def fmt_value(value: float, unit: str) -> str:
-    """Number with an SI prefix for SI units, four significant digits."""
-    if value is None or (isinstance(value, float) and not math.isfinite(value)):
-        return f"n/a {unit}".strip()
-    if unit == "A/s":
-        return f"{value / 1e6:.4g} A/µs"
-    u = "Ω" if unit == "ohm" else unit
-    if u in _SCALED and value != 0:
-        exp = max(-15, min(12, int(math.floor(math.log10(abs(value)) / 3) * 3)))
-        return f"{value / 10 ** exp:.4g} {_PREFIX[exp]}{u}"
-    return f"{value:.4g} {u}".strip()
 
 
 def verdict_line(findings: list[dict], header: dict) -> tuple[str, str]:
@@ -153,28 +135,6 @@ def pointers(f: dict, facts: rv.Facts) -> list[dict]:
     return out
 
 
-def calc_html(c: dict, uid: str) -> str:
-    """One calculation: name, verdict, formula, inputs and outputs, plots, reason and references."""
-    rows = []
-    for k, q in c.get("inputs", {}).items():
-        rows.append(f'<tr><td>{e(k)}</td><td class="num">{e(fmt_value(q.get("value"), q.get("unit", "")))}</td>'
-                    f'<td class="src">{e(q.get("note", ""))}</td></tr>')
-    for k, q in c.get("outputs", {}).items():
-        rows.append(f'<tr class="out"><td>{e(k)}</td><td class="num">{e(fmt_value(q.get("value"), q.get("unit", "")))}'
-                    f'</td><td class="src">{e(q.get("note", ""))}</td></tr>')
-    plots = "".join(f'<figure class="plot">{svgplot.plot_svg(p, f"{uid}-{i}")}</figure>'
-                    for i, p in enumerate(c.get("plots", [])))
-    v = c.get("verdict", "info")
-    foot = [x for x in (c.get("reason", ""),) if x] + [f"Assumes {a}" for a in c.get("assumptions", [])]
-    refs = "; ".join(c.get("refs", []))
-    return (f'<div class="calc"><div class="calc-head"><span class="calc-name">{e(c.get("calculator", ""))}</span>'
-            f'<span class="chip {_VERDICT_CHIP.get(v, "note")}">{e(v)}</span></div>'
-            f'<div class="formula">{e(c.get("formula", ""))}</div>'
-            f'<div class="scroll"><table class="io">{"".join(rows)}</table></div>{plots}'
-            + "".join(f'<p class="small">{e(x)}</p>' for x in foot)
-            + (f'<p class="small">{e(refs)}</p>' if refs else "") + "</div>")
-
-
 def _challenge(f: dict) -> str:
     v = f.get("verification", {})
     st = v.get("status", "PENDING")
@@ -223,7 +183,7 @@ def finding_row(f: dict, ctx) -> str:
     calcs = f.get("calculations", [])
     if calcs:
         folds.append('<details><summary>Math</summary><div class="stack">'
-                     + "".join(calc_html(c, f"{fid}-c{i}") for i, c in enumerate(calcs)) + "</div></details>")
+                     + "".join(plain.calc_block(c, f"{fid}-c{i}") for i, c in enumerate(calcs)) + "</div></details>")
     ev = [f'<li><span class="ek">{e(EVIDENCE_KIND.get(x.get("kind"), x.get("kind")))}</span>{e(x.get("ref"))}'
           + (f": {e(x['detail'])}" if x.get("detail") else "") + "</li>" for x in f.get("evidence", [])]
     ev += [f'<li><span class="ek">Not published</span>{e(n["item"])}: {e(CONSEQUENCE.get(n["consequence"], ""))}'

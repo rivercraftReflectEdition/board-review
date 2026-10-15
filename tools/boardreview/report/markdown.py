@@ -5,8 +5,10 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
+from boardreview.calc.base import fmt
 from boardreview.report import review as rv
-from boardreview.report.html import CONSEQUENCE, EVIDENCE_KIND, fmt_value, step_refs, verdict_line
+from boardreview.report.html import CONSEQUENCE, EVIDENCE_KIND, step_refs, verdict_line
+from boardreview.report.plain import WORD
 
 
 def cell(text) -> str:
@@ -28,11 +30,19 @@ def status_text(f: dict) -> str:
 
 
 def calc_md(c: dict) -> list[str]:
-    head = f"**{c.get('calculator', '')}**: {c.get('verdict', '')}" + (f" ({c['reason']})" if c.get("reason") else "")
-    lines = [head, "", f"`{c.get('formula', '')}`", "", "| | Quantity | Value | Note |", "|---|---|---|---|"]
+    """One calculation: verdict and summary first, key numbers, then the formula and the full table."""
+    name = c.get("name") or c.get("calculator", "")
+    lines = [f"**{name[:1].upper() + name[1:]}: {WORD.get(c.get('verdict', ''), c.get('verdict', ''))}.**"
+             + (f" {c['summary']}" if c.get("summary") else (f" {c['reason']}" if c.get("reason") else "")), ""]
+    keys = [f"{k['label']} {fmt(k.get('value'), k.get('unit', ''))}" + (f" (want {k['want']})" if k.get("want") else "")
+            for k in c.get("key", [])]
+    if keys:
+        lines += [" · ".join(keys), ""]
+    lines += [f"`{c.get('formula', '')}` ({c.get('calculator', '')})", "", "| | Quantity | Value | Note |",
+              "|---|---|---|---|"]
     for side, rows in (("in", c.get("inputs", {})), ("out", c.get("outputs", {}))):
-        lines += [f"| {side} | {cell(k)} | {cell(fmt_value(q.get('value'), q.get('unit', '')))} | {cell(q.get('note'))} |"
-                  for k, q in rows.items()]
+        lines += [f"| {side} | {cell(q.get('label') or k)} | {cell(fmt(q.get('value'), q.get('unit', '')))} | "
+                  f"{cell(q.get('note'))} |" for k, q in rows.items()]
     lines.append("")
     lines += [f"- assumes {a}" for a in c.get("assumptions", [])]
     lines += [f"- ref {r}" for r in c.get("refs", [])]

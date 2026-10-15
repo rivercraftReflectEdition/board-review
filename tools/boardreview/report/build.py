@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-from boardreview.report import analysis, html, markdown
+from boardreview.report import analysis, html, markdown, plain
 from boardreview.report import review as rv
 from boardreview.report.verify import verify_fixes
 
@@ -123,6 +123,9 @@ def run_report(args: argparse.Namespace) -> int:
     print("  " + ", ".join(files) + f", tickets/ ({len(ctx.tickets)} drafts)")
     for note in ctx.facts.notes:
         print(f"note: {note}")
+    for c in ctx.checks:
+        for problem in plain.check_problems(c):
+            print(f"warning: {problem}", file=sys.stderr)
     return 0
 
 
