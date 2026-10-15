@@ -154,6 +154,57 @@ def test_ltspice_fastaccess_and_double_match_the_default_binary(tmp_path):
     assert "fastaccess" in fa.flags and np.array_equal(fa.data, ref.data)
 
 
+def _ascii_plot(plotname: str, flags: str, variables: list[tuple[str, str]], rows: list[list[float]]) -> bytes:
+    lines = ["Title: x", f"Plotname: {plotname}", f"Flags: {flags}", f"No. Variables: {len(variables)}",
+             f"No. Points: {len(rows)}", "Variables:"]
+    lines += [f"\t{i}\t{n}\t{k}" for i, (n, k) in enumerate(variables)]
+    lines.append("Values:")
+    for k, row in enumerate(rows):
+        lines.append(f"{k}\t\t{row[0]:.15e}")
+        lines += [f"\t{v:.15e}" for v in row[1:]]
+    return _header(lines).replace("\n", "\r\n").encode("ascii")
+
+
+def test_stepped_operating_point_keeps_one_step_per_point(tmp_path):
+    # LTspice 26 writes a stepped .op as one point per step, the step parameter first, and no .step lines in the log
+    variables = [("v", "param"), ("V(a)", "voltage"), ("V(b)", "voltage")]
+    (tmp_path / "op.raw").write_bytes(_ascii_plot("Operating Point", "real stepped", variables,
+                                                  [[1.0, 1.0, 0.5], [2.0, 2.0, 1.0]]))
+    (tmp_path / "op.log").write_text("Direct Newton iteration succeeded in finding operating point.\n" * 2)
+    raw = read_raw(tmp_path / "op.raw")
+    assert raw.step_bounds == [(0, 1), (1, 2)]
+    assert raw.step_params == [{"v": 1.0}, {"v": 2.0}]
+    assert raw.get("V(b)", step=1).tolist() == [1.0]
+
+
+def test_descending_stepped_dc_sweep_splits_where_the_sweep_restarts(tmp_path):
+    rows = [[v, v / 2] for v in (5.0, 4.0, 3.0)] + [[v, v / 3] for v in (5.0, 4.0, 3.0)]
+    (tmp_path / "dc.raw").write_bytes(_ascii_plot("DC transfer characteristic", "real reverse linear stepped",
+                                                  [("V1", "voltage"), ("V(b)", "voltage")], rows))
+    (tmp_path / "dc.log").write_text(".step r=1000\n.step r=2000\n")
+    raw = read_raw(tmp_path / "dc.raw")
+    assert raw.step_bounds == [(0, 3), (3, 6)]
+    assert raw.step_params == [{"r": 1000.0}, {"r": 2000.0}]
+
+
+def test_step_count_mismatch_between_log_and_raw_is_reported(tmp_path):
+    rows = [[0.0, 1.0], [1.0, 2.0], [0.0, 3.0], [1.0, 4.0]]
+    (tmp_path / "s.raw").write_bytes(_ascii_plot("Transient Analysis", "real forward stepped",
+                                                 [("time", "time"), ("V(x)", "voltage")], rows))
+    (tmp_path / "s.log").write_text(".step c=1\n.step c=2\n.step c=3\n")
+    with pytest.raises(ValueError, match="3 .step runs"):
+        read_raw(tmp_path / "s.raw")
+
+
+@needs_ltspice
+def test_ltspice_stepped_operating_point(tmp_path):
+    text = "* op step\nV1 a 0 {v}\nR1 a b 1k\nR2 b 0 1k\n.step param v list 1 2 3\n.op\n.end\n"
+    raw = run(text, tmp_path, "op").raw()
+    assert raw.n_steps == 3
+    assert [p["v"] for p in raw.step_params] == [1.0, 2.0, 3.0]
+    assert [raw.get("V(b)", step=k)[0] for k in range(3)] == pytest.approx([0.5, 1.0, 1.5])
+
+
 def test_ngspice_style_all_double_two_plots(tmp_path):
     def plot(name: str, n: int) -> bytes:
         head = _header(["Title: ng", f"Plotname: {name}", "Flags: real", "No. Variables: 2", f"No. Points: {n}",

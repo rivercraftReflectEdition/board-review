@@ -21,6 +21,7 @@ UNITS = {
 
 _BINARY = "Binary:"
 _VALUES = "Values:"
+NO_SWEEP = ("operating point", "transfer function")
 
 
 @dataclass(frozen=True)
@@ -109,11 +110,23 @@ def read_raw(path: str | Path, log_path: str | Path | None = None, plot: int = -
     plots = read_plots(path)
     raw = plots[plot]
     log = Path(log_path) if log_path else _sibling_log(path)
+    params = []
     if log is not None and log.exists():
         params = step_params_from_log(read_text_any(log.read_bytes()))
-        if len(params) == raw.n_steps:
-            raw.step_params = params
+    params = params or _params_from_plot(raw)
+    if params and len(params) != raw.n_steps:
+        raise ValueError(f"{path.name}: the log lists {len(params)} .step runs but the raw file splits into "
+                         f"{raw.n_steps}; the step boundaries are not trustworthy")
+    raw.step_params = params
     return raw
+
+
+def _params_from_plot(raw: RawFile) -> list[dict[str, float]]:
+    """Step values from 'param' variables, which LTspice writes first in a stepped operating point."""
+    cols = [v for v in raw.variables if v.kind.lower() == "param"]
+    if not cols or "stepped" not in raw.flags:
+        return []
+    return [{v.name: float(np.real(raw.data[v.index][a])) for v in cols} for a, _ in raw.step_bounds]
 
 
 def read_plots(path: str | Path) -> list[RawFile]:
@@ -188,7 +201,8 @@ def _read_one(blob: bytes, pos: int) -> tuple[RawFile, int]:
         data, end = _parse_binary(blob, data_pos, n_vars, n_points, flags, header.get("command", ""))
     if variables and variables[0].kind.lower() == "time":
         data[0] = np.abs(data[0])
-    raw = RawFile(header=header, variables=variables, data=data, step_bounds=_split_steps(data[0], flags))
+    raw = RawFile(header=header, variables=variables, data=data,
+                  step_bounds=_split_steps(data[0], flags, header.get("plotname", "")))
     return raw, end
 
 
@@ -289,13 +303,16 @@ def _parse_mixed(blob: bytes, pos: int, n_vars: int, n_points: int, fastaccess: 
     return out, pos + size
 
 
-def _split_steps(axis: np.ndarray, flags: set[str]) -> list[tuple[int, int]]:
+def _split_steps(axis: np.ndarray, flags: set[str], plotname: str = "") -> list[tuple[int, int]]:
+    """One step per point for plots without a sweep; otherwise a step starts where the sweep returns to its start."""
     n = len(axis)
     if n == 0:
         return []
     if "stepped" not in flags:
         return [(0, n)]
+    if plotname.lower() in NO_SWEEP:
+        return [(i, i + 1) for i in range(n)]
     x = np.real(axis)
-    starts = [0] + [int(i) + 1 for i in np.nonzero(np.diff(x) < 0)[0]]
+    starts = [0] + [int(i) + 1 for i in np.nonzero((x[1:] == x[0]) & (x[:-1] != x[0]))[0]]
     ends = starts[1:] + [n]
     return list(zip(starts, ends))
