@@ -35,8 +35,14 @@ One entry per item per block instance:
 
 - `id` unique in the file (for example `U9-ch1.BR-1`), `block`, `instance` (for example
   "U9 channel 1, 3V3 rail"), `item` (`BR-1`), `title`;
+- `headline`: what it is and the outcome, in words: "U9 3V3 loop: phase margin too low";
+- `summary`: two or three plain sentences with the real numbers. Say what was checked, the
+  number against what we want, and what it means on the bench: "The loop crosses over at
+  64 kHz with 30° of phase margin. We want at least 45°, so 3V3 will ring after each load
+  step." Leave it out to use the calculator's own summary;
 - `verdict`: pass, marginal, fail, unknown or not_applicable, with `reason` (required for
-  unknown and not_applicable);
+  unknown and not_applicable). A check's verdict is never better than its worst calculator
+  verdict unless its `summary` says why; the report flags it otherwise;
 - `results`: each calculator `Result` as `Result.to_dict(name)`, where name is the calculator
   path such as `calc.loop.margins`; plots are included;
 - `digest_values`: the datasheet values the check used, each with document and page;

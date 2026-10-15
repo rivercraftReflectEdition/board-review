@@ -24,7 +24,7 @@ Outputs in `--out`:
 | tickets/ID.md | One short ticket draft per finding: what breaks, where, fix, how to verify, status. |
 | findings.json | The findings with status.json merged in. Keep this as the record. |
 | status.json | The current checkbox state in the export format. |
-| analysis.html | With `--detail full`: every check by block instance, passes folded, full Result tables, plots, datasheet values with pages, not-published items and simulation sanity. Findings and checks link both ways. |
+| analysis.html | With `--detail full`: every check by block instance, passes folded, in the reading order below. Findings and checks link both ways. |
 
 Inputs:
 
@@ -50,6 +50,22 @@ Inputs:
 - **known_good.json**: a list of `{ref, note, source, decided}`.
 - **checks.json**: every checklist item run (workflow/40_checks.md). Read from next to
   findings.json when `--checks` is not given.
+
+Reading order, for every check in analysis.html and every calculation in a finding's Math fold:
+
+1. The headline in words, with the verdict as a word: **Fails** U2 +3V3 loop: phase margin too low.
+2. Two or three plain sentences with the real numbers (the check's `summary`, or the
+   calculator's).
+3. The key numbers against what we want: "Phase margin 30° (want 45° or more) · Crossover
+   64 kHz".
+4. Sources as sentences: "The datasheet says EN rising threshold is 1.15 to 1.25 V (U1
+   datasheet rev A, p.5)." Not-published items say what they became.
+5. The plot, with a caption that says what to look at.
+6. Folded: the math (formula, every input with its source, every output), assumptions, and the
+   simulation checks.
+
+The default view never shows variable names. Write labels, summaries and headlines so that it
+does not need them.
 
 Finding and bench ids must be unique across both lists and use letters, digits and
 `_ . - ~ : @ +` only; they become checkbox ids and status document ids.
