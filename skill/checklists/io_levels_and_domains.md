@@ -66,7 +66,12 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Pass: pull-up present; rise time and VOL inside limits.
 
 ## IO-8 MOSFET gate drive
-- Check: VGS(th) max and the VGS at which RDS(on) is specified against the actual gate drive.
-- Why: a FET with VGS(th) max near the drive voltage may not turn on.
-- Compute: none; digest values.
-- Pass: drive above the RDS(on) test voltage, or VGS(th) max well below the drive.
+- Check: the minimum actual gate drive (driver high level or rail at its low corner, less any
+  drop) against the VGS at which the datasheet guarantees RDS(on) or a drain current; then
+  conduction loss with RDS(on) at the hot junction temperature, and SOA for the transitions.
+- Why: VGS(th) is the gate voltage for a small test current (often 250 uA). A FET driven a little
+  above it conducts, but its resistance is not guaranteed and it can overheat.
+- Compute: `calc.thermal.junction_temp` with `P = I^2 * RDS(on)` at the hot corner; SOA from the
+  digest curve.
+- Pass: a guaranteed RDS(on) or drain current at a VGS at or below the minimum actual drive, with
+  loss and SOA inside limits hot. Margin above VGS(th) alone never passes.
