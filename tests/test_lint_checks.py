@@ -37,6 +37,17 @@ def test_single_pin_net_flags_named_nets_only():
     assert found[0].pins == ["R9.1"]
 
 
+def test_labeled_pins_with_a_no_connect_flag_are_one_info_line():
+    m = BoardModel(pin_list_complete=True)
+    m.add_pin("U1", "91", "/CM5/BT_nDis", "BT_nDisable", "input", no_connect=True)
+    m.add_pin("U1", "92", "/CM5/WL_nDis", "WL_nDisable", "input", no_connect=True)
+    m.add_pin("U1", "5", "SPARE", "GPIO5", "bidirectional")
+    m.finalize()
+    found = [(f.severity, f.pins) for f in _run(nets.single_pin_nets, m)]
+    assert ("warning", ["U1.5"]) in found
+    assert ("info", ["U1.91", "U1.92"]) in found and len(found) == 2
+
+
 def test_near_duplicate_rails_spelling_loose_and_case():
     found = _run(nets.near_duplicate_rails, _ti())
     assert [(f.severity, sorted(f.nets)) for f in found] == [("warning", ["+3V3", "3V3"])]

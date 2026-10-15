@@ -10,12 +10,23 @@ from boardreview.model.graph import Graph
 
 def single_pin_nets(model: BoardModel, g: Graph) -> list[Finding]:
     """Nets a person named that reach only one pin: usually a label typo or a missing wire."""
-    out = []
+    out, flagged = [], []
     for net in model.nets.values():
-        if len(net.pins) == 1 and not net.auto_named:
-            out.append(Finding("single_pin_net", "warning",
-                               f"net {net.name} reaches only {net.pins[0]}; check for a misspelled label or a missing wire",
-                               components=[net.pins[0].partition(".")[0]], nets=[net.name], pins=list(net.pins)))
+        if len(net.pins) != 1 or net.auto_named:
+            continue
+        if model.pin(net.pins[0]).no_connect:
+            flagged.append(net)
+            continue
+        out.append(Finding("single_pin_net", "warning",
+                           f"net {net.name} reaches only {net.pins[0]}; check for a misspelled label or a missing wire",
+                           components=[net.pins[0].partition(".")[0]], nets=[net.name], pins=list(net.pins)))
+    if flagged:
+        pins = sorted((n.pins[0] for n in flagged), key=natural_key)
+        out.append(Finding("single_pin_net", "info",
+                           f"{len(flagged)} labeled pins also carry a no-connect flag, so each label reaches only its "
+                           f"own pin: {', '.join(pins)}; the flag says the pin is unused on purpose",
+                           components=sorted({p.partition('.')[0] for p in pins}, key=natural_key),
+                           nets=sorted((n.name for n in flagged), key=natural_key), pins=pins))
     return out
 
 
