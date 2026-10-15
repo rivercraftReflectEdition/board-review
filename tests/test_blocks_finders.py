@@ -186,6 +186,19 @@ def test_i2c_pairs_by_pin_names_and_shared_devices():
     assert any("no pull-up found on N_B" in n for n in b.notes)
 
 
+def test_caps_alone_do_not_make_a_rail_of_a_net_with_i2c_or_reset_pins():
+    rows = [("U5", "1", "BUS_D", "SDA"), ("U5", "2", "BUS_C", "SCL"), ("U6", "7", "BUS_D", "SDA"),
+            ("U6", "8", "BUS_C", "SCL"), ("U5", "3", "N_R", "NRST"), ("U6", "9", "N_R", "~{RESET}")]
+    rows += _two("C1", "BUS_D", "GND") + _two("C2", "BUS_D", "GND") + _two("C3", "BUS_D", "GND")
+    rows += _two("C4", "N_R", "GND") + _two("C5", "N_R", "GND") + _two("C6", "N_R", "GND")
+    rows += _two("R1", "BUS_D", "3V3") + _two("R2", "BUS_C", "3V3") + _two("C7", "3V3", "GND")
+    g = Graph(_board(rows))
+    assert g.rail_evidence("BUS_D") == [] and g.rail_evidence("N_R") == []
+    b = _only(i2c.find_i2c_buses(g), "i2c_bus")
+    assert (b.roles["sda"], b.roles["scl"]) == (["BUS_D"], ["BUS_C"])
+    assert [x.roles["net"] for x in resets.find_reset_nets(g)] == [["N_R"]]
+
+
 def test_straps_level_from_fitted_parts_and_role_tags():
     found = {b.roles["net"][0]: b for b in straps.find_straps(Graph(_ti()))}
     assert found["/BOOT0"].confidence == "high"
