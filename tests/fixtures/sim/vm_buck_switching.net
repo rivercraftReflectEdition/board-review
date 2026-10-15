@@ -1,0 +1,16 @@
+* Voltage-mode buck 5 V to 3.3 V at 500 kHz, triangle carrier, smooth switch so both edges span several time steps,
+* integrator compensation. Averaged twin: vm_buck_averaged.net
+Vin vin 0 5
+Vref ref 0 0.6
+Vramp ramp 0 PULSE(0 2.5 0 1.4u 0.6u 0 2u)
+Bsw sw 0 V=V(vin)*(0.5+0.5*tanh(5*(V(comp)-V(ramp))))
+L1 sw out 1u Rser=10m
+C1 out 0 10u Rser=10m
+Rload out 0 1
+Rtop out fb 10k
+Rbot fb 0 2.22k
+G1 0 comp ref fb 1m
+Cc comp 0 11.6n
+Ro comp 0 10meg
+.tran 0 1m 0 40n startup
+.end

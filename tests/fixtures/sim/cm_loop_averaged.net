@@ -1,0 +1,13 @@
+* Averaged current-mode stand-in: 2 A/V into 10u || 1 ohm (pole 15.9 kHz), integrator EA.
+* T = gm/(s Cc) * 2 * (1 || 1/(s C)) * 2.22/12.22, crossover about 22 kHz, PM about 35 deg
+Vref ref 0 0.6
+G1 0 comp ref fb 1m
+Cc comp 0 1.46n
+Ro comp 0 10meg
+Gmod 0 out comp 0 2
+C1 out 0 10u
+Rload out 0 1
+Rtop out fb 10k
+Rbot fb 0 2.22k
+.op
+.end
