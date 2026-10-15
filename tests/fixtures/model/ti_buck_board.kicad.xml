@@ -1,0 +1,292 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Synthetic board for tests: TI TPS54302 buck, STM32 MCU, crystal, reset, I2C, straps, ESD. Seeded bugs:
+     R9 pulls SDA up to "3V3" (a near-duplicate of "+3V3" and a single-pin net), D2 ground pin floats,
+     R10 is DNP and the only link on OPT_LINK, C10 has no MPN, U2 VSS pin 15 has no net. -->
+<export version="E">
+  <design>
+    <source>synthetic.kicad_sch</source>
+    <date>2026-10-14</date>
+    <tool>Eeschema 8.0.4</tool>
+  </design>
+  <components>
+    <comp ref="J1"><value>PWR_IN</value><footprint>Connector_JST:JST_PH_B2B-PH-K_1x02</footprint>
+      <fields><field name="MPN">B2B-PH-K-S</field><field name="Manufacturer">JST</field></fields>
+      <libsource lib="Connector" part="Conn_01x02" description="Generic connector"/></comp>
+    <comp ref="C1"><value>10uF</value><footprint>Capacitor_SMD:C_1206</footprint>
+      <fields><field name="MPN">GRM31CR71E106KA12L</field><field name="Manufacturer">Murata</field></fields>
+      <libsource lib="Device" part="C" description="Unpolarized capacitor"/></comp>
+    <comp ref="U1"><value>TPS54302</value><footprint>Package_TO_SOT_SMD:SOT-23-6</footprint>
+      <fields><field name="MPN">TPS54302DDCR</field><field name="Manufacturer">Texas Instruments</field></fields>
+      <libsource lib="Regulator_Switching" part="TPS54302" description="3A synchronous buck converter"/></comp>
+    <comp ref="C2"><value>100nF</value><footprint>Capacitor_SMD:C_0402</footprint>
+      <fields><field name="MPN">GRM155R71C104KA88D</field><field name="Manufacturer">Murata</field></fields>
+      <libsource lib="Device" part="C" description="Unpolarized capacitor"/></comp>
+    <comp ref="L1"><value>10uH</value><footprint>Inductor_SMD:L_Coilcraft_XAL4040</footprint>
+      <fields><field name="MPN">XAL4040-103MEC</field><field name="Manufacturer">Coilcraft</field></fields>
+      <libsource lib="Device" part="L" description="Power inductor"/></comp>
+    <comp ref="C3"><value>22uF</value><footprint>Capacitor_SMD:C_0805</footprint>
+      <fields><field name="MPN">GRM21BR61A226ME44L</field><field name="Manufacturer">Murata</field></fields>
+      <libsource lib="Device" part="C"/></comp>
+    <comp ref="C4"><value>22uF</value><footprint>Capacitor_SMD:C_0805</footprint>
+      <fields><field name="MPN">GRM21BR61A226ME44L</field><field name="Manufacturer">Murata</field></fields>
+      <libsource lib="Device" part="C"/></comp>
+    <comp ref="R1"><value>100k</value><footprint>Resistor_SMD:R_0402</footprint>
+      <fields><field name="MPN">RC0402FR-07100KL</field><field name="Manufacturer">Yageo</field></fields>
+      <libsource lib="Device" part="R"/></comp>
+    <comp ref="R2"><value>22.1k</value><footprint>Resistor_SMD:R_0402</footprint>
+      <fields><field name="MPN">RC0402FR-0722K1L</field><field name="Manufacturer">Yageo</field></fields>
+      <libsource lib="Device" part="R"/></comp>
+    <comp ref="C5"><value>33pF</value><footprint>Capacitor_SMD:C_0402</footprint>
+      <fields><field name="MPN">GRM1555C1H330JA01D</field><field name="Manufacturer">Murata</field></fields>
+      <libsource lib="Device" part="C"/></comp>
+    <comp ref="R3"><value>100k</value><footprint>Resistor_SMD:R_0402</footprint>
+      <fields><field name="MPN">RC0402FR-07100KL</field><field name="Manufacturer">Yageo</field></fields>
+      <libsource lib="Device" part="R"/></comp>
+    <comp ref="R4"><value>20k</value><footprint>Resistor_SMD:R_0402</footprint>
+      <fields><field name="MPN">RC0402FR-0720KL</field><field name="Manufacturer">Yageo</field></fields>
+      <libsource lib="Device" part="R"/></comp>
+    <comp ref="FB1"><value>220R@100MHz</value><footprint>Inductor_SMD:L_0603</footprint>
+      <fields><field name="MPN">BLM18PG221SN1D</field><field name="Manufacturer">Murata</field></fields>
+      <libsource lib="Device" part="FerriteBead" description="Ferrite bead"/></comp>
+    <comp ref="C6"><value>1uF</value><footprint>Capacitor_SMD:C_0402</footprint>
+      <fields><field name="MPN">GRM155R61A105KE15D</field><field name="Manufacturer">Murata</field></fields>
+      <libsource lib="Device" part="C"/></comp>
+    <comp ref="C7"><value>100nF</value><footprint>Capacitor_SMD:C_0402</footprint>
+      <fields><field name="MPN">GRM155R71C104KA88D</field><field name="Manufacturer">Murata</field></fields>
+      <libsource lib="Device" part="C"/></comp>
+    <comp ref="U2"><value>STM32G030F6P6</value><footprint>Package_SO:TSSOP-20</footprint>
+      <fields><field name="MPN">STM32G030F6P6</field><field name="Manufacturer">STMicroelectronics</field></fields>
+      <libsource lib="MCU_ST_STM32G0" part="STM32G030F6Px" description="Arm Cortex-M0+ MCU"/></comp>
+    <comp ref="Y1"><value>8MHz</value><footprint>Crystal:Crystal_SMD_3225-4Pin</footprint>
+      <fields><field name="MPN">ABM8-8.000MHZ-B2-T</field><field name="Manufacturer">Abracon</field></fields>
+      <libsource lib="Device" part="Crystal_GND24" description="Four pin crystal"/></comp>
+    <comp ref="C8"><value>18pF</value><footprint>Capacitor_SMD:C_0402</footprint>
+      <fields><field name="MPN">GRM1555C1H180JA01D</field><field name="Manufacturer">Murata</field></fields>
+      <libsource lib="Device" part="C"/></comp>
+    <comp ref="C9"><value>18pF</value><footprint>Capacitor_SMD:C_0402</footprint>
+      <fields><field name="MPN">GRM1555C1H180JA01D</field><field name="Manufacturer">Murata</field></fields>
+      <libsource lib="Device" part="C"/></comp>
+    <comp ref="U3"><value>TPS3839G33</value><footprint>Package_TO_SOT_SMD:SOT-23</footprint>
+      <fields><field name="MPN">TPS3839G33DBZR</field><field name="Manufacturer">Texas Instruments</field></fields>
+      <libsource lib="Power_Supervisor" part="TPS3839" description="Supply voltage supervisor"/></comp>
+    <comp ref="R5"><value>10k</value><footprint>Resistor_SMD:R_0402</footprint>
+      <fields><field name="MPN">RC0402FR-0710KL</field><field name="Manufacturer">Yageo</field></fields>
+      <libsource lib="Device" part="R"/></comp>
+    <comp ref="C10"><value>100nF</value><footprint>Capacitor_SMD:C_0402</footprint>
+      <libsource lib="Device" part="C"/></comp>
+    <comp ref="D1"><value>BAT54</value><footprint>Diode_SMD:D_SOD-323</footprint>
+      <fields><field name="MPN">BAT54WS</field><field name="Manufacturer">Nexperia</field></fields>
+      <libsource lib="Diode" part="BAT54W" description="Schottky diode"/></comp>
+    <comp ref="R11"><value>10k</value><footprint>Resistor_SMD:R_0402</footprint>
+      <fields><field name="MPN">RC0402FR-0710KL</field><field name="Manufacturer">Yageo</field></fields>
+      <libsource lib="Device" part="R"/></comp>
+    <comp ref="J2"><value>DEBUG</value><footprint>Connector_PinHeader_1.27mm:PinHeader_1x03</footprint>
+      <fields><field name="MPN">FTSH-103-01-L-S</field><field name="Manufacturer">Samtec</field></fields>
+      <libsource lib="Connector" part="Conn_01x03"/></comp>
+    <comp ref="R6"><value>10k</value><footprint>Resistor_SMD:R_0402</footprint>
+      <fields><field name="MPN">RC0402FR-0710KL</field><field name="Manufacturer">Yageo</field></fields>
+      <libsource lib="Device" part="R"/></comp>
+    <comp ref="R7"><value>10k</value><footprint>Resistor_SMD:R_0402</footprint>
+      <fields><field name="MPN">RC0402FR-0710KL</field><field name="Manufacturer">Yageo</field></fields>
+      <libsource lib="Device" part="R"/><property name="dnp"/></comp>
+    <comp ref="R8"><value>4.7k</value><footprint>Resistor_SMD:R_0402</footprint>
+      <fields><field name="MPN">RC0402FR-074K7L</field><field name="Manufacturer">Yageo</field></fields>
+      <libsource lib="Device" part="R"/></comp>
+    <comp ref="R9"><value>4.7k</value><footprint>Resistor_SMD:R_0402</footprint>
+      <fields><field name="MPN">RC0402FR-074K7L</field><field name="Manufacturer">Yageo</field></fields>
+      <libsource lib="Device" part="R"/></comp>
+    <comp ref="U4"><value>TMP102</value><footprint>Package_TO_SOT_SMD:SOT-563</footprint>
+      <fields><field name="MPN">TMP102AIDRLR</field><field name="Manufacturer">Texas Instruments</field></fields>
+      <libsource lib="Sensor_Temperature" part="TMP102" description="I2C temperature sensor"/></comp>
+    <comp ref="C11"><value>100nF</value><footprint>Capacitor_SMD:C_0402</footprint>
+      <fields><field name="MPN">GRM155R71C104KA88D</field><field name="Manufacturer">Murata</field></fields>
+      <libsource lib="Device" part="C"/></comp>
+    <comp ref="J3"><value>EXT</value><footprint>Connector_JST:JST_PH_B3B-PH-K_1x03</footprint>
+      <fields><field name="MPN">B3B-PH-K-S</field><field name="Manufacturer">JST</field></fields>
+      <libsource lib="Connector" part="Conn_01x03"/></comp>
+    <comp ref="D2"><value>TPD2E2U06</value><footprint>Package_TO_SOT_SMD:SOT-23</footprint>
+      <fields><field name="MPN">TPD2E2U06DCKR</field><field name="Manufacturer">Texas Instruments</field></fields>
+      <libsource lib="Power_Protection" part="TPD2E2U06" description="ESD protection diode array"/></comp>
+    <comp ref="R10"><value>0R</value><footprint>Resistor_SMD:R_0402</footprint>
+      <fields><field name="MPN">RC0402JR-070RL</field><field name="Manufacturer">Yageo</field></fields>
+      <libsource lib="Device" part="R"/><property name="dnp"/></comp>
+    <comp ref="C12"><value>10uF</value><footprint>Capacitor_SMD:C_0805</footprint>
+      <fields><field name="MPN">GRM21BR61A106KE19L</field><field name="Manufacturer">Murata</field></fields>
+      <libsource lib="Device" part="C"/></comp>
+  </components>
+  <libparts>
+    <libpart lib="Regulator_Switching" part="TPS54302">
+      <pins>
+        <pin num="1" name="GND" type="power_in"/><pin num="2" name="SW" type="power_out"/>
+        <pin num="3" name="VIN" type="power_in"/><pin num="4" name="FB" type="input"/>
+        <pin num="5" name="EN" type="input"/><pin num="6" name="BOOT" type="passive"/>
+      </pins>
+    </libpart>
+    <libpart lib="Power_Supervisor" part="TPS3839">
+      <pins>
+        <pin num="1" name="GND" type="power_in"/><pin num="2" name="~{RESET}" type="open_collector"/>
+        <pin num="3" name="VDD" type="power_in"/>
+      </pins>
+    </libpart>
+    <libpart lib="Sensor_Temperature" part="TMP102">
+      <pins>
+        <pin num="1" name="SCL" type="input"/><pin num="2" name="GND" type="power_in"/>
+        <pin num="3" name="ALERT" type="open_collector"/><pin num="4" name="ADD0" type="input"/>
+        <pin num="5" name="V+" type="power_in"/><pin num="6" name="SDA" type="bidirectional"/>
+      </pins>
+    </libpart>
+    <libpart lib="Power_Protection" part="TPD2E2U06">
+      <pins>
+        <pin num="1" name="IO1" type="passive"/><pin num="2" name="IO2" type="passive"/>
+        <pin num="3" name="GND" type="passive"/>
+      </pins>
+    </libpart>
+  </libparts>
+  <nets>
+    <net code="1" name="VIN" class="Power">
+      <node ref="J1" pin="1" pinfunction="Pin_1" pintype="passive"/>
+      <node ref="C1" pin="1" pintype="passive"/>
+      <node ref="U1" pin="3" pinfunction="VIN" pintype="power_in"/>
+      <node ref="R3" pin="1" pintype="passive"/>
+    </net>
+    <net code="2" name="GND" class="Power">
+      <node ref="J1" pin="2" pinfunction="Pin_2" pintype="passive"/>
+      <node ref="C1" pin="2" pintype="passive"/>
+      <node ref="U1" pin="1" pinfunction="GND" pintype="power_in"/>
+      <node ref="C3" pin="2" pintype="passive"/>
+      <node ref="C4" pin="2" pintype="passive"/>
+      <node ref="R2" pin="2" pintype="passive"/>
+      <node ref="R4" pin="2" pintype="passive"/>
+      <node ref="C6" pin="2" pintype="passive"/>
+      <node ref="C7" pin="2" pintype="passive"/>
+      <node ref="U2" pin="2" pinfunction="VSS" pintype="power_in"/>
+      <node ref="Y1" pin="2" pinfunction="GND" pintype="passive"/>
+      <node ref="Y1" pin="4" pinfunction="GND" pintype="passive"/>
+      <node ref="C8" pin="2" pintype="passive"/>
+      <node ref="C9" pin="2" pintype="passive"/>
+      <node ref="U3" pin="1" pinfunction="GND" pintype="power_in"/>
+      <node ref="C10" pin="2" pintype="passive"/>
+      <node ref="R6" pin="2" pintype="passive"/>
+      <node ref="U4" pin="2" pinfunction="GND" pintype="power_in"/>
+      <node ref="U4" pin="4" pinfunction="ADD0" pintype="input"/>
+      <node ref="C11" pin="2" pintype="passive"/>
+      <node ref="J2" pin="2" pinfunction="Pin_2" pintype="passive"/>
+      <node ref="J3" pin="3" pinfunction="Pin_3" pintype="passive"/>
+      <node ref="C12" pin="2" pintype="passive"/>
+    </net>
+    <net code="3" name="SW">
+      <node ref="U1" pin="2" pinfunction="SW" pintype="power_out"/>
+      <node ref="C2" pin="2" pintype="passive"/>
+      <node ref="L1" pin="1" pintype="passive"/>
+    </net>
+    <net code="4" name="Net-(U1-BOOT)">
+      <node ref="U1" pin="6" pinfunction="BOOT" pintype="passive"/>
+      <node ref="C2" pin="1" pintype="passive"/>
+    </net>
+    <net code="5" name="+3V3" class="Power">
+      <node ref="L1" pin="2" pintype="passive"/>
+      <node ref="C3" pin="1" pintype="passive"/>
+      <node ref="C4" pin="1" pintype="passive"/>
+      <node ref="R1" pin="1" pintype="passive"/>
+      <node ref="C5" pin="1" pintype="passive"/>
+      <node ref="FB1" pin="1" pintype="passive"/>
+      <node ref="U2" pin="1" pinfunction="VDD" pintype="power_in"/>
+      <node ref="U3" pin="3" pinfunction="VDD" pintype="power_in"/>
+      <node ref="R5" pin="1" pintype="passive"/>
+      <node ref="R7" pin="1" pintype="passive"/>
+      <node ref="R8" pin="1" pintype="passive"/>
+      <node ref="U4" pin="5" pinfunction="V+" pintype="power_in"/>
+      <node ref="C11" pin="1" pintype="passive"/>
+      <node ref="J2" pin="1" pinfunction="Pin_1" pintype="passive"/>
+      <node ref="R10" pin="2" pintype="passive"/>
+      <node ref="C12" pin="1" pintype="passive"/>
+      <node ref="R11" pin="1" pintype="passive"/>
+    </net>
+    <net code="6" name="/FB_3V3">
+      <node ref="U1" pin="4" pinfunction="FB" pintype="input"/>
+      <node ref="R1" pin="2" pintype="passive"/>
+      <node ref="R2" pin="1" pintype="passive"/>
+      <node ref="C5" pin="2" pintype="passive"/>
+    </net>
+    <net code="7" name="/EN_BUCK">
+      <node ref="U1" pin="5" pinfunction="EN" pintype="input"/>
+      <node ref="R3" pin="2" pintype="passive"/>
+      <node ref="R4" pin="1" pintype="passive"/>
+    </net>
+    <net code="8" name="3V3A">
+      <node ref="FB1" pin="2" pintype="passive"/>
+      <node ref="C6" pin="1" pintype="passive"/>
+      <node ref="C7" pin="1" pintype="passive"/>
+      <node ref="U2" pin="9" pinfunction="VDDA" pintype="power_in"/>
+    </net>
+    <net code="9" name="/XTAL_P">
+      <node ref="U2" pin="3" pinfunction="PF0-OSC_IN" pintype="input"/>
+      <node ref="Y1" pin="1" pinfunction="1" pintype="passive"/>
+      <node ref="C8" pin="1" pintype="passive"/>
+    </net>
+    <net code="10" name="/XTAL_N">
+      <node ref="U2" pin="4" pinfunction="PF1-OSC_OUT" pintype="output"/>
+      <node ref="Y1" pin="3" pinfunction="3" pintype="passive"/>
+      <node ref="C9" pin="1" pintype="passive"/>
+    </net>
+    <net code="11" name="NRST">
+      <node ref="U2" pin="5" pinfunction="NRST" pintype="bidirectional"/>
+      <node ref="U3" pin="2" pinfunction="~{RESET}" pintype="open_collector"/>
+      <node ref="R5" pin="2" pintype="passive"/>
+      <node ref="C10" pin="1" pintype="passive"/>
+      <node ref="D1" pin="1" pinfunction="A" pintype="passive"/>
+    </net>
+    <net code="12" name="SYS_RST_N">
+      <node ref="D1" pin="2" pinfunction="K" pintype="passive"/>
+      <node ref="J2" pin="3" pinfunction="Pin_3" pintype="passive"/>
+      <node ref="R11" pin="2" pintype="passive"/>
+    </net>
+    <net code="13" name="/BOOT0">
+      <node ref="U2" pin="6" pinfunction="PA14-BOOT0" pintype="bidirectional"/>
+      <node ref="R6" pin="1" pintype="passive"/>
+      <node ref="R7" pin="2" pintype="passive"/>
+    </net>
+    <net code="14" name="I2C1_SCL">
+      <node ref="U2" pin="7" pinfunction="PB6-I2C1_SCL" pintype="bidirectional"/>
+      <node ref="R8" pin="2" pintype="passive"/>
+      <node ref="U4" pin="1" pinfunction="SCL" pintype="input"/>
+    </net>
+    <net code="15" name="I2C1_SDA">
+      <node ref="U2" pin="8" pinfunction="PB7-I2C1_SDA" pintype="bidirectional"/>
+      <node ref="R9" pin="2" pintype="passive"/>
+      <node ref="U4" pin="6" pinfunction="SDA" pintype="bidirectional"/>
+    </net>
+    <net code="16" name="3V3">
+      <node ref="R9" pin="1" pintype="passive"/>
+    </net>
+    <net code="17" name="EXT_A">
+      <node ref="U2" pin="11" pinfunction="PA9" pintype="bidirectional"/>
+      <node ref="J3" pin="1" pinfunction="Pin_1" pintype="passive"/>
+      <node ref="D2" pin="1" pinfunction="IO1" pintype="passive"/>
+    </net>
+    <net code="18" name="EXT_B">
+      <node ref="U2" pin="12" pinfunction="PA10" pintype="bidirectional"/>
+      <node ref="J3" pin="2" pinfunction="Pin_2" pintype="passive"/>
+      <node ref="D2" pin="2" pinfunction="IO2" pintype="passive"/>
+    </net>
+    <net code="19" name="/OPT_LINK">
+      <node ref="U2" pin="13" pinfunction="PA11" pintype="bidirectional"/>
+      <node ref="R10" pin="1" pintype="passive"/>
+    </net>
+    <net code="20" name="unconnected-(U2-PA5-Pad10)">
+      <node ref="U2" pin="10" pinfunction="PA5" pintype="bidirectional"/>
+    </net>
+    <net code="21" name="unconnected-(U2-PA12-Pad14)">
+      <node ref="U2" pin="14" pinfunction="PA12" pintype="bidirectional+no_connect"/>
+    </net>
+    <net code="22" name="unconnected-(U2-VSS-Pad15)">
+      <node ref="U2" pin="15" pinfunction="VSS" pintype="power_in"/>
+    </net>
+    <net code="23" name="unconnected-(U4-ALERT-Pad3)">
+      <node ref="U4" pin="3" pinfunction="ALERT" pintype="open_collector"/>
+    </net>
+    <net code="24" name="unconnected-(D2-GND-Pad3)">
+      <node ref="D2" pin="3" pinfunction="GND" pintype="passive"/>
+    </net>
+  </nets>
+</export>

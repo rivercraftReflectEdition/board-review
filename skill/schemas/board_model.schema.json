@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "boardreview/board_model/1",
+  "title": "Board model",
+  "description": "Components, pins and nets of one board from one netlist source plus an optional BOM. Written by python -m boardreview.model build. Scripts produce it; reviewers read it.",
+  "type": "object",
+  "required": ["schema", "sources", "pin_list_complete", "stats", "components", "pins", "nets", "warnings"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {"const": "boardreview/board_model/1"},
+    "sources": {
+      "description": "Files the model was built from, in load order.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["kind", "path"],
+        "properties": {
+          "kind": {"enum": ["ipc356", "kicad_xml", "protel_net", "eda_agent_json", "bom"]},
+          "path": {"type": "string"}
+        },
+        "additionalProperties": {"type": "string"}
+      }
+    },
+    "pin_list_complete": {
+      "description": "True when pins with no net are listed (IPC-D-356, KiCad, eda-agent). False for Protel .NET, which omits them, so open-pin checks cannot run.",
+      "type": "boolean"
+    },
+    "stats": {
+      "type": "object",
+      "required": ["components", "pins", "nets", "unconnected_pins"],
+      "properties": {
+        "components": {"type": "integer", "minimum": 0},
+        "pins": {"type": "integer", "minimum": 0},
+        "nets": {"type": "integer", "minimum": 0},
+        "unconnected_pins": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "components": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["refdes", "value", "value_si", "mpn", "manufacturer", "footprint", "description", "fitted", "variant", "kind", "attrs"],
+        "additionalProperties": false,
+        "properties": {
+          "refdes": {"type": "string", "minLength": 1},
+          "value": {"type": "string", "description": "Value text as found (10k, 100nF, 120R@100MHz). attrs.value_from says where it came from."},
+          "value_si": {"type": ["number", "null"], "description": "Value in SI units (ohm, F, H; ferrite beads in ohm at 100 MHz), null when unknown."},
+          "mpn": {"type": "string"},
+          "manufacturer": {"type": "string"},
+          "footprint": {"type": "string"},
+          "description": {"type": "string"},
+          "fitted": {"type": "boolean", "description": "False for DNP / Not Fitted in the BOM, netlist or chosen variant."},
+          "variant": {"type": "string"},
+          "kind": {
+            "enum": ["resistor", "capacitor", "inductor", "ferrite", "diode", "led", "tvs", "transistor", "ic", "crystal", "oscillator", "connector", "testpoint", "mechanical", "switch", "fuse", "relay", "transformer", "jumper", "battery", "other"]
+          },
+          "attrs": {"type": "object", "additionalProperties": {"type": "string"}}
+        }
+      }
+    },
+    "pins": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["refdes", "number", "name", "type", "net", "no_connect"],
+        "additionalProperties": false,
+        "properties": {
+          "refdes": {"type": "string"},
+          "number": {"type": "string", "description": "Pin or pad number as the source writes it (1, A12, SHLD)."},
+          "name": {"type": "string", "description": "Pin name when the source has it (KiCad, eda-agent), else empty."},
+          "type": {"type": "string", "description": "Electrical type when known: passive, input, output, bidirectional, tri_state, power_in, power_out, open_collector, open_emitter, no_connect, unspecified, free."},
+          "net": {"type": ["string", "null"], "description": "Net name; null when the pin has no net (N/C, unconnected, tool-named single-pin net)."},
+          "no_connect": {"type": "boolean", "description": "True when the source marks the pin as deliberately not connected."}
+        }
+      }
+    },
+    "nets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "class", "kind", "auto_named", "pins", "attrs"],
+        "additionalProperties": false,
+        "properties": {
+          "name": {"type": "string", "minLength": 1},
+          "class": {"type": "string", "description": "Net class from the source when it carries one, else empty."},
+          "kind": {"enum": ["ground", "chassis", "rail", "signal"], "description": "From the name only. power_tree.md adds rails found by structure."},
+          "auto_named": {"type": "boolean", "description": "True when the CAD tool generated the name (NetC5_2, Net-(R1-Pad2))."},
+          "pins": {"type": "array", "items": {"type": "string", "pattern": "^[^.]+\\..+$"}, "description": "REF.PIN keys."},
+          "attrs": {"type": "object", "description": "Extra facts, for example vias (count of via records in an IPC-D-356 file)."}
+        }
+      }
+    },
+    "warnings": {"type": "array", "items": {"type": "string"}}
+  }
+}
