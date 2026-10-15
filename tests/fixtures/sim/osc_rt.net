@@ -1,0 +1,16 @@
+* Switching stand-in: f = 2.524e11 / (R_RT || 1meg internal); R47 270k gives 1.187 MHz, RT open gives 252 kHz
+.subckt OSCRT RT SW VIN GND
+Vref ref GND 1
+Rs ref RT 1
+Rint RT GND 1meg
+Bph ph GND V=idt(2.524e11*I(Rs))
+Bsw SW GND V=V(VIN)*(0.5+0.5*tanh(20*sin(2*pi*V(ph))))
+.ends
+V1 IN 0 4
+XU1 RT SW IN 0 OSCRT
+R47 RT 0 270k
+L1 SW OUT 2.2u
+C1 OUT 0 10u
+Rload OUT 0 10
+.tran 0 100u 0 10n
+.end

@@ -1,0 +1,17 @@
+* Dual regulator stand-in with channel 2 feedback and switch pins left floating
+.subckt DUALREG VIN1 FB1 SW1 VIN2 FB2 SW2 RUN2 PGOOD GND
+R1 VIN1 SW1 1
+R2 SW1 FB1 1k
+R3 FB1 GND 1k
+R4 VIN2 SW2 1
+R5 SW2 FB2 1k
+R6 FB2 GND 1k
+R7 RUN2 GND 100k
+R8 PGOOD GND 1meg
+.ends
+V1 IN 0 4
+XU1 IN FB OUT IN NC_1 NC_2 0 NC_3 0 DUALREG
+RFB FB 0 1meg
+RLOAD OUT 0 10
+.op
+.end
