@@ -126,9 +126,13 @@ def dangling_terminals(nl: Netlist, allow_open: tuple[str, ...] | list[str] | se
 
 
 def _pin_list(el: Element, pins: list[int]) -> str:
+    sensed = " (and read in its expression)" if -1 in pins else ""
+    pins = [i for i in pins if i >= 0]
+    if not pins:
+        return f"{el.name} expression"
     if el.kind == "X":
-        return f"{el.name} " + ", ".join(el.pin_label(i) for i in pins)
-    return f"{el.name} terminal " + ", ".join(str(i + 1) for i in pins)
+        return f"{el.name} " + ", ".join(el.pin_label(i) for i in pins) + sensed
+    return f"{el.name} terminal " + ", ".join(str(i + 1) for i in pins) + sensed
 
 
 def _open_message(el: Element, pins: list[int], node: str) -> str:
@@ -340,6 +344,30 @@ def switching_frequency_check(t: np.ndarray, v_sw: np.ndarray, expected_hz: floa
     )
 
 
+def edge_resolution_check(t: np.ndarray, v_sw: np.ndarray, t_start_s: float | None = None,
+                          max_frac: float = 2e-3, label: str = "SW") -> Result:
+    """Switch edges must be resolved in time; a PWM edge pinned to the max time step quantizes the duty cycle."""
+    unc, period = measure.edge_timing_uncertainty(t, v_sw, t_start_s)
+    frac = unc / period if period and period == period else float("nan")
+    if frac != frac:
+        verdict, reason = Verdict.UNKNOWN, "no regular edges to measure"
+    elif frac > max_frac:
+        verdict = Verdict.MARGINAL
+        reason = (f"edges land on a {unc * 1e9:.3g} ns time grid, {frac:.2%} of the period: the duty cycle is "
+                  "quantized, so modulator gain and loop gain are not trustworthy. Lower the max step or let the "
+                  "model place its own breakpoints")
+    else:
+        verdict, reason = Verdict.PASS, f"edge timing within {frac:.3%} of the period"
+    return Result(
+        name=f"switch edge resolution at {label}",
+        formula="u = time step at edges that jump between two samples; u / T_sw <= 0.2 percent",
+        inputs={"T_sw": Quantity(period, "s")},
+        outputs={"u": Quantity(unc, "s"), "u/T_sw": Quantity(frac, "")},
+        verdict=verdict,
+        reason=reason,
+    )
+
+
 def check_log(run) -> SanityReport:
     """Errors, warnings and notes from a RunResult's log, and libraries the netlist named but the run did not load."""
     report = SanityReport()
@@ -369,9 +397,13 @@ def check_run(run, sw_node: str | None = None, expected_fsw_hz: float | None = N
         return report
     for k in range(raw.n_steps):
         label = sw_node if raw.n_steps == 1 else f"{sw_node}, step {k + 1} {raw.step_params[k] if raw.step_params else ''}"
+        t, v = raw.axis(step=k), raw.get(sw_node, step=k)
         try:
-            report.results.append(switching_frequency_check(raw.axis(step=k), raw.get(sw_node, step=k),
-                                                            expected_fsw_hz, fsw_tol, t_start_s, label.strip()))
+            report.results.append(switching_frequency_check(t, v, expected_fsw_hz, fsw_tol, t_start_s, label.strip()))
         except ValueError as exc:
             report.issues.append(Issue("fsw", "error", f"{label}: {exc}", sw_node))
+            continue
+        res = edge_resolution_check(t, v, t_start_s, label=label.strip())
+        if res.verdict is not Verdict.PASS:
+            report.results.append(res)
     return report

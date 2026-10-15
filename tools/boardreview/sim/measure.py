@@ -179,12 +179,44 @@ def switching_frequency(t: np.ndarray, y: np.ndarray, t_start_s: float | None = 
     )
 
 
+def edge_timing_uncertainty(t: np.ndarray, y: np.ndarray, t_start_s: float | None = None,
+                            max_edges: int = 400) -> tuple[float, float]:
+    """Median timing uncertainty of switch edges and the switching period, both in seconds.
+
+    An edge with two or more samples between its 10 and 90 percent levels is located by interpolation (0 s);
+    an edge that jumps between two samples is only known to within that time step.
+    """
+    t, y = window(t, y, t_start_s, None)
+    lo, hi = np.percentile(y, [5, 95])
+    lvl, span = 0.5 * (lo + hi), hi - lo
+    inside = (y > lo + 0.1 * span) & (y < lo + 0.9 * span)
+    worst = []
+    for rising in (True, False):
+        edges = crossings(t, y, lvl, 0.1 * span, rising=rising)[-max_edges:]
+        unc = []
+        for te in edges:
+            i = int(np.searchsorted(t, te))
+            if i <= 0 or i >= len(t):
+                continue
+            a, b = i - 1, i
+            while a >= 0 and inside[a]:
+                a -= 1
+            while b < len(t) and inside[b]:
+                b += 1
+            unc.append(0.0 if b - a - 1 >= 2 else t[i] - t[i - 1])
+        if unc:
+            worst.append(float(np.median(unc)))
+    edges = crossings(t, y, lvl, 0.1 * span, rising=True)
+    period = float(np.median(np.diff(edges))) if len(edges) > 2 else float("nan")
+    return (max(worst) if worst else float("nan")), period
+
+
 def box_average(t: np.ndarray, y: np.ndarray, period_s: float, points_per_period: int = 64,
-                dt_s: float | None = None) -> tuple[np.ndarray, np.ndarray]:
+                dt_s: float | None = None, max_points_per_period: int = 512) -> tuple[np.ndarray, np.ndarray]:
     """Centered moving average over exactly one period (removes the switching frequency and its harmonics)."""
     t = np.asarray(t, dtype=float)
     native = float(np.median(np.diff(t))) if dt_s is None else dt_s
-    m = max(points_per_period, int(math.ceil(period_s / native)))
+    m = max(points_per_period, min(max_points_per_period, int(math.ceil(period_s / native))))
     dt = period_s / m
     tu, yu = uniform(t, y, dt)
     dt_actual = tu[1] - tu[0]
@@ -197,7 +229,7 @@ def box_average(t: np.ndarray, y: np.ndarray, period_s: float, points_per_period
 
 def lockin(t: np.ndarray, y: np.ndarray, f_hz: float, t_start_s: float | None = None,
            t_end_s: float | None = None, points_per_period: int = 256) -> complex:
-    """Complex amplitude at f_hz (cosine reference) over the last whole number of periods in the window."""
+    """Complex amplitude at f_hz (cosine reference) over the last whole periods; offset and linear drift fitted out."""
     t, y = window(t, y, t_start_s, t_end_s)
     n = int(math.floor((t[-1] - t[0]) * f_hz + 1e-9))
     if n < 1:
@@ -205,8 +237,12 @@ def lockin(t: np.ndarray, y: np.ndarray, f_hz: float, t_start_s: float | None = 
     t0 = t[-1] - n / f_hz
     count = n * points_per_period
     tu = t0 + np.arange(count) * (1.0 / (f_hz * points_per_period))
-    yu = signal.detrend(np.interp(tu, t, y), type="linear")
-    return complex(2.0 / count * np.sum(yu * np.exp(-2j * np.pi * f_hz * tu)))
+    yu = np.interp(tu, t, y)
+    w = 2 * np.pi * f_hz * tu
+    x = (tu - tu.mean()) / (tu[-1] - tu[0])
+    basis = np.column_stack([np.ones(count), x, np.cos(w), np.sin(w)])
+    coef, *_ = np.linalg.lstsq(basis, yu, rcond=None)
+    return complex(coef[2], -coef[3])
 
 
 @dataclass(frozen=True)

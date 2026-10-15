@@ -95,6 +95,13 @@ def test_tran_step_too_coarse_for_switching():
     assert "tran-step" in rep.rules("warning")
 
 
+def test_nodes_read_in_expressions_count_as_connections():
+    text = "* t\nVramp ramp 0 PULSE(0 1 0 1u 1n 0 2u)\nVin vin 0 5\nBsw sw 0 V=V(vin)*(V(ramp,0)>0.5)\nR1 sw 0 1k\n.op\n"
+    assert sanity.check_netlist(text).ok
+    rep = sanity.check_netlist(text.replace("V(vin)*", "5*"))
+    assert [i.where for i in rep.errors] == ["Vin"]
+
+
 def test_up_slew_bench_record():
     # 3V3 board 2, 2026-10-14: up-ramp 0.12 A/us = (4.03 V x 0.89 - 3.32 V) / 2.2 uH
     assert sanity.up_slew(4.03, 0.89, 3.32, 2.2e-6) == pytest.approx(0.121e6, rel=0.01)

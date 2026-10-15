@@ -189,3 +189,23 @@ def test_real_ltc3633_switching_frequency_and_rail():
     sw = m.switching_frequency(t, raw["V(sw1)"], t_start_s=500e-6)
     assert sw.f_hz == pytest.approx(1.187e6, rel=0.005)
     assert m.mean_value(t, raw["V(out1)"], 500e-6) == pytest.approx(3.30, abs=0.03)
+    unc, period = m.edge_timing_uncertainty(t, raw["V(sw1)"], t_start_s=500e-6)
+    assert unc / period < 2e-3
+
+
+def test_lockin_is_not_biased_by_drift():
+    t = np.linspace(0, 1e-3, 200_001)
+    y = 3.3 + 40.0 * t + 0.005 * np.cos(2 * np.pi * 6e3 * t - 0.3)
+    ph = m.lockin(t, y, 6e3)
+    assert abs(ph) == pytest.approx(0.005, rel=1e-3)
+    assert np.angle(ph) == pytest.approx(-0.3, abs=1e-3)
+
+
+def test_edge_timing_uncertainty_step_vs_smooth_edges():
+    t = np.arange(0, 100e-6, 40e-9)
+    unc, period = m.edge_timing_uncertainty(t, pwm(t, 500e3, 0.66))
+    assert period == pytest.approx(2e-6, rel=1e-3)
+    assert unc == pytest.approx(40e-9, rel=1e-6)
+    tri = np.abs(((t * 500e3) % 1.0) - 0.5) * 2
+    smooth = 2.5 * (1 + np.tanh(12.5 * (0.66 - tri)))
+    assert m.edge_timing_uncertainty(t, smooth)[0] == 0.0

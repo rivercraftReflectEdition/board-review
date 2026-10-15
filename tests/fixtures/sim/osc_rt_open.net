@@ -4,7 +4,7 @@ Vref ref GND 1
 Rs ref RT 1
 Rint RT GND 1meg
 Bph ph GND V=idt(2.524e11*I(Rs))
-Bsw SW GND V=V(VIN)*(0.5+0.5*tanh(20*sin(2*pi*V(ph))))
+Bsw SW GND V=V(VIN)*(0.5+0.5*tanh(4*sin(2*pi*V(ph))))
 .ends
 V1 IN 0 4
 XU1 RT SW IN 0 OSCRT

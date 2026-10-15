@@ -12,6 +12,7 @@ _SUFFIX = {"t": 1e12, "g": 1e9, "meg": 1e6, "k": 1e3, "m": 1e-3, "u": 1e-6, "µ"
            "n": 1e-9, "p": 1e-12, "f": 1e-15, "mil": 25.4e-6}
 _NUM = re.compile(r"^([-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)(meg|mil|[tgkmuµμnpf])?[a-zΩ]*$", re.I)
 _TWO = set("RCLVIBD")
+_SENSE = re.compile(r"\bV\(\s*([^,\s()]+)\s*(?:,\s*([^\s()]+)\s*)?\)", re.I)
 _EG_KEYWORDS = ("value", "table", "poly", "laplace", "freq")
 
 
@@ -46,6 +47,15 @@ class Element:
     def kind(self) -> str:
         return self.name[0].upper()
 
+    @property
+    def sensed(self) -> tuple[str, ...]:
+        """Nodes read inside expressions, V(a) or V(a,b): a behavioral source senses them without loading them."""
+        body = self.text.split(None, 1 + len(self.nodes))[-1] if len(self.text.split()) > 1 + len(self.nodes) else ""
+        out = []
+        for a, b in _SENSE.findall(body):
+            out += [a] + ([b] if b else [])
+        return tuple(out)
+
     def pin_label(self, i: int) -> str:
         """1-based pin number plus its name when known: 'pin 5 (Rt)'."""
         name = self.pin_names[i] if self.pin_names and i < len(self.pin_names) and self.pin_names[i] else ""
@@ -70,11 +80,13 @@ class Netlist:
     globals: set[str]
 
     def node_map(self, elements: list[Element] | None = None) -> dict[str, list[tuple[Element, int]]]:
-        """Node (lower case) -> list of (element, 0-based terminal index)."""
+        """Node (lower case) -> list of (element, 0-based terminal index); -1 marks a node read in an expression."""
         out: dict[str, list[tuple[Element, int]]] = {}
         for el in self.elements if elements is None else elements:
             for i, n in enumerate(el.nodes):
                 out.setdefault(n.lower(), []).append((el, i))
+            for n in el.sensed:
+                out.setdefault(n.lower(), []).append((el, -1))
         return out
 
     def directive(self, name: str) -> list[str]:
