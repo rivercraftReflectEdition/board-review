@@ -1,3 +1,4 @@
+import os
 import shutil
 from pathlib import Path
 
@@ -12,6 +13,8 @@ from boardreview.sim.runner import LTspice, run, schematic_to_netlist
 FIXTURES = Path(__file__).parent / "fixtures" / "sim"
 LOCAL = Path(__file__).parent / "local" / "ltc3633"
 needs_ltspice = pytest.mark.skipif(not LTspice().available(), reason="LTspice not installed")
+slow = pytest.mark.skipif(not os.environ.get("BOARDREVIEW_SLOW"),
+                          reason="runs a switching LTspice model; set BOARDREVIEW_SLOW=1")
 
 
 def test_parse_value_suffixes():
@@ -163,6 +166,7 @@ def test_switching_frequency_check_on_synthetic_747khz():
 
 
 @needs_ltspice
+@slow
 def test_run_check_catches_wrong_switching_frequency(tmp_path):
     for name, verdict in (("osc_rt.net", Verdict.PASS), ("osc_rt_open.net", Verdict.FAIL)):
         shutil.copy(FIXTURES / name, tmp_path / name)
@@ -196,6 +200,7 @@ def test_schematic_wire_short_of_pin_is_caught(tmp_path):
 
 @needs_ltspice
 @pytest.mark.skipif(not (LOCAL / "NEW_3V3_6p8uH_FCM.asc").exists(), reason="local LTC3633 schematic not present")
+@slow
 def test_real_rt_wire_short_of_pin_runs_at_747_khz(tmp_path):
     # 2026-10-06: the RT wire in NEW_3V3_6p8uH_FCM.asc stopped 16 units short of the Rt pin; the model ran at 747 kHz
     allow = ["Pgood1", "Pgood2", "Track/SS1", "Track/SS2"]

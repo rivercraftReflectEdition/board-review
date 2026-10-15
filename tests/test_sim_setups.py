@@ -15,6 +15,8 @@ from boardreview.sim.sanity import SanityReport, check_netlist, check_run
 FIXTURES = Path(__file__).parent / "fixtures" / "sim"
 LOCAL = Path(__file__).parent / "local" / "ltc3633"
 needs_ltspice = pytest.mark.skipif(not LTspice().available(), reason="LTspice not installed")
+slow = pytest.mark.skipif(not os.environ.get("BOARDREVIEW_SLOW"),
+                          reason="runs a switching LTspice model; set BOARDREVIEW_SLOW=1")
 COMMON = dict(top_resistor="Rtop", out_node="out", fsw_hz=500e3, c_out_f=10e-6, slew_up_a_per_s=1.6e6,
               slew_down_a_per_s=3.3e6)
 
@@ -200,6 +202,7 @@ def test_ac_loop_gain_with_cff_matches_analytic(tmp_path):
 
 
 @needs_ltspice
+@slow
 def test_switching_injection_with_cff_matches_analytic(tmp_path):
     body = setups.body_from_netlist(FIXTURES / "vm_buck_switching.net") + "\nCff out fb 1n"
     s = setups.LoopGainSetup(body=body, sw_node="sw", amplitude_v=5e-3, t_settle_s=1e-3, **COMMON)
@@ -212,6 +215,7 @@ def test_switching_injection_with_cff_matches_analytic(tmp_path):
 
 
 @needs_ltspice
+@slow
 def test_switching_injection_matches_averaged_ac(tmp_path):
     s = setups.LoopGainSetup(body=setups.body_from_netlist(FIXTURES / "vm_buck_switching.net"), sw_node="sw",
                              amplitude_v=5e-3, t_settle_s=1e-3, **COMMON)
@@ -233,6 +237,7 @@ def test_switching_injection_matches_averaged_ac(tmp_path):
 
 
 @needs_ltspice
+@slow
 def test_quantized_switch_edges_are_flagged(tmp_path):
     body = setups.body_from_netlist(FIXTURES / "vm_buck_switching.net").replace("tanh(5*", "tanh(200*")
     s = setups.LoopGainSetup(body=body, sw_node="sw", amplitude_v=5e-3, t_settle_s=1e-3, **COMMON)
@@ -267,6 +272,7 @@ def test_load_step_ring_estimates_phase_margin_of_a_standard_loop(tmp_path):
 
 
 @needs_ltspice
+@slow
 def test_switching_load_step_and_startup(tmp_path):
     body = setups.body_from_netlist(FIXTURES / "vm_buck_switching.net")
     ls = setups.LoadStepSetup(body=body, out_node="out", i_from_a=0.0, i_to_a=1.0, t_step_s=1e-3, t_stop_s=1.4e-3,
