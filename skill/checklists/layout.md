@@ -17,14 +17,15 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
   the switch node.
 - Why: stray capacitance at FB adds lag `atan(2 pi fc (R_top||R_bot) C)`; coupling from the
   switch node injects noise into the loop.
-- Compute: `calc.loop` with an estimated stray C.
+- Compute: `calc.loop.Pole` at `1/(2 pi (R_top||R_bot) C)` with an estimated stray C; its phase
+  at crossover is the lag.
 - Pass: lag under 5 deg at crossover; datasheet layout rules met.
 
 ## LAY-3 Decoupling placement
 - Check: smallest capacitor closest to the pin with the shortest via path; same-side or
   opposite-side placement against the datasheet's guidance for BGAs.
 - Why: mounting inductance, not capacitance, limits high-frequency decoupling.
-- Compute: `sim.pdn` with via inductance when the rail is critical.
+- Compute: `sim.setups.run_impedance` with via inductance when the rail is critical.
 - Pass: every pin group has its high-frequency capacitor within the guidance distance.
 
 ## LAY-4 Return paths
@@ -38,7 +39,7 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Check: trace widths and gaps for single-ended and differential impedance computed from the
   fabricator's stackup; length-match rules from the timing budgets.
 - Why: rules inherited from another board's stackup give the wrong impedance.
-- Compute: `calc.timing` for skew budgets; the fabricator's stackup values.
+- Compute: `calc.timing.budget` for skew budgets; the fabricator's stackup values.
 - Pass: rules match the computed values.
 
 ## LAY-6 Mechanical keepouts and stack height
@@ -66,5 +67,5 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 ## LAY-9 Schematic and PCB in sync
 - Check: netlist_integrity NET-1 passes on the copper that goes to fab.
 - Why: an unsynced ECO ships the old circuit.
-- Compute: 3-way compare.
+- Compute: `model.compare` 3-way compare.
 - Pass: zero differences.

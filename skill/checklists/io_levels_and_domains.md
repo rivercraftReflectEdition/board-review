@@ -9,14 +9,14 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Check: driver VOH/VOL against receiver VIH/VIL at the worst supply and temperature. Many
   datasheets give thresholds as formulas of the supply (for example `VIH = a * VDD + b`).
 - Why: thresholds that pass at nominal fail at the supply corner when the two domains move apart.
-- Compute: `calc.divider` for any network; threshold formulas from the digest.
+- Compute: `calc.divider.divider_output` for any network; threshold formulas from the digest.
 - Pass: margin at both levels at every corner.
 
 ## IO-2 Pin abs max with pull resistors and dividers
 - Check: every pull-up or divider that ends on a pin; the pin's voltage against its abs max,
   using the domain the pin belongs to (5 V tolerant pins only when their own supply is up).
 - Why: a pull-up to a higher rail puts a pin above abs max for the life of the board.
-- Compute: `calc.divider`.
+- Compute: `calc.divider.divider_output`.
 - Pass: below abs max at the rail's worst high, in every power state.
 - Example: [pull-ups above pin abs max](../../docs/lessons/pullups-above-pin-abs-max.md)
 
@@ -26,7 +26,7 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
   unpowered rail rises to.
 - Why: back-powering violates sequencing rules, latches parts up, and can hold a module half
   powered.
-- Compute: `calc.divider` with the clamp diode as a source; current into the dead rail.
+- Compute: `calc.divider.divider_output` with the clamp diode as a source; current into the dead rail.
 - Pass: current below the datasheet's injection limit and the dead rail stays below its
   power-on threshold.
 
@@ -61,7 +61,8 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Check: every open-drain line (I2C, interrupts, power-good, faults) has a pull-up; VOL at the
   real pull-up current against VIL (some parts guarantee VOL only at high current).
 - Why: a missing pull-up never reads high; a weak VOL guarantee can sit above VIL.
-- Compute: `calc.i2c` for rise time and pull-up range; `calc.divider` for VOL.
+- Compute: `calc.i2c.i2c_rise_time` for rise time and `calc.i2c.i2c_pullup_range` for the
+  pull-up range; VOL at the real pull-up current from the digest.
 - Pass: pull-up present; rise time and VOL inside limits.
 
 ## IO-8 MOSFET gate drive

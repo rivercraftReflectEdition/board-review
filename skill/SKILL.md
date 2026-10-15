@@ -43,8 +43,9 @@ the calculator, the pass criterion, and what to do when the data is not publishe
 2. **Cite everything.** Every claim names a pin (`U4.12`), a net, a schematic page, a datasheet
    document with revision and page, or a calculator result. No citation, no claim.
 3. **Show the math.** Every number comes from a calculator in `tools/boardreview/calc` and the
-   report prints its formula, inputs and outputs (`Result.to_markdown()`). Use worst-case
-   corners: tolerance, temperature, bias, aging. Typical values are labeled typical.
+   report prints its formula, inputs and outputs (`Result.to_markdown()`). Where a checklist
+   says no calculator exists yet, write the formula, inputs and result the same way. Use
+   worst-case corners: tolerance, temperature, bias, aging. Typical values are labeled typical.
 4. **"Not published" is an answer.** When the documents do not give a value the check needs
    (internal compensation, bead inductance, sink current), say so in the digest. The finding
    becomes a required footprint, a bench test, or a vendor question. Never guess a value and
@@ -88,15 +89,21 @@ verification. Severity:
 
 ## Tools
 
-- `tools/boardreview/model`: board model from Altium, KiCad and IPC-D-356; 3-way compare;
-  snapshot diff.
-- `tools/boardreview/lint`: single-pin nets, open IC pins, floating inputs, duplicate names,
-  value outliers.
-- `tools/boardreview/blocks`: candidate regulators, filters, interfaces, clocks, resets, straps.
-- `tools/boardreview/calc`: `buck`, `loop`, `lc_tank`, `mlcc_bias`, `divider`, `timing`, `tvs`,
-  `i2c`, `crystal`, `thermal`. Each returns a `Result`.
-- `tools/boardreview/sim`: LTspice batch runs (loop gain by injection, load step, start-up, PDN
-  impedance) with sanity checks. A simulation is evidence only after its checks pass.
+Python names in this skill are relative to the `boardreview` package in `tools/boardreview`:
+`calc.buck.current_slew` is `boardreview.calc.buck.current_slew`.
+
+- `model`: board model from IPC-D-356, KiCad XML, Protel .NET, eda-agent JSON and a BOM;
+  `model.compare` for the 3-way compare and the snapshot diff.
+- `lint`: single-pin nets, unconnected IC pins, ground and supply pins on the wrong net,
+  floating protection grounds, near-duplicate rail names, parts without MPN, DNP-only links,
+  BOM against netlist.
+- `blocks`: candidate switching regulators, bead and LC filters, crystals, oscillators, resets,
+  I2C buses, straps.
+- `calc`: `buck`, `loop`, `lc_tank`, `mlcc_bias`, `divider`, `timing`, `protection`, `i2c`,
+  `crystal`, `thermal`. Each function returns a `Result`.
+- `sim`: LTspice batch runs from `sim.setups` (`run_loop_gain`, `run_load_step`, `run_startup`,
+  `run_impedance`) with the checks in `sim.sanity`. A simulation is evidence only after its
+  checks pass.
 - Altium: the eda-agent MCP tools. KiCad: `kicad-cli`.
 
 ## Evals and lessons (in the board-review repo)

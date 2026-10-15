@@ -10,8 +10,8 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
   the voltage windows of multi-level pins).
 - Why: a strap at mid-rail latches an undefined or default mode; many modes cannot be changed by
   software afterward.
-- Compute: `calc.divider` with the internal pull in parallel with the external low side (or
-  high side), at resistor and pull tolerance corners.
+- Compute: `calc.divider.divider_output` with the internal pull in parallel with the external
+  low side (or high side), at resistor and pull tolerance corners.
 - Pass: inside the intended level window with margin at every corner.
 - Not published: internal pull only typical; use a wide bound (for example 0.5x to 2x typical)
   and show the level holds at both ends.
@@ -30,13 +30,13 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
   series parts to the pin, and include every other load on it during sampling (MCU pins in reset,
   LED drivers, transistor gates, other ICs' pulls).
 - Why: per-net checks that stop at the first resistor miss doubled straps and loaded straps.
-- Compute: `calc.divider` with all loads.
+- Compute: `calc.divider.divider_output` with all loads.
 - Pass: STR-1 holds with every load included.
 
 ## STR-4 Nothing drives the strap net while it is sampled
 - Check: what the other end of a dual-function pin does between power-up and strap latch.
 - Why: an MCU pin driving during reset overrides the strap.
-- Compute: `calc.timing` for latch time against the driver's reset state.
+- Compute: `calc.timing.budget` for latch time against the driver's reset state.
 - Pass: every other driver is high-Z or agrees during sampling.
 
 ## STR-5 Boot pins select the intended source in every mode
@@ -44,7 +44,8 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
   (production, recovery or serial, development) and how each is reached.
 - Why: a boot divider that reads high selects serial boot forever; a mode reachable only by
   soldering slows bring-up.
-- Compute: `calc.divider` against the boot pin's VIH/VIL formula at the supply corners.
+- Compute: `calc.divider.divider_output` against the boot pin's VIH/VIL formula at the supply
+  corners.
 - Pass: production mode is the default with margin; every other mode is reachable through a
   documented jumper, DNP or test point.
 - Example: [boot pin divider](../../docs/lessons/boot-pin-divider.md)

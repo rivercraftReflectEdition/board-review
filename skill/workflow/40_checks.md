@@ -42,35 +42,35 @@ Checklists are organized by block; this table finds every item for a failure mod
 
 | Failure mode | Items | Calculators |
 |---|---|---|
-| loop_instability | BR-1, BR-2, BR-4, BR-10, BR-11, LDO-2 | calc.buck, calc.loop, sim.loop_gain |
-| reverse_current | CR-1, BR-5, LDO-5 | calc.buck, sim.startup |
+| loop_instability | BR-1, BR-2, BR-4, BR-10, BR-11, LDO-2 | calc.buck, calc.loop, sim.setups.run_loop_gain |
+| reverse_current | CR-1, BR-5, LDO-5 | calc.buck, sim.setups.run_startup |
 | back_power | IO-3, CSI-4, RST-3 | calc.divider |
-| lc_resonance | FLT-1, FLT-2, FLT-5, FLT-6, PDN-4, PROT-5 | calc.lc_tank, sim.pdn |
+| lc_resonance | FLT-1, FLT-2, FLT-5, FLT-6, PDN-4, PROT-5 | calc.lc_tank, sim.setups.run_impedance |
 | insufficient_capacitance | PDN-1, PDN-2, BR-8 | calc.mlcc_bias |
 | saturation | BR-7, FLT-3 | calc.buck |
 | dropout | LDO-1, CR-3 | calc.buck, calc.divider |
 | threshold_margin | EN-2, EN-3, RST-1, RST-2, STR-1, IO-1 | calc.divider |
 | level_mismatch | IO-1, CLK-1, EN-8 | calc.divider |
 | leakage | EN-6, RST-2, BR-9 | calc.divider |
-| abs_max | IO-2, EN-5, CR-4, CLK-1, PROT-2 | calc.divider, calc.tvs |
+| abs_max | IO-2, EN-5, CR-4, CLK-1, PROT-2 | calc.divider, calc.protection |
 | strap_conflict | STR-1, STR-2, STR-3, STR-4, ETH-1 | calc.divider |
 | boot_mode | STR-5 | calc.divider |
 | reset_hazard | RST-5, RST-6, RST-7, MEM-5 | calc.timing |
-| sequencing | EN-4, EN-7, CR-5, CSI-3 | calc.timing, sim.startup |
-| wrong_value | EN-1, NET-6 | calc.divider, lint |
-| net_short | NET-1, NET-2, MEM-1 | model |
-| open_net | NET-5, ETH-3 | lint |
-| missing_sheet | NET-3 | model |
-| pin_swap | IO-5, MEM-2, ETH-4, CSI-1, NET-8 | lint |
+| sequencing | EN-4, EN-7, CR-5, CSI-3 | calc.timing, sim.setups.run_startup |
+| wrong_value | EN-1, NET-6 | calc.divider |
+| net_short | NET-1, NET-2, MEM-1 | model.compare |
+| open_net | NET-5, ETH-3 | lint.run_all |
+| missing_sheet | NET-3 | model.compare |
+| pin_swap | IO-5, MEM-2, ETH-4, CSI-1, NET-8 | none |
 | missing_pullup | IO-7, RST-4, EN-8 | calc.i2c, calc.divider |
 | timing_margin | MEM-6, CSI-2, CSI-5, CLK-3 | calc.timing |
 | clock_fault | CLK-2, CLK-3, CLK-5, CLK-6, ETH-2 | calc.crystal |
-| protection_gap | PROT-1 to PROT-7, ETH-6 | calc.tvs |
+| protection_gap | PROT-1 to PROT-7, ETH-6 | calc.protection |
 | thermal_overstress | TH-1 to TH-6, LDO-3 | calc.thermal |
-| footprint_mismatch | NET-8, PROT-3, RST-9 | lint |
+| footprint_mismatch | NET-8, PROT-3, RST-9 | none |
 | mechanical_interference | LAY-6, CSI-6 | none |
 | signal_integrity | LAY-4, LAY-5, CSI-5, PROT-7 | calc.timing |
-| missing_rework_option | BR-3, MEM-7, LAY-8 | calc.loop |
+| missing_rework_option | BR-3, MEM-7, LAY-8 | calc.loop.cff_lead |
 
 ## When to simulate
 
@@ -86,12 +86,16 @@ whose real compensation is unknown; that stays unknown with a bench test.
 
 ## Simulation sanity checks
 
-`sim` runs these; the agent confirms each before quoting a result:
-1. Netlist matches the board: every model pin connected as on the board, no floating pins.
-2. Operating point matches hand calculation: VOUT, duty, and fsw within 5 percent of the value
-   from the timing resistor.
-3. Loop gain by injection: amplitude a few mV; halving it changes gain by under 1 dB and phase
-   by under 3 deg; injection frequencies away from fsw/n.
+`sim` automates the parts named below; the agent confirms each before quoting a result:
+1. Netlist matches the board: every model pin connected as on the board, no floating pins
+   (`sim.sanity.check_netlist`).
+2. Operating point matches hand calculation: VOUT and duty against
+   `calc.divider.regulator_output` and `calc.buck.duty_cycle`; fsw within 5 percent of the value
+   from the timing resistor (`sim.sanity.check_run`).
+3. Loop gain by injection: amplitude a few mV and under the inductor slew limit
+   (`sim.sanity.injection_slew_check`); halving it changes gain by under 0.5 dB and phase by
+   under 3 deg (`sim.setups.linearity_check`); injection frequencies away from fsw/n
+   (`sim.setups.injection_frequencies`).
 4. Model limits written in the finding: ideal comparators, missing parasitics, typical silicon.
 5. Corners run, not only nominal.
 

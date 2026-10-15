@@ -7,7 +7,7 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Check: `VIN_min - VOUT_max` against the dropout voltage at the real load current and hot
   junction temperature. VIN_min includes the upstream rail's tolerance and ripple trough.
 - Why: an LDO in dropout passes input ripple and transients straight to the load.
-- Compute: `calc.divider` for VOUT tolerance; dropout from the digest curve at Tj.
+- Compute: `calc.divider.regulator_output` for VOUT tolerance; dropout from the digest curve at Tj.
 - Pass: headroom above maximum dropout plus the ripple trough.
 - Not published: dropout given only as typical; use the curve at the hot corner and mark UNSURE.
 
@@ -15,14 +15,14 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Check: effective COUT at bias and its ESR against the datasheet's stability region; some parts
   need a minimum ESR or allow only a maximum capacitance.
 - Why: outside the region the LDO rings or oscillates.
-- Compute: `calc.mlcc_bias`.
+- Compute: `calc.mlcc_bias.mlcc_effective`.
 - Pass: inside the region at all temperatures and tolerances.
 
 ## LDO-3 Power dissipation
 - Check: `P = (VIN_max - VOUT) * I_max + VIN_max * I_q` against the package's board-level
   thermal resistance.
 - Why: thermal shutdown or drift at the hot corner.
-- Compute: `calc.thermal`.
+- Compute: `calc.thermal.junction_temp`.
 - Pass: Tj below the datasheet maximum minus the project's derating.
 
 ## LDO-4 Ripple rejection at the upstream switching frequency

@@ -16,7 +16,7 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Check: each ceramic at its DC bias, temperature and tolerance. Class II parts in small cases can
   lose most of their value.
 - Why: a design that meets the minimum on nominal values may be far below it on the board.
-- Compute: `calc.mlcc_bias`.
+- Compute: `calc.mlcc_bias.mlcc_effective`.
 - Pass: effective value meets the datasheet minimum.
 - Not published: no bias curve from the vendor; use the worst curve of the same case, voltage
   rating and dielectric, mark UNSURE, and measure one unit unpowered and biased.
@@ -25,13 +25,14 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Check: `Z_target = dV_allowed / dI_step`; PDN impedance below target from DC to the frequency
   where the load's current edges stop.
 - Why: rail droop during load steps causes resets and data errors that look like firmware bugs.
-- Compute: `sim.pdn` with regulator output impedance, capacitor ESR and ESL, plane spreading.
+- Compute: `sim.setups.run_impedance` with regulator output impedance and capacitor ESR and ESL
+  (mounting and plane spreading inductance added to each ESL).
 - Pass: impedance below target, no anti-resonance peak above it.
 
 ## PDN-4 Anti-resonance between banks
 - Check: parallel banks of different values resonate where one bank's ESL meets the next bank's C.
 - Why: the peak can sit right at a clock or switching frequency.
-- Compute: `sim.pdn`.
+- Compute: `sim.setups.run_impedance`.
 - Pass: peaks below target, or damped by ESR.
 
 ## PDN-5 Voltage rating

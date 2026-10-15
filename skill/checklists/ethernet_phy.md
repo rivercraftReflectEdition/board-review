@@ -8,7 +8,7 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
   wiring and the MAC's configuration. Run straps_and_boot_pins STR-1 to STR-3 on every PHY strap.
 - Why: many PHYs latch the interface mode only from straps; a wrong strap means no link and no
   software fix.
-- Compute: `calc.divider` per strap.
+- Compute: `calc.divider.divider_output` per strap.
 - Pass: every strap decodes to the intended mode, address and options.
 - Example: [strap pairs fitted on both sides](../../docs/lessons/strap-pairs-fitted-both-sides.md)
 
@@ -16,7 +16,8 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Check: source and direction of the reference clock (50 MHz for RMII, 25 MHz crystal or
   oscillator otherwise), frequency tolerance, and which end drives it.
 - Why: RMII with no 50 MHz reference, or two drivers, gives no link.
-- Compute: `calc.crystal` ppm budget against the 50 ppm Ethernet requirement.
+- Compute: `calc.timing.budget` in ppm against the 50 ppm Ethernet requirement;
+  `calc.crystal.load_capacitance` for the pulling term.
 - Pass: one source, inside tolerance.
 
 ## ETH-3 Management interface
@@ -38,7 +39,7 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Check: reset pull-up value and timing per datasheet; LED pins that double as straps (some PHYs
   sense LED polarity at reset); energy-saving features enabled by default.
 - Why: LED wiring changes the strap value; default power saving surprises firmware.
-- Compute: `calc.divider` for LED-strap levels.
+- Compute: `calc.divider.divider_output` for LED-strap levels.
 - Pass: straps hold with the LED circuits attached; firmware handoff lists defaults to clear.
 
 ## ETH-6 MDI protection

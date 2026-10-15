@@ -84,7 +84,7 @@
       "additionalProperties": false,
       "required": ["calculator", "formula", "inputs", "outputs", "verdict"],
       "properties": {
-        "calculator": {"type": "string", "description": "Module name, for example 'calc.lc_tank'."},
+        "calculator": {"type": "string", "description": "Calculator module and function relative to the boardreview package, for example 'calc.lc_tank.lc_filter'."},
         "formula": {"type": "string"},
         "inputs": {"type": "object", "additionalProperties": {"$ref": "#/$defs/quantity"}},
         "outputs": {"type": "object", "additionalProperties": {"$ref": "#/$defs/quantity"}},

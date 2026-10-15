@@ -38,14 +38,14 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
   the memory on every MCU reset source; the memory's power and whether it can be cycled alone.
 - Why: a memory left in a non-default mode after a warm reset blocks the boot ROM; a memory that
   cannot be power-cycled alone is hard to recover on the bench.
-- Compute: `calc.timing`; resets_supervisors_watchdogs RST-1 and RST-5.
+- Compute: `calc.timing.budget`; resets_supervisors_watchdogs RST-1 and RST-5.
 - Pass: reset reaches the memory from every source with valid levels and timing.
 
 ## MEM-6 Timing budget
 - Check: setup and hold at the planned clock including board skew, controller delay-line range
   and temperature.
 - Why: a bus that passes at room temperature on one board fails hot or on another board.
-- Compute: `calc.timing`.
+- Compute: `calc.timing.budget` for setup and hold at the worst corner.
 - Pass: positive margin at worst corner; otherwise a bench delay sweep over temperature.
 
 ## MEM-7 Debug and rework options

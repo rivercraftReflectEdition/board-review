@@ -28,12 +28,12 @@ skill/                    installable skill (link into ~/.claude/skills/board-re
 tools/boardreview/        Python package the skill calls
   model/                  netlist, BOM and pin map from Altium, KiCad and IPC-D-356; 3-way compare
   lint/                   deterministic checks: single-pin nets, open IC pins, floating grounds, names
-  blocks/                 find regulators, filters, interfaces, clocks and resets in the netlist
+  blocks/                 find regulators, filters, clocks, resets, I2C buses and straps in the netlist
   calc/                   calculators: buck, loop (Bode, PM/GM, Cff), lc_tank, mlcc_bias, divider,
-                          crystal, i2c, tvs, thermal
+                          crystal, i2c, protection (TVS), thermal, timing
   sim/                    LTspice batch runs (ngspice optional): loop-gain injection, load step,
                           PDN and filter impedance, with netlist sanity checks before trusting a run
-  report/                 markdown and HTML report
+  report/                 markdown and HTML report (not built yet)
 tests/                    calculator and model tests with worked numbers
 evals/                    expected findings per board and the scorer (board data stays local)
 docs/lessons/             one page per real miss: what, why, which check now catches it

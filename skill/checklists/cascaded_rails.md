@@ -11,8 +11,8 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
   sink rating, and the modes and conditions where sinking is inhibited), a bleed load, or a clamp.
 - Why: a pulse-skipping or diode-emulating upstream regulator cannot sink. Returned charge pumps
   the rail up until something gives.
-- Compute: `C_rail dV/dt = I_up - I_down - I_other`; worst returned current from `calc.buck`
-  valley current; charge per event `I_return * t_event`.
+- Compute: `C_rail dV/dt = I_up - I_down - I_other`; worst returned current from
+  `calc.buck.inductor_ripple` valley current; charge per event `I_return * t_event`.
 - Pass: the rail's worst excursion stays under every load's abs max and under the upstream
   regulator's OV threshold, at minimum load.
 - Not published: sink current unspecified; treat as zero.
@@ -22,14 +22,14 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Check: a regulated converter has negative incremental input impedance. The upstream rail's
   output impedance must stay well below it across frequency, or the two loops interact.
 - Why: two regulators that are each stable alone can ring or oscillate together.
-- Compute: `sim.pdn` overlay of `|Z_out_upstream|` and `VIN^2 / P_in_downstream`.
+- Compute: `sim.setups.run_impedance` overlay of `|Z_out_upstream|` and `VIN^2 / P_in_downstream`.
 - Pass: 6 dB separation at every frequency.
 
 ## CR-3 Headroom
 - Check: the upstream rail's worst low (tolerance, load step trough, ripple) against the
   downstream part's minimum VIN, its dropout, and its maximum duty.
 - Why: a downstream regulator at maximum duty cannot recover from a step and can limit-cycle.
-- Compute: `calc.buck` maximum output `VIN * Dmax` minus conduction drops.
+- Compute: `calc.buck.dropout` maximum output `VIN * Dmax` minus conduction drops.
 - Pass: positive headroom at the worst corner.
 
 ## CR-4 Every load on the rail survives the rail's worst high
@@ -37,14 +37,15 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
   standoffs and load switches). Compare with the upstream setpoint tolerance, overshoot, and any
   pumping from CR-1.
 - Why: TVS diodes and load switches on a rail often have the lowest limits.
-- Compute: `calc.divider` setpoint tolerance plus the CR-1 excursion.
+- Compute: `calc.divider.regulator_output` setpoint tolerance plus the CR-1 excursion.
 - Pass: worst high below every abs max; below recommended maximums in normal operation.
 
 ## CR-5 Start-up interaction
 - Check: downstream inrush sags the upstream rail below the downstream enable or UVLO threshold,
   restarting it in a loop; soft-start times and enable chains.
 - Why: a start-up hiccup looks like a loop oscillation on the bench and costs debug time.
-- Compute: `sim.startup` with both regulators; `calc.divider` for enable thresholds.
+- Compute: `sim.setups.run_startup` with both regulators; `calc.divider.enable_thresholds` for
+  enable thresholds.
 - Pass: no restart in simulation at worst-case capacitance; bench start-up capture in the plan.
 
 ## CR-6 Power budget
