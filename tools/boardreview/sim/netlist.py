@@ -94,7 +94,11 @@ class Netlist:
         return [d for _, d in self.directives if d.lower().split()[0] == name.lower()]
 
     def is_ground(self, node: str) -> bool:
-        return node.lower() in GROUND or node.lower() in self.globals
+        return node.lower() in GROUND
+
+    def is_global(self, node: str) -> bool:
+        """Declared .global: one node in every subcircuit, not a ground."""
+        return node.lower() in self.globals
 
 
 def read_netlist_text(path: str | Path) -> str:

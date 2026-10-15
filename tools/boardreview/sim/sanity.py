@@ -13,12 +13,15 @@ import numpy as np
 from boardreview.calc.base import Quantity, Result, Verdict
 from boardreview.sim import measure
 from boardreview.sim.netlist import (
+    GROUND,
     Element,
     Netlist,
+    Subckt,
     is_encrypted,
     norm_name,
     parse_netlist,
     parse_value,
+    read_netlist_text,
     resolve_lib,
     subckt_pins_in_file,
     symbol_pins,
@@ -136,7 +139,7 @@ def check_netlist(source: str | Path | Netlist, allow_open: tuple[str, ...] | li
     dangling, issues = dangling_terminals(nl, allow_open)
     report.issues += issues
     report.issues += shorted_elements(nl)
-    report.issues += no_dc_path(nl, skip=dangling)
+    report.issues += no_dc_path(nl, skip=dangling, lib_dirs=lib_dirs)
     report.issues += lib_issues
     if expected_fsw_hz:
         report.issues += tran_resolution(nl, expected_fsw_hz)
@@ -166,7 +169,7 @@ def dangling_terminals(nl: Netlist,
     issues: list[Issue] = []
     dangling: set[str] = set()
     for node, terms in nl.node_map().items():
-        if nl.is_ground(node) or len({t[0].name for t in terms}) > 1:
+        if nl.is_ground(node) or nl.is_global(node) or len({t[0].name for t in terms}) > 1:
             continue
         el = terms[0][0]
         if el.kind == "X" and node.startswith("mp_"):
@@ -218,42 +221,112 @@ def shorted_elements(nl: Netlist) -> list[Issue]:
     return out
 
 
-def no_dc_path(nl: Netlist, skip: set[str] | None = None) -> list[Issue]:
-    """Nodes that reach ground only through capacitors or current sources float at DC."""
-    parent: dict[str, str] = {}
+class _Union:
+    def __init__(self) -> None:
+        self.parent: dict[str, str] = {}
 
-    def find(a: str) -> str:
-        parent.setdefault(a, a)
-        while parent[a] != a:
-            parent[a] = parent[parent[a]]
-            a = parent[a]
+    def find(self, a: str) -> str:
+        self.parent.setdefault(a, a)
+        while self.parent[a] != a:
+            self.parent[a] = self.parent[self.parent[a]]
+            a = self.parent[a]
         return a
 
-    def union(a: str, b: str) -> None:
-        parent[find(a)] = find(b)
+    def union(self, a: str, b: str) -> None:
+        self.parent[self.find(a)] = self.find(b)
 
-    nodes = nl.node_map()
-    for n in nodes:
-        find(n)
-        if nl.is_ground(n):
-            union(n, "0")
-    find("0")
-    for el in nl.elements:
-        conducting = list(el.nodes)
-        if el.kind in _DC_OPEN:
-            continue
-        if el.kind in "EH":
-            conducting = list(el.nodes[:2])
-        if el.kind == "B" and "i" in el.params:
-            continue
-        for a in conducting[1:]:
-            union(conducting[0].lower(), a.lower())
-    ground = find("0")
-    floating = sorted(n for n in nodes if find(n) != ground and n not in (skip or set()))
-    if not floating:
+
+def _conducting(el: Element) -> list[str]:
+    """Terminals a non-subcircuit element joins at DC."""
+    if el.kind in _DC_OPEN or (el.kind == "B" and "i" in el.params):
         return []
-    return [Issue("no-dc-path", "warning",
-                  "no DC path to ground (only capacitors or current sources): " + ", ".join(floating), "")]
+    return [n.lower() for n in (el.nodes[:2] if el.kind in "EH" else el.nodes)]
+
+
+def _join(uf: _Union, elements: list[Element], defs: dict[str, Subckt], globals_: set[str],
+          cache: dict[str, tuple[str, ...] | None], open_unknown: bool) -> list[str]:
+    """Union the DC-connected nodes of elements; returns the subcircuit instances whose inside is unknown."""
+    unknown = []
+    for el in elements:
+        if el.kind != "X":
+            nodes = _conducting(el)
+            for n in nodes[1:]:
+                uf.union(nodes[0], n)
+            continue
+        labels = _pin_labels(el.model or "", defs, globals_, cache)
+        if labels is None or len(labels) != len(el.nodes):
+            unknown.append(el.name)
+            if not open_unknown:
+                for n in el.nodes[1:]:
+                    uf.union(el.nodes[0].lower(), n.lower())
+            continue
+        first: dict[str, str] = {}
+        for node, label in zip((n.lower() for n in el.nodes), labels):
+            uf.union(node, first.setdefault(label, node) if label.startswith("#") else label)
+    return unknown
+
+
+def _pin_labels(name: str, defs: dict[str, Subckt], globals_: set[str],
+                cache: dict[str, tuple[str, ...] | None]) -> tuple[str, ...] | None:
+    """Per pin, '0' or a global name it reaches at DC inside the subcircuit, else '#group'; None when unknown."""
+    key = name.lower()
+    if key in cache:
+        return cache[key]
+    cache[key] = None
+    sub = defs.get(key)
+    if sub is None:
+        return None
+    uf = _Union()
+    for n in GROUND:
+        uf.union(n, "0")
+    if _join(uf, sub.elements, defs, globals_, cache, open_unknown=True):
+        return None
+    anchors = {uf.find(g): g for g in globals_}
+    anchors[uf.find("0")] = "0"
+    labels = tuple(anchors.get(uf.find(p.lower()), "#" + uf.find(p.lower())) for p in sub.pins)
+    cache[key] = labels
+    return labels
+
+
+def _floating(nl: Netlist, defs: dict[str, Subckt], open_unknown: bool) -> tuple[set[str], list[str]]:
+    uf = _Union()
+    for n in GROUND:
+        uf.union(n, "0")
+    unknown = _join(uf, nl.elements, defs, nl.globals, {}, open_unknown)
+    ground = uf.find("0")
+    return {n for n in nl.node_map() if uf.find(n) != ground}, unknown
+
+
+def subckt_definitions(nl: Netlist, lib_dirs: list[Path] | None = None) -> dict[str, Subckt]:
+    """Subcircuits defined in the netlist or in the plain-text libraries it loads."""
+    defs: dict[str, Subckt] = {}
+    base = nl.path.parent if nl.path else None
+    for _, name in nl.libs:
+        p = resolve_lib(name, base, lib_dirs)
+        if p is not None and not is_encrypted(p):
+            defs.update({k: v for k, v in parse_netlist("* lib\n" + read_netlist_text(p)).subckts.items()
+                         if k not in defs})
+    defs.update(nl.subckts)
+    return defs
+
+
+def no_dc_path(nl: Netlist, skip: set[str] | None = None, lib_dirs: list[Path] | None = None) -> list[Issue]:
+    """Nodes with no DC path to ground; known subcircuits are followed inside, unreadable ones leave it unverified."""
+    defs = subckt_definitions(nl, lib_dirs)
+    skip = skip or set()
+    open_floating, unknown = _floating(nl, defs, open_unknown=True)
+    closed_floating, _ = _floating(nl, defs, open_unknown=False)
+    out = []
+    floating = sorted(closed_floating - skip)
+    if floating:
+        out.append(Issue("no-dc-path", "warning",
+                         "no DC path to ground (only capacitors or current sources): " + ", ".join(floating), ""))
+    unverified = sorted(open_floating - closed_floating - skip)
+    if unverified:
+        out.append(Issue("dc-path-unknown", "warning",
+                         f"DC path not verified, it runs only through {', '.join(sorted(set(unknown)))} whose "
+                         "subcircuit could not be read: " + ", ".join(unverified), ""))
+    return out
 
 
 def model_files(nl: Netlist,

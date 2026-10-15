@@ -93,6 +93,45 @@ def test_node_between_capacitors_has_no_dc_path():
     assert any(i.rule == "no-dc-path" and "x" in i.message for i in rep.issues)
 
 
+def _dc_issues(text: str, rule: str, **kw) -> list[str]:
+    return [i.message for i in sanity.check_netlist(text, **kw).issues if i.rule == rule]
+
+
+def test_dc_path_follows_the_inside_of_a_known_subcircuit():
+    reg = ".subckt REG VIN FB GND\nR1 VIN GND 1k\nC1 FB GND 1p\n.ends\n"
+    msgs = _dc_issues("* t\n" + reg + "V1 in 0 5\nX1 in fb 0 REG\nCfb fb 0 1n\n.op\n", "no-dc-path")
+    assert len(msgs) == 1 and msgs[0].endswith(": fb")
+    div = ".subckt DIV a b g\nR1 a b 1k\nR2 b g 1k\n.ends\n"
+    assert not _dc_issues("* t\n" + div + "V1 a 0 1\nX1 a b 0 DIV\nC1 b 0 1n\n.op\n", "no-dc-path")
+    nested = ".subckt TOP a b g\nX1 a b g DIV\n.ends\n" + div
+    assert not _dc_issues("* t\n" + nested + "V1 a 0 1\nX1 a b 0 TOP\nC1 b 0 1n\n.op\n", "no-dc-path")
+
+
+def test_dc_path_reads_subcircuits_from_plain_library_files(tmp_path):
+    (tmp_path / "reg.lib").write_text(".subckt REG VIN FB GND\nR1 VIN GND 1k\nC1 FB GND 1p\n.ends\n")
+    net = tmp_path / "t.net"
+    net.write_text("* t\nV1 in 0 5\nX1 in fb 0 REG\nCfb fb 0 1n\n.lib reg.lib\n.op\n")
+    assert any(m.endswith(": fb") for m in _dc_issues(net, "no-dc-path"))
+
+
+def test_dc_path_through_an_unreadable_subcircuit_is_not_assumed(tmp_path):
+    (tmp_path / "REG.sub").write_bytes(b"<Binary File>\n\x00\x01\x02")
+    net = tmp_path / "t.net"
+    net.write_text("* t\nV1 in 0 5\nXU1 in fb 0 REG\nCfb fb 0 1n\nRl in 0 1k\n.lib REG.sub\n.op\n")
+    msgs = _dc_issues(net, "dc-path-unknown")
+    assert len(msgs) == 1 and "XU1" in msgs[0] and msgs[0].endswith(": fb")
+    assert not _dc_issues(net, "no-dc-path")
+
+
+def test_global_nodes_are_not_ground():
+    text = "* t\n.global vcc\nV1 a 0 1\nC1 a x 1n\nR1 x vcc 1k\nC2 vcc 0 1n\n.op\n"
+    msgs = _dc_issues(text, "no-dc-path")
+    assert len(msgs) == 1 and msgs[0].endswith(": vcc, x")
+    assert not _dc_issues(text.replace("C2 vcc 0 1n", "R2 vcc 0 1k"), "no-dc-path")
+    sub = ".subckt PULL a\nR1 a vcc 1k\n.ends\n"
+    assert sanity.check_netlist("* t\n.global vcc\n" + sub + "V1 vcc 0 1\nX1 p PULL\nC1 p 0 1n\n.op\n").ok
+
+
 def test_tran_step_too_coarse_for_switching():
     rep = sanity.check_netlist("* t\nV1 a 0 1\nR1 a 0 1\n.tran 0 1m 0 100n\n", expected_fsw_hz=1.187e6)
     assert "tran-step" in rep.rules("warning")
