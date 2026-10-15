@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import numpy as np
@@ -113,10 +113,7 @@ def subharmonic_fraction(f_hz: float, fsw_hz: float) -> float:
 
 @dataclass
 class LoopGainSetup:
-    """Middlebrook voltage injection in series with the top feedback resistor; T = -V(b)/V(a).
-
-    a is the injected side (top of the feedback resistor, node lg_a), b is the regulator output.
-    """
+    """Middlebrook injection in series with the top feedback resistor: T = -V(b)/V(a), a = lg_a, b = output."""
 
     body: str
     top_resistor: str
@@ -234,6 +231,11 @@ class LoopGainResult:
         mr = self.margins_result()
         if mr is not None:
             lines += ["", mr.to_markdown()]
+            fc = self.margins.crossover_hz
+            if fc is not None:
+                below = max((p.f_hz for p in self.points if p.f_hz <= fc), default=None)
+                above = min((p.f_hz for p in self.points if p.f_hz >= fc), default=None)
+                lines.append(f"- f_c interpolated between measured points at {below:.4g} and {above:.4g} Hz")
         lines += ["", self.report.to_markdown()]
         return "\n".join(lines)
 
@@ -265,13 +267,9 @@ def measure_loop_gain_point(run_result: RunResult, setup: LoopGainSetup, f_hz: f
 
 
 def run_loop_gain(setup: LoopGainSetup, freqs: list[float], workdir: str | Path, max_workers: int = 2,
-                  timeout_s: float = 3600.0, force: bool = False, refine: int = 0,
+                  timeout_s: float = 3600.0, force: bool = False, refine: int = 0, linearity: bool = False,
                   **run_kwargs: object) -> LoopGainResult:
-    """One transient per injection frequency (stepped-transient sweep), checked, then margins.
-
-    refine > 0 adds that many points inside each interval that holds a 0 dB or -180 deg crossing, then
-    recomputes the margins, so they are not read off a straight line between two distant points.
-    """
+    """Checked transients per frequency, margins, optional refinement at crossings and a linearity rerun."""
     report = setup.check(freqs)
     if not report.ok and not force:
         raise ValueError("fix the setup before running (or pass force=True):\n" + report.to_markdown())
@@ -293,7 +291,36 @@ def run_loop_gain(setup: LoopGainSetup, freqs: list[float], workdir: str | Path,
             break
     margins = measure.loop_margins([p.f_hz for p in points], [p.t for p in points]) if len(points) > 1 else None
     report.issues += _loop_plausibility(points)
+    if linearity and margins is not None and margins.crossover_hz is not None:
+        f_lin = _off_subharmonic(margins.crossover_hz, setup.fsw_hz)
+        report.results.append(linearity_check(setup, f_lin, workdir, max_workers=max_workers, timeout_s=timeout_s,
+                                              **run_kwargs))
     return LoopGainResult(points, margins, report, runs)
+
+
+def linearity_check(setup: LoopGainSetup, f_hz: float, workdir: str | Path, ratio: float = 0.5,
+                    max_db: float = 0.5, max_deg: float = 3.0, **run_kwargs: object) -> Result:
+    """Rerun one frequency at a smaller amplitude; a small-signal T does not depend on the amplitude."""
+    small = replace(setup, amplitude_v=setup.amplitude_v * ratio)
+    runs = run_many([setup.netlist(f_hz), small.netlist(f_hz)], workdir,
+                    [f"lin_full_{f_hz:.0f}Hz", f"lin_small_{f_hz:.0f}Hz"], **run_kwargs)
+    if not all(r.ok for r in runs):
+        return Result(name="loop gain linearity", formula="T(A) vs T(A ratio)", inputs={}, outputs={},
+                      verdict=Verdict.UNKNOWN, reason="; ".join(p for r in runs for p in r.problems()))
+    a = measure_loop_gain_point(runs[0], setup, f_hz)
+    b = measure_loop_gain_point(runs[1], small, f_hz)
+    d_db = b.mag_db - a.mag_db
+    d_deg = (b.phase_deg - a.phase_deg + 180.0) % 360.0 - 180.0
+    ok = abs(d_db) <= max_db and abs(d_deg) <= max_deg
+    return Result(
+        name="loop gain linearity",
+        formula="dT = T(A ratio) / T(A); small signal if |dT| <= 0.5 dB and angle <= 3 deg",
+        inputs={"f": Quantity(f_hz, "Hz"), "A": Quantity(setup.amplitude_v, "V"), "ratio": Quantity(ratio, "")},
+        outputs={"d_mag": Quantity(d_db, "dB"), "d_phase": Quantity(d_deg, "deg")},
+        verdict=Verdict.PASS if ok else Verdict.FAIL,
+        reason="T does not depend on the amplitude" if ok else
+        "T changes with the amplitude: slew limit, clipping or locking; lower the amplitude",
+    )
 
 
 def refine_frequencies(points: list[LoopGainPoint], n: int, fsw_hz: float) -> list[float]:

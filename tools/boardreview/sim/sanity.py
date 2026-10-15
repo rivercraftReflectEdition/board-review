@@ -63,12 +63,24 @@ class SanityReport:
         return self
 
     def to_markdown(self) -> str:
+        """Issues worst first and repeats counted; failed or marginal checks in full, passed ones on one line."""
         head = "**Simulation sanity**: " + ("pass" if self.ok else "DO NOT TRUST THIS RUN YET")
         lines = [head]
         order = {"error": 0, "warning": 1, "info": 2}
-        lines += [f"- {i}" for i in sorted(self.issues, key=lambda i: order.get(i.severity, 3))]
-        lines += ["", *[r.to_markdown() for r in self.results]] if self.results else []
-        return "\n".join(lines)
+        counts: dict[str, int] = {}
+        for i in sorted(self.issues, key=lambda i: order.get(i.severity, 3)):
+            counts[str(i)] = counts.get(str(i), 0) + 1
+        lines += [f"- {text}" + (f" (x{n})" if n > 1 else "") for text, n in counts.items()]
+        passed: dict[str, int] = {}
+        detail = []
+        for r in self.results:
+            if r.verdict is Verdict.PASS:
+                key = f"{r.name} ({r.reason})" if r.reason else r.name
+                passed[key] = passed.get(key, 0) + 1
+            else:
+                detail.append(r.to_markdown())
+        lines += [f"- pass: {name}" + (f" (x{n})" if n > 1 else "") for name, n in passed.items()]
+        return "\n".join(lines + ([""] + detail if detail else []))
 
 
 def check_netlist(source: str | Path | Netlist, allow_open: tuple[str, ...] | list[str] | set[str] = (),
@@ -314,7 +326,8 @@ def injection_slew_check(amplitude_v: float, f_hz: float, slew_a_per_s: float, c
         outputs={"A_max": Quantity(a_max, "V"), "A/A_max": Quantity(ratio, "")},
         verdict=verdict,
         reason=reason,
-        assumptions=("the output sine is carried by C_out alone", "S_up is the inductor's largest up-slope"),
+        assumptions=("the output sine is carried by C_out alone", "S_up is the inductor's largest up-slope",
+                     "near crossover the output sine is A/|1+T|, about 1.4 A at 40 deg PM; check the measured V(b)"),
     )
 
 

@@ -181,11 +181,7 @@ def switching_frequency(t: np.ndarray, y: np.ndarray, t_start_s: float | None = 
 
 def edge_timing_uncertainty(t: np.ndarray, y: np.ndarray, t_start_s: float | None = None,
                             max_edges: int = 400) -> tuple[float, float]:
-    """Median timing uncertainty of switch edges and the switching period, both in seconds.
-
-    An edge with two or more samples between its 10 and 90 percent levels is located by interpolation (0 s);
-    an edge that jumps between two samples is only known to within that time step.
-    """
+    """Median edge timing uncertainty and the switching period, in seconds (0 when edges span 2+ samples)."""
     t, y = window(t, y, t_start_s, None)
     lo, hi = np.percentile(y, [5, 95])
     lvl, span = 0.5 * (lo + hi), hi - lo

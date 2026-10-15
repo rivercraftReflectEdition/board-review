@@ -1,4 +1,5 @@
 import math
+import os
 from pathlib import Path
 
 import numpy as np
@@ -6,10 +7,11 @@ import pytest
 
 from boardreview.calc.base import Verdict
 from boardreview.sim import measure, setups
-from boardreview.sim.runner import LTspice, run
+from boardreview.sim.runner import LTspice, run, schematic_to_netlist
 from boardreview.sim.sanity import check_netlist, check_run
 
 FIXTURES = Path(__file__).parent / "fixtures" / "sim"
+LOCAL = Path(__file__).parent / "local" / "ltc3633"
 needs_ltspice = pytest.mark.skipif(not LTspice().available(), reason="LTspice not installed")
 COMMON = dict(top_resistor="Rtop", out_node="out", fsw_hz=500e3, c_out_f=10e-6, slew_a_per_s=1.6e6)
 
@@ -104,8 +106,11 @@ def test_switching_injection_matches_averaged_ac(tmp_path):
     s = setups.LoopGainSetup(body=setups.body_from_netlist(FIXTURES / "vm_buck_switching.net"), sw_node="sw",
                              amplitude_v=5e-3, t_settle_s=1e-3, **COMMON)
     freqs = setups.injection_frequencies(2e3, 80e3, 7, 500e3)
-    res = setups.run_loop_gain(s, freqs, tmp_path, max_workers=3, refine=3)
+    res = setups.run_loop_gain(s, freqs, tmp_path, max_workers=3, refine=3, linearity=True)
     assert res.report.ok, res.to_markdown()
+    lin = [r for r in res.report.results if r.name == "loop gain linearity"]
+    assert lin and lin[0].verdict is Verdict.PASS
+    assert "f_c interpolated between measured points" in res.to_markdown()
     for p in res.points:
         expected = vm_buck_t(np.array([p.f_hz]))[0]
         tol_db, tol_deg = (0.2, 1.0) if p.f_hz < 50e3 else (0.5, 3.0)
@@ -193,3 +198,20 @@ def test_pdn_impedance_matches_analytic(tmp_path):
     assert res.transfer is not None and res.transfer.shape == res.z.shape
     assert res.summary.peaks
     assert "rail impedance" in res.to_markdown()
+
+
+@needs_ltspice
+@pytest.mark.skipif(not (LOCAL / "NEW_3V3_6p8uH_FCM.asc").exists() or not os.environ.get("BOARDREVIEW_SLOW"),
+                    reason="local LTC3633 schematic absent or BOARDREVIEW_SLOW not set (about 1 minute)")
+def test_real_ltc3633_loop_gain(tmp_path):
+    # 2026-10-06 review, 6.8 uH and 18 uF in FCM at 1.187 MHz: crossover about 169 kHz, PM about 42 deg at 3 mV
+    (tmp_path / "fcm.asc").write_bytes((LOCAL / "NEW_3V3_6p8uH_FCM.asc").read_bytes())
+    body = setups.body_from_netlist(schematic_to_netlist(tmp_path / "fcm.asc"))
+    s = setups.LoopGainSetup(body=body, top_resistor="R48", out_node="OUT1", fsw_hz=1.187e6, c_out_f=18e-6,
+                             slew_a_per_s=57e3, sw_node="SW1", amplitude_v=1e-3, t_settle_s=500e-6,
+                             allow_open=("Pgood1", "Pgood2", "Track/SS1", "Track/SS2"))
+    freqs = setups.injection_frequencies(30e3, 200e3, 6, 1.187e6)
+    res = setups.run_loop_gain(s, freqs, tmp_path, max_workers=3, refine=2, linearity=True)
+    assert res.report.ok, res.to_markdown()
+    assert 150e3 < res.margins.crossover_hz < 220e3
+    assert 35 < res.margins.phase_margin_deg < 55
