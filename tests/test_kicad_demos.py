@@ -18,7 +18,7 @@ DEMOS = demos_dir(CLI)
 BOARDS = {"complex_hierarchy": "complex_hierarchy", "pic_programmer": "pic_programmer",
           "royalblue54L_feather": "RoyalBlue54L-Feather", "stickhub": "StickHub"}
 CONNECTIVITY = ("only_a", "only_b", "pins_only_a", "pins_only_b", "renamed", "removed", "added", "moved", "merged",
-                "split")
+                "split", "fitted_differs")
 needs_demos = pytest.mark.skipif(DEMOS is None, reason="KiCad demos not installed")
 slow_kicad = pytest.mark.skipif(CLI is None or DEMOS is None or not os.environ.get("BOARDREVIEW_SLOW"),
                                 reason="needs kicad-cli, the KiCad demos and BOARDREVIEW_SLOW=1")

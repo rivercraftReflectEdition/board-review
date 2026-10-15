@@ -12,6 +12,7 @@ ABSENT = "<absent>"
 MECHANICAL = {"mechanical", "testpoint"}
 IPC_REF_LEN = 6
 IPC_PIN_LEN = 4
+POPULATION_SOURCES = {"kicad_xml", "kicad_pcb", "eda_agent_json", "bom"}
 
 
 @dataclass
@@ -23,6 +24,7 @@ class Side:
     complete: bool = True
     bom_only: set[str] = field(default_factory=set)
     apart: set[str] = field(default_factory=set)
+    dnp: set[str] | None = None
 
     @classmethod
     def of(cls, label: str, model: BoardModel) -> "Side":
@@ -33,8 +35,10 @@ class Side:
         comps = (set(model.components) - bom_only) | with_pins
         apart = {r for r in comps if (model.pin_list_complete and r not in with_pins)
                  or model.components[r].attrs.get("exclude_from_board")}
+        states = any(s.get("kind") in POPULATION_SOURCES for s in model.sources)
+        dnp = {r for r, c in model.components.items() if not c.fitted} if states else None
         return cls(label, pins, comps, {r: c.kind for r, c in model.components.items()}, model.pin_list_complete,
-                   bom_only, apart)
+                   bom_only, apart, dnp)
 
     def net_or_absent(self, key: str) -> str | None:
         """Net of a pin; a missing pin on a present part counts as no net when the source omits open pins."""
@@ -66,6 +70,7 @@ class PairDiff:
     open_only_b: list[str] = field(default_factory=list)
     cut_refs: list[tuple[str, list[str]]] = field(default_factory=list)
     cut_pins: list[tuple[str, str]] = field(default_factory=list)
+    fitted_differs: list[tuple[str, bool, bool]] = field(default_factory=list)
     renamed: list[tuple[str, str]] = field(default_factory=list)
     truncated: list[tuple[str, str]] = field(default_factory=list)
     removed: list[str] = field(default_factory=list)
@@ -101,9 +106,10 @@ def _refit(side: Side, drop: set[str], rename: dict[str, str]) -> Side:
         return rename.get(r, r)
 
     pins = {f"{ref(_part(k))}.{k.partition('.')[2]}": n for k, n in side.pins.items() if _part(k) not in drop}
+    dnp = None if side.dnp is None else {ref(r) for r in side.dnp - drop}
     return Side(side.label, pins, {ref(r) for r in side.comps - drop},
                 {ref(r): k for r, k in side.kinds.items() if r not in drop}, side.complete, side.bom_only - drop,
-                {ref(r) for r in side.apart - drop})
+                {ref(r) for r in side.apart - drop}, dnp)
 
 
 def fit_refs(a: Side, b: Side) -> tuple[Side, Side, list[tuple[str, list[str]]]]:
@@ -150,7 +156,7 @@ def fit_pins(a: Side, b: Side) -> tuple[Side, Side, list[tuple[str, str]]]:
         if not rename:
             continue
         short = Side(short.label, {rename.get(k, k): n for k, n in short.pins.items()}, short.comps, short.kinds,
-                     short.complete, short.bom_only, short.apart)
+                     short.complete, short.bom_only, short.apart, short.dnp)
         a, b = (long, short) if short_is_b else (short, long)
         cuts += sorted(((full, k) for k, full in rename.items()), key=lambda t: natural_key(t[0]))
     return a, b, cuts
@@ -218,6 +224,9 @@ def compare_pair(a: Side, b: Side) -> PairDiff:
                                    (b.comps - a.comps, b, d.only_b, d.mech_only_b)):
         for r in sorted(refs, key=natural_key):
             (mech if side.kinds.get(r) in MECHANICAL or r in side.apart else real).append(r)
+    if a.dnp is not None and b.dnp is not None:
+        d.fitted_differs = [(r, r not in a.dnp, r not in b.dnp) for r in sorted(common_parts, key=natural_key)
+                            if (r in a.dnp) != (r in b.dnp)]
     d.groups_only_a = _groups(a, d.only_a)
     d.groups_only_b = _groups(b, d.only_b)
     for here, there, conn, open_ in ((a, b, d.pins_only_a, d.open_only_a), (b, a, d.pins_only_b, d.open_only_b)):
@@ -272,6 +281,7 @@ class CompareReport:
                  "groups_only_b": p.groups_only_b, "mech_only_a": p.mech_only_a, "mech_only_b": p.mech_only_b,
                  "pins_only_a": p.pins_only_a, "pins_only_b": p.pins_only_b, "open_only_a": p.open_only_a,
                  "open_only_b": p.open_only_b, "cut_refs": p.cut_refs, "cut_pins": p.cut_pins,
+                 "fitted_differs": p.fitted_differs,
                  "renamed": p.renamed, "truncated": p.truncated, "removed": p.removed, "added": p.added, "merged": p.merged,
                  "split": p.split, "moved": p.moved}
                 for p in self.pairs
@@ -354,6 +364,11 @@ def _pair_findings(p: PairDiff, limit: int) -> list[str]:
                    " (KiCad keeps the last 14 characters, in upper case). This is a format limit, not a rename;"
                    " a difference in the cut-off part cannot be seen. Compare against the .kicad_pcb file for"
                    " full names.")
+    if p.fitted_differs:
+        state = {True: "fitted", False: "DNP"}
+        out.append(f"{len(p.fitted_differs)} parts are fitted in one source and DNP in the other: "
+                   + _list([f"{r} ({p.a} {state[x]}, {p.b} {state[y]})" for r, x, y in p.fitted_differs], limit)
+                   + ". Assembly outputs from the board (positions, BOM) follow the board's setting.")
     if p.renamed:
         out.append(f"{len(p.renamed)} nets renamed from {p.a} to {p.b}: "
                    + _list([f"{x} -> {y}" for x, y in p.renamed], limit) + ".")

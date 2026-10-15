@@ -80,6 +80,20 @@ def test_three_way_table_reads_a_cut_name_as_the_full_name():
     assert rows["U1.43"][1] == "schematic"
 
 
+def test_fitted_state_that_differs_between_sources_that_state_it():
+    sch = _model([("R1.1", "A"), ("R1.2", "B"), ("R2.1", "A"), ("R2.2", "B")])
+    sch.sources.append({"kind": "kicad_xml", "path": "sch.xml"})
+    sch.component("R1").fitted = False
+    pcb = _model([("R1.1", "A"), ("R1.2", "B"), ("R2.1", "A"), ("R2.2", "B")])
+    pcb.sources.append({"kind": "kicad_pcb", "path": "board.kicad_pcb"})
+    fab = _model([("R1.1", "A"), ("R1.2", "B"), ("R2.1", "A"), ("R2.2", "B")])
+    fab.sources.append({"kind": "ipc356", "path": "fab.ipc"})
+    report = compare.compare([("schematic", sch), ("pcb", pcb), ("fab", fab)])
+    assert report.pairs[0].fitted_differs == [("R1", False, True)]
+    assert report.pairs[1].fitted_differs == [] and report.pairs[2].fitted_differs == []
+    assert "R1 (schematic DNP, pcb fitted)" in report.to_markdown()
+
+
 def test_designator_cut_to_six_characters_is_matched_when_unique():
     sch = _model([("Module301.1", "A"), ("Module301.2", "B"), ("R1.1", "A"), ("R2.1", "B")])
     pcb = _model([("Module.1", "A"), ("Module.2", "B"), ("R1.1", "A"), ("R2.1", "B")])
