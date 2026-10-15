@@ -26,6 +26,13 @@ def vm_buck_t(f: np.ndarray) -> np.ndarray:
     return 1e-3 * zc * 2 * h * k
 
 
+def vm_buck_cff_t(f: np.ndarray, cff_f: float) -> np.ndarray:
+    """Loop gain of vm_buck_averaged.net with Cff across Rtop: k = Rbot / (Rbot + Rtop || 1/(s Cff))."""
+    s = 2j * np.pi * f
+    ztop = 1 / (1 / 10e3 + s * cff_f)
+    return vm_buck_t(f) / (2.22 / 12.22) * 2.22e3 / (2.22e3 + ztop)
+
+
 def interp_complex(f_new: np.ndarray, f: np.ndarray, t: np.ndarray) -> np.ndarray:
     lf = np.log(f)
     return np.interp(np.log(f_new), lf, t.real) + 1j * np.interp(np.log(f_new), lf, t.imag)
@@ -60,6 +67,21 @@ def test_loop_gain_netlist_opens_the_loop_at_the_top_resistor():
     assert "Vbr_inj lg_a out SINE(0 0.002 10000 0.0003)" in net
     assert ".save V(lg_a) V(out) V(sw)" in net
     assert check_netlist(net, expected_fsw_hz=500e3).ok
+
+
+def test_loop_gain_moves_every_feedback_branch_to_the_injection_node():
+    body = setups.body_from_netlist(FIXTURES / "vm_buck_averaged.net")
+    cff = setups.LoopGainSetup(body=body + "\nCff out fb 22p", **COMMON).ac_netlist(1e3, 1e5)
+    assert "Rtop lg_a fb 10k" in cff and "Cff lg_a fb 22p" in cff
+    type3 = setups.LoopGainSetup(body=body + "\nC3 out x3 1n\nR3 x3 fb 1k", **COMMON).ac_netlist(1e3, 1e5)
+    assert "C3 lg_a x3 1n" in type3 and "R3 x3 fb 1k" in type3
+    assert "Rload out 0 1" in type3 and "C1 out 0 10u" in type3
+
+
+def test_loop_gain_refuses_a_feedback_path_it_cannot_move():
+    body = setups.body_from_netlist(FIXTURES / "vm_buck_averaged.net") + "\nBsense xs 0 V=V(out)\nRs xs fb 1meg"
+    with pytest.raises(ValueError, match="Bsense"):
+        setups.LoopGainSetup(body=body, **COMMON).ac_netlist(1e3, 1e5)
 
 
 def test_loop_gain_check_flags_slew_and_high_frequency():
@@ -99,6 +121,32 @@ def test_ac_loop_gain_matches_analytic(tmp_path):
     assert lm.crossover_hz == pytest.approx(4981, rel=0.01)
     assert lm.phase_margin_deg == pytest.approx(88.0, abs=0.5)
     assert lm.gain_margin_db == pytest.approx(11.8, abs=0.3)
+
+
+@needs_ltspice
+def test_ac_loop_gain_with_cff_matches_analytic(tmp_path):
+    # Cff 1 nF across Rtop 10k: zero 15.9 kHz, pole 87.6 kHz. Breaking only Rtop reported GM 11.4 dB.
+    body = setups.body_from_netlist(FIXTURES / "vm_buck_averaged.net") + "\nCff out fb 1n"
+    s = setups.LoopGainSetup(body=body, **COMMON)
+    f, t = setups.loop_gain_from_ac(run(s.ac_netlist(1e3, 200e3, 50), tmp_path, "cff"), "out")
+    assert np.allclose(t, vm_buck_cff_t(f, 1e-9), rtol=1e-2)
+    lm = measure.loop_margins(f, t)
+    exact = measure.loop_margins(f, vm_buck_cff_t(f, 1e-9))
+    assert lm.crossover_hz == pytest.approx(exact.crossover_hz, rel=0.01)
+    assert lm.gain_margin_db == pytest.approx(exact.gain_margin_db, abs=0.2)
+    assert exact.gain_margin_db == pytest.approx(7.26, abs=0.1)
+
+
+@needs_ltspice
+def test_switching_injection_with_cff_matches_analytic(tmp_path):
+    body = setups.body_from_netlist(FIXTURES / "vm_buck_switching.net") + "\nCff out fb 1n"
+    s = setups.LoopGainSetup(body=body, sw_node="sw", amplitude_v=5e-3, t_settle_s=1e-3, **COMMON)
+    for f in setups.injection_frequencies(4e3, 40e3, 3, 500e3):
+        r = run(s.netlist(f), tmp_path, f"cff_{f:.0f}")
+        p = setups.measure_loop_gain_point(r, s, f)
+        expected = vm_buck_cff_t(np.array([f]), 1e-9)[0]
+        assert p.mag_db == pytest.approx(20 * math.log10(abs(expected)), abs=0.3)
+        assert p.phase_deg == pytest.approx(math.degrees(np.angle(expected)), abs=2.0)
 
 
 @needs_ltspice

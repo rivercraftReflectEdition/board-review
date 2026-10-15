@@ -10,7 +10,7 @@ import numpy as np
 
 from boardreview.calc.base import Quantity, Result, Verdict
 from boardreview.sim import measure
-from boardreview.sim.netlist import norm_name, read_netlist_text
+from boardreview.sim.netlist import GROUND, Element, norm_name, parse_netlist, read_netlist_text
 from boardreview.sim.runner import RunResult, run, run_many
 from boardreview.sim.sanity import Issue, SanityReport, check_netlist, check_run, injection_slew_check
 
@@ -70,6 +70,41 @@ def remove_element(body: str, element: str) -> tuple[str, list[str]]:
     while j < len(lines) and lines[j].strip().startswith("+"):
         j += 1
     return "\n".join(lines[:i] + lines[j:]), toks
+
+
+def _is_branch(el: Element) -> bool:
+    return len(el.nodes) == 2 and el.kind in "RCLDX"
+
+
+def feedback_branches(body: str, top_resistor: str, out_node: str) -> tuple[str, list[str], list[str]]:
+    """Feedback node, two-terminal parts joining out_node to the feedback network, and other paths between them."""
+    nl = parse_netlist("* body\n" + body)
+    out = out_node.lower()
+    top = [e for e in nl.elements if norm_name(e.name) == norm_name(top_resistor)]
+    if len(top) != 1 or len(top[0].nodes) != 2 or [n.lower() for n in top[0].nodes].count(out) != 1:
+        raise ValueError(f"{top_resistor} must be one two-terminal part with one end on {out_node}")
+    fb = next(n.lower() for n in top[0].nodes if n.lower() != out)
+    nodes = nl.node_map()
+    reached, todo = {fb}, [fb]
+    while todo:
+        for el, i in nodes.get(todo.pop(), []):
+            if i < 0 or not _is_branch(el):
+                continue
+            for n in (m.lower() for m in el.nodes):
+                if n not in reached and n != out and n not in GROUND:
+                    reached.add(n)
+                    todo.append(n)
+    moves, blockers = [], []
+    for el in nl.elements:
+        pins = {n.lower() for n in el.nodes}
+        touched = pins | {n.lower() for n in el.sensed}
+        if out not in touched or not touched & reached:
+            continue
+        if _is_branch(el) and out in pins:
+            moves.append(el.name)
+        elif not (el.kind == "X" and len(el.nodes) > 2):
+            blockers.append(el.name)
+    return fb, moves, blockers
 
 
 def _check_free(body: str, *names: str) -> None:
@@ -139,9 +174,21 @@ class LoopGainSetup:
     def t_stop(self, f_hz: float) -> float:
         return self.t_settle_s + (self.n_settle_periods + self.n_meas_periods) / f_hz
 
+    def branches(self) -> list[str]:
+        """Parts moved from out_node to the injection node: top_resistor and every other feedback branch."""
+        fb, moves, blockers = feedback_branches(self.body, self.top_resistor, self.out_node)
+        if blockers:
+            raise ValueError(f"{', '.join(blockers)} joins {self.out_node} to the feedback network at {fb} without "
+                             f"passing the injection point, so the measured T would not be the loop gain. Move its "
+                             f"{self.out_node} side to {INJ_NODE} by hand or inject elsewhere")
+        return moves
+
     def _opened(self) -> str:
         _check_free(self.body, INJ_SOURCE)
-        return replace_node(self.body, self.top_resistor, self.out_node, INJ_NODE)
+        body = self.body
+        for name in self.branches():
+            body = replace_node(body, name, self.out_node, INJ_NODE)
+        return body
 
     def netlist(self, f_hz: float) -> str:
         """Transient netlist with a sine of amplitude_v at f_hz switched on at t_settle_s."""
@@ -171,6 +218,7 @@ class LoopGainSetup:
     def check(self, freqs: list[float]) -> SanityReport:
         """Static checks before a sweep: netlist, injection slew limit, f = fsw/k, and f against fsw."""
         rep = check_netlist(self.netlist(freqs[0]), allow_open=self.allow_open, expected_fsw_hz=self.fsw_hz)
+        rep.issues.append(Issue("injection", "info", f"moved to {INJ_NODE}: {', '.join(self.branches())}"))
         for f in freqs:
             res = injection_slew_check(self.amplitude_v, f, self.slew_a_per_s, self.c_out_f)
             if res.verdict is not Verdict.PASS:
