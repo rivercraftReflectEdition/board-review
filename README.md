@@ -1,8 +1,9 @@
 # board-review
 
-A Claude Code skill for schematic and board reviews that catch what a pin-and-net check misses:
+An agent skill for schematic and board reviews that catch what a pin-and-net check misses:
 loop stability, LC tanks, sink capability between rails, straps, reset margins, abs-max under
-real conditions. Altium first (through eda-agent), KiCad next, one board model for both.
+real conditions. Altium first (through eda-agent), KiCad next, one board model for both. It runs
+in Claude Code, OpenAI Codex CLI and any agent that reads `SKILL.md` skills and has a shell.
 
 ## Principles
 
@@ -19,13 +20,16 @@ real conditions. Altium first (through eda-agent), KiCad next, one board model f
 ## Layout
 
 ```
-skill/                    installable skill (link into ~/.claude/skills/board-review)
-  SKILL.md                entry point: when to use, workflow, rules, finding format
+skill/                    installable skill (see Install)
+  SKILL.md                entry point: setup, when to use, workflow, rules, finding format
+  agents/openai.yaml      Codex UI metadata
   workflow/               one page per stage: intake, extract, datasheets, blocks, checks, verify, report
   checklists/             one page per circuit block (buck, ldo, ferrite/LC, pdn, clocks, resets,
                           io levels, straps, ethernet, csi, xspi memory, protection, sequencing, thermal)
   schemas/                board_model, datasheet_digest, finding, check_result (JSON Schema)
-tools/boardreview/        Python package the skill calls
+  lessons/                one page per real miss: what, why, which check now catches it
+tools/boardreview/        Python package the skill calls (python -m boardreview prep, report,
+                          verify-fixes, validate)
   model/                  netlist, BOM and pin map from Altium, KiCad and IPC-D-356; 3-way compare;
                           part position, side and sheet from IPC-D-356, KiCad position files and XML
   lint/                   deterministic checks: single-pin nets, open IC pins, floating grounds, names
@@ -38,8 +42,43 @@ tools/boardreview/        Python package the skill calls
                           ticket drafts, analysis.html with every check and plot; verify-fixes
 tests/                    calculator and model tests with worked numbers
 evals/                    expected findings per board and the scorer (board data stays local)
-docs/lessons/             one page per real miss: what, why, which check now catches it
+docs/                     conventions for people and agents working on this repo
 ```
+
+## Install
+
+One-time setup, from a clone of this repo. Python 3.11 or newer.
+
+```
+python -m pip install -e <path to board-review>
+python -m boardreview --help
+```
+
+Then link the `skill/` folder into each agent's skills folder. The link keeps the skill current
+with the repo; the editable install does the same for the Python package.
+
+Windows (cmd.exe; junctions need no admin rights):
+
+```
+mkdir "%USERPROFILE%\.claude\skills" "%USERPROFILE%\.codex\skills"
+mklink /J "%USERPROFILE%\.claude\skills\board-review" "C:\path\to\board-review\skill"
+mklink /J "%USERPROFILE%\.codex\skills\board-review" "C:\path\to\board-review\skill"
+```
+
+From PowerShell, run each `mklink` through cmd: `cmd /c 'mklink /J "<link>" "<target>"'`.
+
+macOS and Linux:
+
+```
+mkdir -p ~/.claude/skills ~/.codex/skills
+ln -s /path/to/board-review/skill ~/.claude/skills/board-review
+ln -s /path/to/board-review/skill ~/.codex/skills/board-review
+```
+
+Claude Code reads `~/.claude/skills/<name>/SKILL.md`; Codex CLI reads
+`~/.codex/skills/<name>/SKILL.md` (or `$CODEX_HOME/skills`). Restart the agent after linking. KiCad
+boards also need `kicad-cli` (KiCad 8 or newer; skill/workflow/10_extract.md). Altium boards need
+the eda-agent MCP server configured in the agent.
 
 ## Data policy
 
