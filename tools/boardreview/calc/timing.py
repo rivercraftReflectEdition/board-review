@@ -1,6 +1,8 @@
-"""Timing budgets for a star tracker: timestamp error from slew, IMX900 line and exposure time, smear."""
+"""Timing budgets: a sum of terms against a limit, RC edges, and star tracker timestamp, IMX900 exposure and smear."""
 
 from __future__ import annotations
+
+import math
 
 from boardreview.calc.base import Quantity, Result, Verdict
 
@@ -15,6 +17,52 @@ def _budget(value: float, limit: float | None, what: str, unit_scale: float, uni
     if value > limit:
         return Verdict.FAIL, f"{what} {value * unit_scale:.4g} {unit} exceeds {limit * unit_scale:.4g} {unit}"
     return Verdict.PASS, f"{what} {value * unit_scale:.4g} {unit} within {limit * unit_scale:.4g} {unit}"
+
+
+def budget(terms: dict[str, float], limit: float, unit: str = "s", margin_frac: float = 0.2,
+           name: str = "budget", refs: tuple[str, ...] = ()) -> Result:
+    """Sum of worst-case terms that must fit inside a limit, with a required spare fraction."""
+    total = sum(terms.values())
+    spare = limit - total
+    if total > limit:
+        verdict, reason = Verdict.FAIL, f"total {total:.4g} {unit} exceeds the limit {limit:.4g} {unit}"
+    elif spare < margin_frac * limit:
+        verdict, reason = Verdict.MARGINAL, f"{spare:.4g} {unit} spare, under {margin_frac:.0%} of the limit"
+    else:
+        verdict, reason = Verdict.PASS, f"{spare:.4g} {unit} spare, {spare / limit:.0%} of the limit"
+    inputs = {k: Quantity(v, unit) for k, v in terms.items()}
+    inputs.update(limit=Quantity(limit, unit), margin=Quantity(margin_frac, "", "required spare / limit"))
+    return Result(
+        name=name,
+        formula="total = sum(terms); spare = limit - total; pass when spare >= margin * limit",
+        inputs=inputs,
+        outputs={"total": Quantity(total, unit), "spare": Quantity(spare, unit)},
+        verdict=verdict,
+        reason=reason,
+        refs=("worst-case stack: terms add linearly",) + tuple(refs),
+        assumptions=("each term is its worst-case value, not a typical one",),
+    )
+
+
+def rc_edge(r_ohm: float, c_f: float, v_from_frac: float = 0.1, v_to_frac: float = 0.9,
+            limit_s: float | None = None) -> Result:
+    """Time a first-order RC step takes between two fractions of its final value."""
+    t = r_ohm * c_f * math.log((1.0 - v_from_frac) / (1.0 - v_to_frac))
+    verdict, reason = _budget(t, limit_s, "edge", 1e6, "us")
+    inputs = {"r": Quantity(r_ohm, "ohm"), "c": Quantity(c_f, "F"), "from": Quantity(v_from_frac, "", "of final"),
+              "to": Quantity(v_to_frac, "", "of final")}
+    if limit_s is not None:
+        inputs["limit"] = Quantity(limit_s, "s")
+    return Result(
+        name="RC edge time",
+        formula="t = R*C*ln((1 - from)/(1 - to)); 10 to 90 % is 2.197 RC",
+        inputs=inputs,
+        outputs={"t": Quantity(t, "s")},
+        verdict=verdict,
+        reason=reason,
+        refs=("first-order step response v(t) = V*(1 - exp(-t/(R*C)))",),
+        assumptions=("one resistor charging one capacitor from a step; driver and input thresholds ideal",),
+    )
 
 
 def timestamp_error(

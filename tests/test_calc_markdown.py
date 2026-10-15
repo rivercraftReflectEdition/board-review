@@ -23,6 +23,8 @@ CASES = [
     lambda: timing.timestamp_error(1.0, 3.0),
     lambda: timing.imx900_exposure(2785, 2507, 2666),
     lambda: timing.smear_px(1.0, 0.05, 29.006),
+    lambda: timing.budget({"initial": 10.0, "temperature": 20.0}, 50.0, "ppm"),
+    lambda: timing.rc_edge(10e3, 100e-12),
     lambda: i2c.i2c_rise_time(2.2e3, 100e-12),
     lambda: i2c.i2c_pullup_range(3.3, 100e-12),
     lambda: crystal.load_capacitance(12e-12, 12e-12, 3e-12),
