@@ -1,0 +1,302 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Synthetic board for board-review report tests. No real board data. Seeded issues: R11 10R0 in the U1
+     enable divider, R60 and R61 both fitted on PHY_MODE0, no pull-ups on I2C2, C12 rated 6.3 V on +5V. -->
+<export version="E">
+  <design>
+    <source>synthetic_node.kicad_sch</source>
+    <date>2026-10-01</date>
+    <tool>Eeschema 8.0.4</tool>
+  </design>
+  <components>
+    <comp ref="J1"><value>PWR_IN</value><footprint>Connector:Conn_1x02_P2.54</footprint>
+      <fields><field name="MPN">SYN-CONN-2</field><field name="Manufacturer">Synthetic</field></fields>
+      <libsource lib="Synthetic" part="J" description="Power input connector"/>
+      <sheetpath names="/Power_In/" tstamps="/86ee4/"/></comp>
+    <comp ref="D1"><value>SYN-TVS24</value><footprint>Diode_SMD:D_SMA</footprint>
+      <fields><field name="MPN">SYN-TVS24A</field><field name="Manufacturer">Synthetic</field></fields>
+      <libsource lib="Synthetic" part="D" description="TVS diode"/>
+      <sheetpath names="/Power_In/" tstamps="/86ee4/"/></comp>
+    <comp ref="C1"><value>10uF</value><footprint>Capacitor_SMD:C_1210</footprint>
+      <fields><field name="MPN">SYN-C10U50</field><field name="Manufacturer">Synthetic</field></fields>
+      <libsource lib="Synthetic" part="C" description="Capacitor 10uF 50V"/>
+      <sheetpath names="/Power_In/" tstamps="/86ee4/"/></comp>
+    <comp ref="U1"><value>SYN5V-BUCK</value><footprint>Package_TO_SOT_SMD:SOT-23-6</footprint>
+      <fields><field name="MPN">SYN5V-BUCK</field><field name="Manufacturer">Synthetic</field></fields>
+      <libsource lib="Synthetic" part="U" description="Synchronous buck converter"/>
+      <sheetpath names="/Power_In/" tstamps="/86ee4/"/></comp>
+    <comp ref="C2"><value>100nF</value><footprint>Capacitor_SMD:C_0402</footprint>
+      <fields><field name="MPN">SYN-C100N</field><field name="Manufacturer">Synthetic</field></fields>
+      <libsource lib="Synthetic" part="C" description="Capacitor 100nF"/>
+      <sheetpath names="/Power_In/" tstamps="/86ee4/"/></comp>
+    <comp ref="L1"><value>10uH</value><footprint>Inductor_SMD:L_1210</footprint>
+      <fields><field name="MPN">SYN-L10U</field><field name="Manufacturer">Synthetic</field></fields>
+      <libsource lib="Synthetic" part="L" description="Power inductor"/>
+      <sheetpath names="/Power_In/" tstamps="/86ee4/"/></comp>
+    <comp ref="C3"><value>22uF</value><footprint>Capacitor_SMD:C_0805</footprint>
+      <fields><field name="MPN">SYN-C22U16</field><field name="Manufacturer">Synthetic</field></fields>
+      <libsource lib="Synthetic" part="C" description="Capacitor 22uF 16V"/>
+      <sheetpath names="/Power_In/" tstamps="/86ee4/"/></comp>
+    <comp ref="C12"><value>22uF</value><footprint>Capacitor_SMD:C_0805</footprint>
+      <fields><field name="MPN">SYN-C22U6V3</field><field name="Manufacturer">Synthetic</field></fields>
+      <libsource lib="Synthetic" part="C" description="Capacitor 22uF 6.3V"/>
+      <sheetpath names="/Power_In/" tstamps="/86ee4/"/></comp>
+    <comp ref="R10"><value>100k</value><footprint>Resistor_SMD:R_0402</footprint>
+      <fields><field name="MPN">SYN-R100K</field><field name="Manufacturer">Synthetic</field></fields>
+      <libsource lib="Synthetic" part="R" description="Resistor"/>
+      <sheetpath names="/Power_In/" tstamps="/86ee4/"/></comp>
+    <comp ref="R11"><value>10R0</value><footprint>Resistor_SMD:R_0402</footprint>
+      <fields><field name="MPN">SYN-R10R0</field><field name="Manufacturer">Synthetic</field></fields>
+      <libsource lib="Synthetic" part="R" description="Resistor"/>
+      <sheetpath names="/Power_In/" tstamps="/86ee4/"/></comp>
+    <comp ref="R12"><value>52.3k</value><footprint>Resistor_SMD:R_0402</footprint>
+      <fields><field name="MPN">SYN-R52K3</field><field name="Manufacturer">Synthetic</field></fields>
+      <libsource lib="Synthetic" part="R" description="Resistor"/>
+      <sheetpath names="/Power_In/" tstamps="/86ee4/"/></comp>
+    <comp ref="R13"><value>10k</value><footprint>Resistor_SMD:R_0402</footprint>
+      <fields><field name="MPN">SYN-R10K</field><field name="Manufacturer">Synthetic</field></fields>
+      <libsource lib="Synthetic" part="R" description="Resistor"/>
+      <sheetpath names="/Power_In/" tstamps="/86ee4/"/></comp>
+    <comp ref="U2"><value>SYN3V3-BUCK</value><footprint>Package_TO_SOT_SMD:SOT-23-5</footprint>
+      <fields><field name="MPN">SYN3V3-BUCK</field><field name="Manufacturer">Synthetic</field></fields>
+      <libsource lib="Synthetic" part="U" description="Synchronous buck converter"/>
+      <sheetpath names="/Power_3V3/" tstamps="/70465/"/></comp>
+    <comp ref="L2"><value>4.7uH</value><footprint>Inductor_SMD:L_1210</footprint>
+      <fields><field name="MPN">SYN-L4U7</field><field name="Manufacturer">Synthetic</field></fields>
+      <libsource lib="Synthetic" part="L" description="Power inductor"/>
+      <sheetpath names="/Power_3V3/" tstamps="/70465/"/></comp>
+    <comp ref="C4"><value>10uF</value><footprint>Capacitor_SMD:C_0603</footprint>
+      <fields><field name="MPN">SYN-C10U10</field><field name="Manufacturer">Synthetic</field></fields>
+      <libsource lib="Synthetic" part="C" description="Capacitor 10uF 10V"/>
+      <sheetpath names="/Power_3V3/" tstamps="/70465/"/></comp>
+    <comp ref="C5"><value>10uF</value><footprint>Capacitor_SMD:C_0603</footprint>
+      <fields><field name="MPN">SYN-C10U10</field><field name="Manufacturer">Synthetic</field></fields>
+      <libsource lib="Synthetic" part="C" description="Capacitor 10uF 10V"/>
+      <sheetpath names="/Power_3V3/" tstamps="/70465/"/></comp>
+    <comp ref="R20"><value>45.3k</value><footprint>Resistor_SMD:R_0402</footprint>
+      <fields><field name="MPN">SYN-R45K3</field><field name="Manufacturer">Synthetic</field></fields>
+      <libsource lib="Synthetic" part="R" description="Resistor"/>
+      <sheetpath names="/Power_3V3/" tstamps="/70465/"/></comp>
+    <comp ref="R21"><value>10k</value><footprint>Resistor_SMD:R_0402</footprint>
+      <fields><field name="MPN">SYN-R10K</field><field name="Manufacturer">Synthetic</field></fields>
+      <libsource lib="Synthetic" part="R" description="Resistor"/>
+      <sheetpath names="/Power_3V3/" tstamps="/70465/"/></comp>
+    <comp ref="FB1"><value>600R@100MHz</value><footprint>Inductor_SMD:L_0603</footprint>
+      <fields><field name="MPN">SYN-FB600</field><field name="Manufacturer">Synthetic</field></fields>
+      <libsource lib="Synthetic" part="FB" description="Ferrite bead"/>
+      <sheetpath names="/Power_3V3/" tstamps="/70465/"/></comp>
+    <comp ref="C6"><value>1uF</value><footprint>Capacitor_SMD:C_0402</footprint>
+      <fields><field name="MPN">SYN-C1U</field><field name="Manufacturer">Synthetic</field></fields>
+      <libsource lib="Synthetic" part="C" description="Capacitor 1uF"/>
+      <sheetpath names="/Power_3V3/" tstamps="/70465/"/></comp>
+    <comp ref="U3"><value>SYN-MCU48</value><footprint>Package_QFP:LQFP-48</footprint>
+      <fields><field name="MPN">SYN-MCU48</field><field name="Manufacturer">Synthetic</field></fields>
+      <libsource lib="Synthetic" part="U" description="Arm Cortex-M MCU"/>
+      <sheetpath names="/MCU/" tstamps="/682b1/"/></comp>
+    <comp ref="Y1"><value>8MHz</value><footprint>Crystal:Crystal_SMD_3225-4Pin</footprint>
+      <fields><field name="MPN">SYN-XTAL8M</field><field name="Manufacturer">Synthetic</field></fields>
+      <libsource lib="Synthetic" part="Y" description="Crystal 8 MHz"/>
+      <sheetpath names="/MCU/" tstamps="/682b1/"/></comp>
+    <comp ref="C9"><value>12pF</value><footprint>Capacitor_SMD:C_0402</footprint>
+      <fields><field name="MPN">SYN-C12P</field><field name="Manufacturer">Synthetic</field></fields>
+      <libsource lib="Synthetic" part="C" description="Capacitor 12pF"/>
+      <sheetpath names="/MCU/" tstamps="/682b1/"/></comp>
+    <comp ref="C10"><value>12pF</value><footprint>Capacitor_SMD:C_0402</footprint>
+      <fields><field name="MPN">SYN-C12P</field><field name="Manufacturer">Synthetic</field></fields>
+      <libsource lib="Synthetic" part="C" description="Capacitor 12pF"/>
+      <sheetpath names="/MCU/" tstamps="/682b1/"/></comp>
+    <comp ref="R30"><value>10k</value><footprint>Resistor_SMD:R_0402</footprint>
+      <fields><field name="MPN">SYN-R10K</field><field name="Manufacturer">Synthetic</field></fields>
+      <libsource lib="Synthetic" part="R" description="Resistor"/>
+      <sheetpath names="/MCU/" tstamps="/682b1/"/></comp>
+    <comp ref="U4"><value>SYN-SUPV</value><footprint>Package_TO_SOT_SMD:SOT-23</footprint>
+      <fields><field name="MPN">SYN-SUPV29</field><field name="Manufacturer">Synthetic</field></fields>
+      <libsource lib="Synthetic" part="U" description="Supply voltage supervisor"/>
+      <sheetpath names="/MCU/" tstamps="/682b1/"/></comp>
+    <comp ref="R31"><value>10k</value><footprint>Resistor_SMD:R_0402</footprint>
+      <fields><field name="MPN">SYN-R10K</field><field name="Manufacturer">Synthetic</field></fields>
+      <libsource lib="Synthetic" part="R" description="Resistor"/>
+      <sheetpath names="/MCU/" tstamps="/682b1/"/></comp>
+    <comp ref="C11"><value>100nF</value><footprint>Capacitor_SMD:C_0402</footprint>
+      <fields><field name="MPN">SYN-C100N</field><field name="Manufacturer">Synthetic</field></fields>
+      <libsource lib="Synthetic" part="C" description="Capacitor 100nF"/>
+      <sheetpath names="/MCU/" tstamps="/682b1/"/></comp>
+    <comp ref="J2"><value>DEBUG</value><footprint>Connector:Conn_1x03_P2.54</footprint>
+      <fields><field name="MPN">SYN-CONN-3</field><field name="Manufacturer">Synthetic</field></fields>
+      <libsource lib="Synthetic" part="J" description="Debug header"/>
+      <sheetpath names="/MCU/" tstamps="/682b1/"/></comp>
+    <comp ref="U5"><value>SYN-PHY10</value><footprint>Package_DFN_QFN:QFN-24</footprint>
+      <fields><field name="MPN">SYN-PHY10</field><field name="Manufacturer">Synthetic</field></fields>
+      <libsource lib="Synthetic" part="U" description="Ethernet PHY"/>
+      <sheetpath names="/Ethernet/" tstamps="/03c81/"/></comp>
+    <comp ref="R60"><value>10k</value><footprint>Resistor_SMD:R_0402</footprint>
+      <fields><field name="MPN">SYN-R10K</field><field name="Manufacturer">Synthetic</field></fields>
+      <libsource lib="Synthetic" part="R" description="Resistor"/>
+      <sheetpath names="/Ethernet/" tstamps="/03c81/"/></comp>
+    <comp ref="R61"><value>10k</value><footprint>Resistor_SMD:R_0402</footprint>
+      <fields><field name="MPN">SYN-R10K</field><field name="Manufacturer">Synthetic</field></fields>
+      <libsource lib="Synthetic" part="R" description="Resistor"/>
+      <sheetpath names="/Ethernet/" tstamps="/03c81/"/></comp>
+    <comp ref="C13"><value>100nF</value><footprint>Capacitor_SMD:C_0402</footprint>
+      <fields><field name="MPN">SYN-C100N</field><field name="Manufacturer">Synthetic</field></fields>
+      <libsource lib="Synthetic" part="C" description="Capacitor 100nF"/>
+      <sheetpath names="/Ethernet/" tstamps="/03c81/"/></comp>
+    <comp ref="U6"><value>SYN-TEMP</value><footprint>Package_TO_SOT_SMD:SOT-563</footprint>
+      <fields><field name="MPN">SYN-TEMP1</field><field name="Manufacturer">Synthetic</field></fields>
+      <libsource lib="Synthetic" part="U" description="I2C temperature sensor"/>
+      <sheetpath names="/Sensors/" tstamps="/ec502/"/></comp>
+    <comp ref="C14"><value>100nF</value><footprint>Capacitor_SMD:C_0402</footprint>
+      <fields><field name="MPN">SYN-C100N</field><field name="Manufacturer">Synthetic</field></fields>
+      <libsource lib="Synthetic" part="C" description="Capacitor 100nF"/>
+      <sheetpath names="/Sensors/" tstamps="/ec502/"/></comp>
+    <comp ref="R32"><value>10k</value><footprint>Resistor_SMD:R_0402</footprint>
+      <fields><field name="MPN">SYN-R10K</field><field name="Manufacturer">Synthetic</field></fields>
+      <libsource lib="Synthetic" part="R" description="Resistor"/>
+      <sheetpath names="/Sensors/" tstamps="/ec502/"/><property name="dnp"/></comp>
+  </components>
+  <nets>
+    <net code="1" name="+3V3" class="Power">
+      <node ref="L2" pin="2" pintype="passive"/>
+      <node ref="C4" pin="1" pintype="passive"/>
+      <node ref="C5" pin="1" pintype="passive"/>
+      <node ref="R20" pin="1" pintype="passive"/>
+      <node ref="FB1" pin="1" pintype="passive"/>
+      <node ref="U3" pin="1" pinfunction="VDD" pintype="power_in"/>
+      <node ref="U4" pin="3" pinfunction="VDD" pintype="power_in"/>
+      <node ref="R31" pin="1" pintype="passive"/>
+      <node ref="J2" pin="1" pinfunction="Pin_1" pintype="passive"/>
+      <node ref="U5" pin="1" pinfunction="VDD" pintype="power_in"/>
+      <node ref="R60" pin="1" pintype="passive"/>
+      <node ref="C13" pin="1" pintype="passive"/>
+      <node ref="U6" pin="1" pinfunction="VDD" pintype="power_in"/>
+      <node ref="C14" pin="1" pintype="passive"/>
+    </net>
+    <net code="2" name="+5V" class="Power">
+      <node ref="L1" pin="2" pintype="passive"/>
+      <node ref="C3" pin="1" pintype="passive"/>
+      <node ref="C12" pin="1" pintype="passive"/>
+      <node ref="R12" pin="1" pintype="passive"/>
+      <node ref="U2" pin="1" pinfunction="VIN" pintype="power_in"/>
+      <node ref="U2" pin="2" pinfunction="EN" pintype="passive"/>
+      <node ref="R32" pin="1" pintype="passive"/>
+    </net>
+    <net code="3" name="3V3A" class="Power">
+      <node ref="FB1" pin="2" pintype="passive"/>
+      <node ref="C6" pin="1" pintype="passive"/>
+      <node ref="U3" pin="3" pinfunction="VDDA" pintype="power_in"/>
+    </net>
+    <net code="4" name="BOOT0">
+      <node ref="U3" pin="7" pinfunction="BOOT0" pintype="passive"/>
+      <node ref="R30" pin="1" pintype="passive"/>
+    </net>
+    <net code="5" name="GND" class="Power">
+      <node ref="J1" pin="2" pinfunction="Pin_2" pintype="passive"/>
+      <node ref="D1" pin="2" pinfunction="A" pintype="passive"/>
+      <node ref="C1" pin="2" pintype="passive"/>
+      <node ref="U1" pin="3" pinfunction="GND" pintype="power_in"/>
+      <node ref="C3" pin="2" pintype="passive"/>
+      <node ref="C12" pin="2" pintype="passive"/>
+      <node ref="R11" pin="2" pintype="passive"/>
+      <node ref="R13" pin="2" pintype="passive"/>
+      <node ref="U2" pin="3" pinfunction="GND" pintype="power_in"/>
+      <node ref="C4" pin="2" pintype="passive"/>
+      <node ref="C5" pin="2" pintype="passive"/>
+      <node ref="R21" pin="2" pintype="passive"/>
+      <node ref="C6" pin="2" pintype="passive"/>
+      <node ref="U3" pin="2" pinfunction="VSS" pintype="power_in"/>
+      <node ref="Y1" pin="2" pinfunction="GND" pintype="passive"/>
+      <node ref="Y1" pin="4" pinfunction="GND" pintype="passive"/>
+      <node ref="C9" pin="2" pintype="passive"/>
+      <node ref="C10" pin="2" pintype="passive"/>
+      <node ref="R30" pin="2" pintype="passive"/>
+      <node ref="U4" pin="1" pinfunction="GND" pintype="power_in"/>
+      <node ref="C11" pin="2" pintype="passive"/>
+      <node ref="J2" pin="2" pinfunction="Pin_2" pintype="passive"/>
+      <node ref="U5" pin="2" pinfunction="GND" pintype="power_in"/>
+      <node ref="R61" pin="2" pintype="passive"/>
+      <node ref="C13" pin="2" pintype="passive"/>
+      <node ref="U6" pin="2" pinfunction="GND" pintype="power_in"/>
+      <node ref="C14" pin="2" pintype="passive"/>
+    </net>
+    <net code="6" name="I2C2_SCL">
+      <node ref="U3" pin="8" pinfunction="PB6" pintype="passive"/>
+      <node ref="U6" pin="3" pinfunction="SCL" pintype="passive"/>
+    </net>
+    <net code="7" name="I2C2_SDA">
+      <node ref="U3" pin="9" pinfunction="PB7" pintype="passive"/>
+      <node ref="U6" pin="4" pinfunction="SDA" pintype="passive"/>
+    </net>
+    <net code="8" name="MDC">
+      <node ref="U3" pin="11" pinfunction="PA2" pintype="passive"/>
+      <node ref="U5" pin="5" pinfunction="MDC" pintype="passive"/>
+    </net>
+    <net code="9" name="MDIO">
+      <node ref="U3" pin="10" pinfunction="PA1" pintype="passive"/>
+      <node ref="U5" pin="4" pinfunction="MDIO" pintype="passive"/>
+    </net>
+    <net code="10" name="NRST">
+      <node ref="U3" pin="6" pinfunction="NRST" pintype="passive"/>
+      <node ref="U4" pin="2" pinfunction="RESET" pintype="passive"/>
+      <node ref="R31" pin="2" pintype="passive"/>
+      <node ref="C11" pin="1" pintype="passive"/>
+      <node ref="J2" pin="3" pinfunction="Pin_3" pintype="passive"/>
+    </net>
+    <net code="11" name="PHY_MODE0">
+      <node ref="U5" pin="3" pinfunction="MODE0" pintype="passive"/>
+      <node ref="R60" pin="2" pintype="passive"/>
+      <node ref="R61" pin="1" pintype="passive"/>
+    </net>
+    <net code="12" name="PHY_RST_N">
+      <node ref="U3" pin="12" pinfunction="PA8" pintype="passive"/>
+      <node ref="U5" pin="6" pinfunction="RESET_N" pintype="passive"/>
+    </net>
+    <net code="13" name="SENSOR_ALERT">
+      <node ref="U6" pin="5" pinfunction="ALERT" pintype="passive"/>
+      <node ref="R32" pin="2" pintype="passive"/>
+    </net>
+    <net code="14" name="SW_3V3">
+      <node ref="U2" pin="5" pinfunction="SW" pintype="passive"/>
+      <node ref="L2" pin="1" pintype="passive"/>
+    </net>
+    <net code="15" name="SW_5V">
+      <node ref="U1" pin="5" pinfunction="SW" pintype="passive"/>
+      <node ref="C2" pin="2" pintype="passive"/>
+      <node ref="L1" pin="1" pintype="passive"/>
+    </net>
+    <net code="16" name="U1_BOOT">
+      <node ref="U1" pin="6" pinfunction="BOOT" pintype="passive"/>
+      <node ref="C2" pin="1" pintype="passive"/>
+    </net>
+    <net code="17" name="U1_EN">
+      <node ref="U1" pin="2" pinfunction="EN" pintype="passive"/>
+      <node ref="R10" pin="2" pintype="passive"/>
+      <node ref="R11" pin="1" pintype="passive"/>
+    </net>
+    <net code="18" name="U1_FB">
+      <node ref="U1" pin="4" pinfunction="FB" pintype="passive"/>
+      <node ref="R12" pin="2" pintype="passive"/>
+      <node ref="R13" pin="1" pintype="passive"/>
+    </net>
+    <net code="19" name="U2_FB">
+      <node ref="U2" pin="4" pinfunction="FB" pintype="passive"/>
+      <node ref="R20" pin="2" pintype="passive"/>
+      <node ref="R21" pin="1" pintype="passive"/>
+    </net>
+    <net code="20" name="VIN_24V" class="Power">
+      <node ref="J1" pin="1" pinfunction="Pin_1" pintype="passive"/>
+      <node ref="D1" pin="1" pinfunction="K" pintype="passive"/>
+      <node ref="C1" pin="1" pintype="passive"/>
+      <node ref="U1" pin="1" pinfunction="VIN" pintype="power_in"/>
+      <node ref="R10" pin="1" pintype="passive"/>
+    </net>
+    <net code="21" name="XTAL_IN">
+      <node ref="U3" pin="4" pinfunction="OSC_IN" pintype="passive"/>
+      <node ref="Y1" pin="1" pinfunction="1" pintype="passive"/>
+      <node ref="C9" pin="1" pintype="passive"/>
+    </net>
+    <net code="22" name="XTAL_OUT">
+      <node ref="U3" pin="5" pinfunction="OSC_OUT" pintype="passive"/>
+      <node ref="Y1" pin="3" pinfunction="3" pintype="passive"/>
+      <node ref="C10" pin="1" pintype="passive"/>
+    </net>
+  </nets>
+</export>
