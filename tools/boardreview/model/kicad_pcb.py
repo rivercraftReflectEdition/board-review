@@ -21,7 +21,7 @@ NAME_ESCAPES = {"slash": "/", "backslash": "\\", "space": " ", "tab": "\t", "ret
 _NAME_ESCAPE = re.compile(r"\{(" + "|".join(NAME_ESCAPES) + r")\}")
 
 
-def _blocks(text: str, heads: tuple[str, ...]) -> Iterator[str]:
+def top_level_blocks(text: str, heads: tuple[str, ...]) -> Iterator[str]:
     """Text of each child of the root whose head is in heads; strings may hold parentheses."""
     depth, start = 0, -1
     for m in _SCAN.finditer(text):
@@ -116,7 +116,7 @@ def parse_kicad_pcb(text: str, path: str = "") -> BoardModel:
     """Parse a .kicad_pcb file: one part per footprint, one pin per numbered pad, placement in attrs."""
     if not text.lstrip().startswith("(kicad_pcb"):
         raise ValueError("not a KiCad board file (no kicad_pcb root)")
-    footprints = [parse_sexpr(b) for b in _blocks(text, FOOTPRINT_HEADS)]
+    footprints = [parse_sexpr(b) for b in top_level_blocks(text, FOOTPRINT_HEADS)]
     pairs = [(f[1], p[1]) for fp in footprints for p in _kids(fp, "pad") if len(p) > 1
              for f in _kids(p, "pinfunction") if len(f) > 1]
     numbered = kicad.numbered_functions(pairs)
