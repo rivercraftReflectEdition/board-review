@@ -1,4 +1,5 @@
 import shutil
+import subprocess
 from pathlib import Path
 
 import numpy as np
@@ -69,6 +70,88 @@ def test_ascii_complex(tmp_path):
     assert raw.is_complex
     assert np.allclose(raw.axis(), [100.0, 1000.0])
     assert np.allclose(raw["out"], [0.5 - 0.5j, 0.1 - 0.3j])
+
+
+ASCII_TRAN = _header([
+    "Title: x", "Plotname: Transient Analysis", "Flags: real forward", "No. Variables: 2", "No. Points: 3",
+    "Variables:", "\t0\ttime\ttime", "\t1\tV(out)\tvoltage", "Values:",
+    "0\t\t0.0e+00", "\t1.0e+00", "1\t\t1.0e-06", "\t2.5e+00", "2\t\t2.0e-06", "\t-3.0e-01",
+]).replace("\n", "\r\n")
+
+ASCII_AC = _header([
+    "Title: x", "Plotname: AC Analysis", "Flags: complex forward log", "No. Variables: 2", "No. Points: 2",
+    "Variables:", "\t0\tfrequency\tfrequency", "\t1\tV(out)\tvoltage", "Values:",
+    "0\t\t1.0e+02,0.0e+00", "\t5.0e-01,-5.0e-01", "1\t\t1.0e+03,0.0e+00", "\t1.0e-01,-3.0e-01",
+]).replace("\n", "\r\n")
+
+
+@pytest.mark.parametrize("encoding", ["ascii", "utf-16-le"])
+def test_ascii_real_and_complex_in_either_encoding(tmp_path, encoding):
+    (tmp_path / "t.raw").write_bytes(ASCII_TRAN.encode(encoding))
+    (tmp_path / "a.raw").write_bytes(ASCII_AC.encode(encoding))
+    tran, ac = read_raw(tmp_path / "t.raw"), read_raw(tmp_path / "a.raw")
+    assert np.allclose(tran.axis(), [0.0, 1e-6, 2e-6]) and np.allclose(tran["out"], [1.0, 2.5, -0.3])
+    assert np.allclose(ac.axis(), [100.0, 1000.0]) and np.allclose(ac["out"], [0.5 - 0.5j, 0.1 - 0.3j])
+
+
+@pytest.mark.parametrize("encoding", ["ascii", "utf-16-le"])
+def test_truncated_ascii_is_rejected(tmp_path, encoding):
+    cut = ASCII_TRAN[: ASCII_TRAN.index("2\t\t2.0e-06")]
+    (tmp_path / "t.raw").write_bytes(cut.encode(encoding))
+    with pytest.raises(ValueError, match="3 points"):
+        read_raw(tmp_path / "t.raw")
+
+
+def test_truncated_binary_is_rejected(tmp_path):
+    t = np.linspace(0, 1e-3, 11)
+    blob = _ltspice_binary_tran(t, [np.sin(t)], ["V(a)"])
+    (tmp_path / "b.raw").write_bytes(blob[:-5])
+    with pytest.raises(ValueError, match="11 points"):
+        read_raw(tmp_path / "b.raw")
+
+
+def _binary_head(flags: str, n: int, names: list[str], kind: str = "time") -> bytes:
+    head = ["Title: synthetic", "Plotname: Transient Analysis", f"Flags: {flags}", f"No. Variables: {len(names) + 1}",
+            f"No. Points: {n}", "Command: LTspice", "Variables:", f"\t0\t{kind}\t{kind}"]
+    head += [f"\t{i + 1}\t{nm}\tvoltage" for i, nm in enumerate(names)]
+    return _header(head + ["Binary:"]).encode("utf-16-le")
+
+
+def test_binary_double_and_real_fastaccess_layouts(tmp_path):
+    # Layouts as LTspice 26.0.2 writes them: "real double forward" is point-major float64; "-FastAccess" stores
+    # the time column (float64) and then each variable's whole trace (float32).
+    t = np.linspace(0, 1e-3, 7)
+    a, b = np.cos(t * 1e4), np.sin(t * 1e4)
+    point_major = np.stack([t, a, b], axis=1).astype("<f8")
+    (tmp_path / "d.raw").write_bytes(_binary_head("real double forward", 7, ["V(a)", "V(b)"]) + point_major.tobytes())
+    fast = t.astype("<f8").tobytes() + np.concatenate([a, b]).astype("<f4").tobytes()
+    (tmp_path / "f.raw").write_bytes(_binary_head("real forward fastaccess", 7, ["V(a)", "V(b)"]) + fast)
+    fast_dbl = np.concatenate([t, a, b]).astype("<f8").tobytes()
+    (tmp_path / "fd.raw").write_bytes(_binary_head("real double forward fastaccess", 7, ["V(a)", "V(b)"]) + fast_dbl)
+    for name, tol in (("d", 0.0), ("f", 1e-7), ("fd", 0.0)):
+        raw = read_raw(tmp_path / f"{name}.raw")
+        assert np.allclose(raw.axis(), t, rtol=0, atol=0)
+        assert np.allclose(raw["a"], a, atol=tol) and np.allclose(raw["b"], b, atol=tol)
+
+
+def test_complex_fastaccess_is_rejected(tmp_path):
+    head = _binary_head("complex forward log fastaccess", 2, ["V(a)"], kind="frequency")
+    (tmp_path / "c.raw").write_bytes(head + np.zeros(4, dtype="<c16").tobytes())
+    with pytest.raises(ValueError, match="FastAccess"):
+        read_raw(tmp_path / "c.raw")
+
+
+@needs_ltspice
+def test_ltspice_fastaccess_and_double_match_the_default_binary(tmp_path):
+    shutil.copy(FIXTURES / "rc_tran.net", tmp_path / "rc.net")
+    ref = run(tmp_path / "rc.net").raw()
+    text = (FIXTURES / "rc_tran.net").read_text().replace(".end", ".options numdgt=15\n.end")
+    dbl = run(text, tmp_path, "dbl").raw()
+    assert "double" in dbl.flags and np.allclose(dbl["V(out)"], ref["V(out)"], atol=1e-6)
+    shutil.copy(tmp_path / "rc.raw", tmp_path / "fa.raw")
+    subprocess.run([str(LTspice().exe), "-FastAccess", str(tmp_path / "fa.raw")], capture_output=True, timeout=120)
+    fa = read_raw(tmp_path / "fa.raw")
+    assert "fastaccess" in fa.flags and np.array_equal(fa.data, ref.data)
 
 
 def test_ngspice_style_all_double_two_plots(tmp_path):

@@ -181,8 +181,10 @@ def _read_one(blob: bytes, pos: int) -> tuple[RawFile, int]:
     n_points = int(header.get("no. points", "0"))
     flags = set(header.get("flags", "").lower().split())
     if marker == _VALUES:
-        data, end = _parse_ascii(blob, data_pos, n_vars, n_points, "complex" in flags)
+        data, end = _parse_ascii(blob, data_pos, n_vars, n_points, "complex" in flags, enc)
     else:
+        if {"complex", "fastaccess"} <= flags:
+            raise ValueError("complex FastAccess is not a layout LTspice writes; reconvert the raw file")
         data, end = _parse_binary(blob, data_pos, n_vars, n_points, flags, header.get("command", ""))
     if variables and variables[0].kind.lower() == "time":
         data[0] = np.abs(data[0])
@@ -223,14 +225,16 @@ def _parse_header(text: str) -> tuple[dict[str, str], list[Variable]]:
     return header, variables
 
 
-def _parse_ascii(blob: bytes, pos: int, n_vars: int, n_points: int, is_complex: bool) -> tuple[np.ndarray, int]:
-    end = blob.find(b"Title:", pos)
+def _parse_ascii(blob: bytes, pos: int, n_vars: int, n_points: int, is_complex: bool,
+                 enc: str = "latin-1") -> tuple[np.ndarray, int]:
+    end = blob.find("Title:".encode(enc), pos)
     end = len(blob) if end < 0 else end
-    tokens = blob[pos:end].decode("latin-1").split()
+    tokens = blob[pos:end].decode(enc).split()
     per_point = n_vars + 1
-    if n_points * per_point > len(tokens):
-        n_points = len(tokens) // per_point
-    tokens = tokens[: n_points * per_point]
+    index = tokens[::per_point]
+    if len(tokens) != n_points * per_point or index != [str(k) for k in range(n_points)]:
+        raise ValueError(f"the header promises {n_points} points of {n_vars} values but the data has "
+                         f"{len(tokens)} tokens: truncated or corrupt raw file")
     if is_complex:
         pairs = [t.split(",") for t in tokens]
         values = [complex(float(p[0]), float(p[1]) if len(p) > 1 else 0.0) for p in pairs]
@@ -243,6 +247,11 @@ def _parse_ascii(blob: bytes, pos: int, n_vars: int, n_points: int, is_complex: 
 def _parse_binary(
     blob: bytes, pos: int, n_vars: int, n_points: int, flags: set[str], command: str
 ) -> tuple[np.ndarray, int]:
+    double = "double" in flags or "ngspice" in command.lower()
+    per_point = 16 * n_vars if "complex" in flags else 8 * n_vars if double else 8 + 4 * (n_vars - 1)
+    if len(blob) - pos < n_points * per_point:
+        raise ValueError(f"the header promises {n_points} points of {n_vars} values but only {len(blob) - pos} "
+                         f"data bytes follow: truncated raw file")
     if "complex" in flags:
         size = n_points * n_vars * 16
         arr = np.frombuffer(blob, dtype="<c16", count=n_points * n_vars, offset=pos)
