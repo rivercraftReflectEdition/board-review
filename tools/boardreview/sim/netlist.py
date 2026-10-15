@@ -265,6 +265,21 @@ def _pnba_names(text: str) -> tuple[str, ...]:
     return tuple(out)
 
 
+def absolutize_libs(text: str, dirs: list[Path]) -> str:
+    """Rewrite .lib/.include names that exist in dirs as quoted absolute paths."""
+    out = []
+    for line in text.split("\n"):
+        s = line.strip()
+        word = s.split()[0].lower() if s else ""
+        name = _lib_name(s) if word in (".lib", ".include", ".inc") else ""
+        if name and not Path(name).is_absolute():
+            hit = next((d / name for d in dirs if (d / name).exists()), None)
+            if hit is not None:
+                line = f'{s.split()[0]} "{hit.resolve()}"'
+        out.append(line)
+    return "\n".join(out)
+
+
 def ltspice_lib_dirs() -> list[Path]:
     """LTspice library roots that exist on this machine (24+ per-user, XVII documents, macOS)."""
     home = Path.home()

@@ -12,6 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from boardreview.sim.netlist import absolutize_libs, read_netlist_text
 from boardreview.sim.rawfile import RawFile, read_raw, read_text_any
 
 ENV_LTSPICE = "BOARDREVIEW_LTSPICE"
@@ -223,7 +224,7 @@ class RunResult:
 
 
 class LTspice:
-    """LTspice batch backend: 'LTspice.exe -b [-ascii] [-alt|-norm] [-I<path>] deck.net' writes deck.raw and deck.log."""
+    """LTspice batch backend: 'LTspice.exe -b [-ascii] [-alt|-norm] deck.net' writes deck.raw and deck.log."""
 
     name = "ltspice"
 
@@ -233,15 +234,12 @@ class LTspice:
     def available(self) -> bool:
         return self.exe is not None and Path(self.exe).exists()
 
-    def command(self, netlist: Path, ascii_raw: bool = False, solver: str | None = None,
-                include_dir: Path | None = None) -> list[str]:
+    def command(self, netlist: Path, ascii_raw: bool = False, solver: str | None = None) -> list[str]:
         cmd = [str(self.exe), "-b"]
         if ascii_raw:
             cmd.append("-ascii")
         if solver in ("alt", "norm"):
             cmd.append(f"-{solver}")
-        if include_dir is not None:
-            cmd.append(f"-I{include_dir}")
         cmd.append(str(netlist))
         return cmd
 
@@ -263,8 +261,7 @@ class NgSpice:
     def available(self) -> bool:
         return self.exe is not None and Path(self.exe).exists()
 
-    def command(self, netlist: Path, ascii_raw: bool = False, solver: str | None = None,
-                include_dir: Path | None = None) -> list[str]:
+    def command(self, netlist: Path, ascii_raw: bool = False, solver: str | None = None) -> list[str]:
         raw, log = self.outputs(netlist)
         return [str(self.exe), "-b", "-r", str(raw), "-o", str(log), str(netlist)]
 
@@ -338,16 +335,24 @@ def run(
     ascii_raw: bool = False,
     backend: LTspice | NgSpice | None = None,
     solver: str | None = None,
-    include_dir: str | Path | None = None,
+    lib_dirs: list[str | Path] | None = None,
 ) -> RunResult:
-    """Run one netlist (a path, or text written to workdir/name.net) and collect its outputs."""
+    """Run a netlist (path, or text written to workdir/name.net); lib_dirs makes .lib names found there absolute."""
     backend = backend or get_backend("ltspice")
+    if lib_dirs:
+        src = netlist
+        if _is_path(netlist):
+            src_path = Path(netlist).resolve()
+            src = read_netlist_text(src_path)
+            workdir = workdir or src_path.parent / "abs_libs"
+            name = src_path.stem
+        netlist = absolutize_libs(str(src), [Path(d) for d in lib_dirs])
     path = _as_netlist_path(netlist, workdir, name)
     raw_path, log_path = backend.outputs(path)
     for stale in (raw_path, log_path, path.with_name(path.stem + ".op.raw")):
         if stale.exists():
             stale.unlink()
-    cmd = backend.command(path, ascii_raw, solver, Path(include_dir) if include_dir else None)
+    cmd = backend.command(path, ascii_raw, solver)
     t0 = time.monotonic()
     timed_out = False
     returncode: int | None
@@ -401,9 +406,13 @@ def schematic_to_netlist(asc_path: str | Path, timeout_s: float = 60.0, exe: str
     return net
 
 
+def _is_path(netlist: str | Path) -> bool:
+    return isinstance(netlist, Path) or ("\n" not in str(netlist) and Path(str(netlist)).suffix.lower() in
+                                         (".net", ".cir", ".sp", ".spi", ".spice", ".ckt"))
+
+
 def _as_netlist_path(netlist: str | Path, workdir: str | Path | None, name: str) -> Path:
-    if isinstance(netlist, Path) or ("\n" not in str(netlist) and Path(str(netlist)).suffix.lower() in
-                                     (".net", ".cir", ".sp", ".spi", ".spice", ".ckt")):
+    if _is_path(netlist):
         path = Path(netlist).resolve()
         if not path.exists():
             raise FileNotFoundError(path)

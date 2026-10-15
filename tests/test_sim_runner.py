@@ -87,9 +87,21 @@ def test_ngspice_command_shape(tmp_path):
 
 def test_ltspice_command_flags(tmp_path):
     lt = LTspice(exe="LTspice.exe")
-    cmd = lt.command(tmp_path / "d.net", ascii_raw=True, solver="alt", include_dir=tmp_path)
-    assert cmd[1:4] == ["-b", "-ascii", "-alt"]
-    assert cmd[4] == f"-I{tmp_path}" and cmd[-1].endswith("d.net")
+    cmd = lt.command(tmp_path / "d.net", ascii_raw=True, solver="alt")
+    assert cmd[1:4] == ["-b", "-ascii", "-alt"] and cmd[-1].endswith("d.net")
+
+
+@needs_ltspice
+def test_run_with_lib_dirs_makes_lib_paths_absolute(tmp_path):
+    libdir = tmp_path / "my libs"
+    libdir.mkdir()
+    (libdir / "mydiv.lib").write_text(".subckt DIV a b g\nR1 a b 1k\nR2 b g 1k\n.ends\n")
+    text = "* lib dirs\nV1 a 0 2\nX1 a b 0 DIV\n.lib mydiv.lib\n.op\n"
+    assert not run(text, workdir=tmp_path, name="plain").ok
+    res = run(text, workdir=tmp_path, name="abs", lib_dirs=[libdir])
+    assert res.ok, res.summary()
+    assert res.raw()["V(b)"][0] == pytest.approx(1.0)
+    assert any(f.endswith("mydiv.lib") for f in res.log.files_loaded)
 
 
 @needs_ltspice
@@ -118,6 +130,16 @@ def test_run_surfaces_missing_library(tmp_path):
     res = run("* missing lib\nV1 in 0 1\nX1 in 0 FOO\n.lib nosuchfile.lib\n.op\n", workdir=tmp_path, name="ml")
     assert not res.ok
     assert any("File not found" in e for e in res.log.errors)
+
+
+@pytest.mark.skipif(not NgSpice().available(), reason="ngspice not installed")
+def test_ngspice_rc_transient(tmp_path):
+    text = "* rc\nV1 in 0 PULSE(0 1 1u 10n 10n 500u 1m)\nR1 in out 1k\nC1 out 0 10n\n.tran 50n 100u\n.end\n"
+    res = run(text, workdir=tmp_path, name="rc", backend=NgSpice())
+    assert res.ok, res.summary()
+    raw = res.raw()
+    t, v = raw.axis(), raw["V(out)"]
+    assert v[t > 90e-6].min() == pytest.approx(1.0, abs=0.01)
 
 
 @needs_ltspice
