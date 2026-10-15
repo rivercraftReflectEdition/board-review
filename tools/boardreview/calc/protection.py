@@ -55,11 +55,15 @@ def tvs_clamp(
     clamp_points: list[tuple[float, float]],
     margin_frac: float = 0.10,
     refs: tuple[str, ...] = (),
+    i_pp_max_a: float | None = None,
+    p_pp_max_w: float | None = None,
 ) -> Result:
-    """Clamp voltage at the expected surge current, interpolated from (Ipp, Vc) points, against the downstream abs max."""
+    """Clamp voltage at the surge current from (Ipp, Vc) points against the downstream abs max and the pulse rating."""
     pts = sorted(clamp_points)
     i = np.array([p[0] for p in pts])
     v = np.array([p[1] for p in pts])
+    i_char = float(i[-1])
+    beyond = i_surge_a > i_char
     if len(pts) == 1:
         vc, r_dyn = float(v[0]), float("nan")
     else:
@@ -68,26 +72,59 @@ def tvs_clamp(
         # Below the first point keep the first Vc rather than extrapolating down.
         vc = float(v[k - 1] + r_dyn * (max(i_surge_a, i[0]) - i[k - 1]))
     margin = v_abs_max_v - vc
-    if margin < 0:
+    missing = []
+    if i_pp_max_a is None and p_pp_max_w is None:
+        missing.append("the rated peak pulse current or power for this pulse shape")
+    if beyond:
+        missing.append(f"Vc at {i_surge_a:g} A or above (characterized to {i_char:g} A)")
+    if i_pp_max_a is not None and i_surge_a > i_pp_max_a:
+        verdict, reason = Verdict.FAIL, f"surge {i_surge_a:g} A above the rated {i_pp_max_a:g} A peak pulse current"
+    elif p_pp_max_w is not None and vc * i_surge_a > p_pp_max_w:
+        verdict = Verdict.FAIL
+        reason = f"surge {vc * i_surge_a:.4g} W (Vc*I) above the rated {p_pp_max_w:g} W peak pulse power"
+    elif beyond and float(v[-1]) > v_abs_max_v:
+        verdict = Verdict.FAIL
+        reason = f"Vc is already {v[-1]:g} V at {i_char:g} A, above the downstream abs max {v_abs_max_v:g} V"
+    elif not beyond and margin < 0:
         verdict, reason = Verdict.FAIL, f"clamps at {vc:.2f} V, above the downstream abs max {v_abs_max_v:g} V"
+    elif missing:
+        verdict = Verdict.UNKNOWN
+        reason = f"clamp {vc:.2f} V{' extrapolated' if beyond else ''} against {v_abs_max_v:g} V; give {' and '.join(missing)}"
     elif margin < margin_frac * v_abs_max_v:
         verdict, reason = Verdict.MARGINAL, f"clamps at {vc:.2f} V, within {margin_frac:.0%} of {v_abs_max_v:g} V"
     else:
         verdict, reason = Verdict.PASS, f"clamps at {vc:.2f} V, {margin:.2f} V under abs max"
+    inputs = {
+        "v_abs_max": Quantity(v_abs_max_v, "V"),
+        "i_surge": Quantity(i_surge_a, "A"),
+        **{f"vc_at_{p[0]:g}A": Quantity(p[1], "V") for p in pts},
+    }
+    if i_pp_max_a is not None:
+        inputs["i_pp_max"] = Quantity(i_pp_max_a, "A")
+    if p_pp_max_w is not None:
+        inputs["p_pp_max"] = Quantity(p_pp_max_w, "W")
     return Result(
         name="TVS clamp vs downstream abs max",
-        formula="Vc(I) linear between datasheet (Ipp, Vc) points, extrapolated with the last slope; margin = Vabsmax - Vc",
-        inputs={
-            "v_abs_max": Quantity(v_abs_max_v, "V"),
-            "i_surge": Quantity(i_surge_a, "A"),
-            **{f"vc_at_{p[0]:g}A": Quantity(p[1], "V") for p in pts},
+        formula=(
+            "Vc(I) linear between datasheet (Ipp, Vc) points, Vc(first point) below them; margin = Vabsmax - Vc; "
+            "I <= IPP(max); Vc*I <= PPP(max)"
+        ),
+        inputs=inputs,
+        outputs={
+            "v_clamp": Quantity(vc, "V", "extrapolated with the last slope" if beyond else ""),
+            "r_dyn": Quantity(r_dyn, "ohm"),
+            "margin": Quantity(margin, "V"),
+            "p_pulse": Quantity(vc * i_surge_a, "W", "Vc*I at the surge peak"),
         },
-        outputs={"v_clamp": Quantity(vc, "V"), "r_dyn": Quantity(r_dyn, "ohm"), "margin": Quantity(margin, "V")},
         verdict=verdict,
         reason=reason,
-        refs=("TVS data sheet: VC at IPP for the stated pulse; pass the part, revision and page in refs",) + tuple(refs),
+        refs=(
+            "TVS data sheet: VC at IPP and the IPP or PPP rating for the stated pulse; pass the part, revision and page in refs",
+        )
+        + tuple(refs),
         assumptions=(
             "trace inductance between TVS and the protected pin adds L*di/dt on top of Vc",
-            "clamp points are for the same pulse shape as the expected surge",
+            "clamp points and ratings are for the same pulse shape as the expected surge",
+            "Vc rises with current, so Vc at the first point bounds lower currents",
         ),
     )
