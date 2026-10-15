@@ -41,7 +41,7 @@ positives, known-good hits and duplicates.
 
 ## Matching rule
 
-A review finding R matches an expected finding E when all three hold:
+A review finding R matches an expected finding E when all four hold:
 
 1. **Block.** R's block equals E's block or one of E's `alt_blocks`, after aliases (`buck`,
    `phy`, `tvs` and so on map to checklist names).
@@ -49,14 +49,22 @@ A review finding R matches an expected finding E when all three hold:
    E's. Designator ranges such as `R14-R22` expand. Net names compare without case, with `_` and
    spaces read as `-`, and with any hierarchy path dropped. An E with no parts and no nets
    matches any location.
-3. **Failure mode.** R's `failure_mode` equals E's or one of E's `alt_failure_modes`, after
-   synonyms (`oscillation` reads as `loop_instability`); or R's text (title, claim, mechanism,
-   fix, instance, check) hits at least half of E's `keywords`, rounded up, minimum one. Each
-   keyword is a group of `|` alternatives. An alternative hits when it starts a word in the text,
-   or, if it has six or more characters, when it appears with spaces removed.
+3. **Mechanism.** R's text hits at least half of E's `keywords`, rounded up, minimum one. The
+   text is R's title, claim, mechanism, fix, instance and check, plus the reason of every
+   calculation whose verdict is `fail` or `marginal`. Each keyword is a group of `|`
+   alternatives. An alternative hits when it starts a word in the text, or, if it has six or
+   more characters, when it appears with spaces removed. Every expected item needs keywords;
+   the scorer reports an item without them as an expected-file error. A matching
+   `failure_mode` tag alone is not a match: "This circuit needs review" tagged
+   `loop_instability` names no mechanism.
+4. **Polarity.** R does not say the circuit is fine. It fails this when every calculation it
+   carries (ignoring `info`) returns `pass`, or when its title or claim says the part is stable,
+   fine, OK, correct, adequate, sufficient, safe or within limits, says it passes, or says there
+   is no issue, unless the same text qualifies that with but, however, except, although, though,
+   yet, until, unless or only. "U2 is stable" never matches a loop finding.
 
 Pairing is one to one. Candidate pairs are ranked by location overlap plus keyword hits plus 2
-for a failure-mode tag match, best first.
+for a failure-mode tag match, best first. The tag still ranks pairs; it no longer decides them.
 
 Counting:
 - True positive: an expected finding paired with a review finding. Recall = TP / expected.

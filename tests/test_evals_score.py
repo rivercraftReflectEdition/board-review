@@ -59,15 +59,19 @@ def test_keyword_rule_word_start_alternatives_and_compounds():
     assert score.keywords_needed(["a", "b", "c"]) == 2
 
 
-def test_match_needs_block_location_and_failure_mode():
-    exp = {"block": "buck_regulator", "parts": ["U2"], "failure_mode": "loop_instability"}
-    assert score.evaluate(exp, _finding(parts=["U2"]), BLOCKS, MODES)[0]
-    assert not score.evaluate(exp, _finding(parts=["U3"]), BLOCKS, MODES)[0]
-    assert not score.evaluate(exp, _finding(parts=["U2"], block="ldo"), BLOCKS, MODES)[0]
-    assert not score.evaluate(exp, _finding(parts=["U2"], failure_mode="dropout"), BLOCKS, MODES)[0]
+LOOP = {"block": "buck_regulator", "failure_mode": "loop_instability", "keywords": ["oscillat|unstable|phase margin"]}
+OSC = "The loop oscillates at light load."
 
 
-def test_keywords_rescue_a_different_failure_tag():
+def test_match_needs_block_location_and_mechanism():
+    exp = dict(LOOP, parts=["U2"])
+    assert score.evaluate(exp, _finding(parts=["U2"], claim=OSC), BLOCKS, MODES)[0]
+    assert not score.evaluate(exp, _finding(parts=["U3"], claim=OSC), BLOCKS, MODES)[0]
+    assert not score.evaluate(exp, _finding(parts=["U2"], block="ldo", claim=OSC), BLOCKS, MODES)[0]
+    assert not score.evaluate(exp, _finding(parts=["U2"]), BLOCKS, MODES)[0]
+
+
+def test_keywords_match_across_failure_tags():
     exp = {"block": "straps_and_boot_pins", "alt_blocks": ["ethernet_phy"], "parts": ["R40-R41"],
            "failure_mode": "strap_conflict", "keywords": ["strap", "both|mid level", "latch"]}
     rev = _finding(block="ethernet_phy", parts=["R41"], failure_mode="level_mismatch",
@@ -78,21 +82,59 @@ def test_keywords_rescue_a_different_failure_tag():
     assert not score.evaluate(exp, rev_one_hit, BLOCKS, MODES)[0]
 
 
-def test_expected_without_location_matches_on_block_and_mode():
-    exp = {"block": "thermal", "failure_mode": "thermal_overstress"}
-    assert score.evaluate(exp, _finding(block="thermal", failure_mode="thermal_overstress"), BLOCKS, MODES)[0]
+def _example_expected(eid):
+    return next(e for e in score.load_json(EVALS / "example" / "expected.json")["findings"] if e["id"] == eid)
+
+
+def test_tag_alone_does_not_match_a_vague_finding():
+    vague = _finding(parts=["U2"], title="This circuit needs review", claim="This circuit needs review.",
+                     verification={"status": "PENDING"})
+    assert score.validate(vague, SCHEMA) == []
+    assert not score.evaluate(_example_expected("E1"), vague, BLOCKS, MODES)[0]
+
+
+def test_finding_that_asserts_a_pass_does_not_match():
+    e1 = _example_expected("E1")
+    stable = _finding(parts=["U2"], title="U2 is stable",
+                      claim="U2 is stable: the example compensation gives 60 degrees of phase margin.")
+    assert not score.evaluate(e1, stable, BLOCKS, MODES)[0]
+    calc = {"calculator": "calc.loop", "formula": "PM = 180 + arg(T(fc))", "inputs": {},
+            "outputs": {"pm": {"value": 62.0, "unit": "deg"}}, "verdict": "pass"}
+    by_calc = _finding(parts=["U2"], title="U2 loop margin with the example compensation",
+                       claim="Phase margin 62 degrees with the datasheet example compensation.", calculations=[calc])
+    assert not score.evaluate(e1, by_calc, BLOCKS, MODES)[0]
+    qualified = _finding(parts=["U2"], title="U2 is stable at full load but oscillates at light load",
+                         claim="Outside the example envelope the internal compensation leaves no phase margin.")
+    assert score.evaluate(e1, qualified, BLOCKS, MODES)[0]
+
+
+def test_failing_calculation_reason_counts_as_mechanism():
+    e1 = _example_expected("E1")
+    calc = {"calculator": "calc.loop", "formula": "PM = 180 + arg(T(fc))", "inputs": {},
+            "outputs": {"pm": {"value": 12.0, "unit": "deg"}}, "verdict": "fail",
+            "reason": "phase margin 12 degrees with L and COUT outside the example envelope"}
+    f = _finding(parts=["U2"], title="U2 loop", claim="See the loop calculation below.", calculations=[calc])
+    assert score.evaluate(e1, f, BLOCKS, MODES)[0]
+    calc["verdict"] = "info"
+    assert not score.evaluate(e1, f, BLOCKS, MODES)[0]
+
+
+def test_expected_without_location_matches_on_block_and_mechanism():
+    exp = {"block": "thermal", "failure_mode": "thermal_overstress", "keywords": ["junction|overheat"]}
+    f = _finding(block="thermal", failure_mode="thermal_overstress", claim="Junction reaches 140 C at 85 C ambient.")
+    assert score.evaluate(exp, f, BLOCKS, MODES)[0]
 
 
 def test_one_to_one_pairing_duplicates_and_known_good():
     expected = {
         "board": "t",
-        "findings": [{"id": "E1", "block": "buck_regulator", "parts": ["U2", "L2"], "failure_mode": "loop_instability"}],
+        "findings": [dict(LOOP, id="E1", parts=["U2", "L2"])],
         "known_good": [{"id": "K1", "block": "clocks_crystals", "parts": ["R5"], "failure_mode": "other",
                         "keywords": ["ground"]}],
     }
     review = [
-        _finding(id="A", parts=["U2"]),
-        _finding(id="B", parts=["U2", "L2"]),
+        _finding(id="A", parts=["U2"], claim=OSC),
+        _finding(id="B", parts=["U2", "L2"], claim=OSC),
         _finding(id="C", block="clocks_crystals", parts=["R5"], failure_mode="open_net", title="OSC_OUT to ground"),
         _finding(id="D", block="ldo", parts=["U3"], failure_mode="dropout"),
     ]
@@ -103,9 +145,14 @@ def test_one_to_one_pairing_duplicates_and_known_good():
     assert (r["tp"], r["fp"], r["recall"], r["precision"]) == (1, 2, 1.0, pytest.approx(1 / 3))
 
 
+DROPOUT = {"id": "E1", "title": "x", "block": "ldo", "parts": ["U3"], "failure_mode": "dropout", "keywords": ["dropout"]}
+HEADROOM = "U3 is in dropout at the 3.0 V input minimum."
+
+
 def test_refuted_findings_excluded_unless_asked():
-    expected = {"board": "t", "findings": [{"id": "E1", "block": "ldo", "parts": ["U3"], "failure_mode": "dropout"}]}
-    review = [_finding(block="ldo", parts=["U3"], failure_mode="dropout", verification={"status": "WRONG"})]
+    expected = {"board": "t", "findings": [DROPOUT]}
+    review = [_finding(block="ldo", parts=["U3"], failure_mode="dropout", claim=HEADROOM,
+                       verification={"status": "WRONG"})]
     assert score.score_board(expected, review, SCHEMA)["tp"] == 0
     assert score.score_board(expected, review, SCHEMA, include_refuted=True)["tp"] == 1
 
@@ -113,7 +160,7 @@ def test_refuted_findings_excluded_unless_asked():
 def test_example_board_scores():
     r = score.score_board(score.load_json(EVALS / "example" / "expected.json"),
                           score.review_list(score.load_json(EVALS / "example" / "review.json")), SCHEMA)
-    assert (r["tp"], r["fp"], r["duplicates"], r["refuted_excluded"]) == (3, 3, 1, 1)
+    assert (r["tp"], r["fp"], r["duplicates"], r["refuted_excluded"]) == (3, 4, 0, 1)
     assert {m["id"] for m in r["misses"]} == {"E2", "E5", "E6"}
     assert r["known_good_hits"] == [{"review": "R7", "known_good": "K1"}]
     assert r["recall_by_severity"] == {"blocker": [3, 3], "major": [0, 3]}
@@ -123,7 +170,7 @@ def test_example_board_scores():
 def test_manifest_totals_split_and_bug_classes(tmp_path):
     result = score.score_manifest(EVALS / "manifest.json", schema=SCHEMA)
     dev, held = result["overall"]["dev"], result["overall"]["held-out"]
-    assert (dev["tp"], dev["expected"], dev["fp"]) == (8, 13, 6)
+    assert (dev["tp"], dev["expected"], dev["fp"]) == (8, 13, 7)
     assert (held["tp"], held["expected"], held["fp"]) == (1, 2, 1)
     classes = result["detected_by_bug_class"]["dev"]
     assert classes["bead_cap_resonance_near_fsw"] == [0, 1]
@@ -141,10 +188,9 @@ def test_reviews_dir_overrides_and_missing_files_are_skipped(tmp_path):
         {"name": "b", "split": "held-out", "expected": "missing.json"},
     ]}
     (tmp_path / "manifest.json").write_text(json.dumps(manifest))
-    (tmp_path / "a.json").write_text(json.dumps({"board": "a", "findings": [
-        {"id": "E1", "title": "x", "block": "ldo", "parts": ["U3"], "failure_mode": "dropout"}]}))
+    (tmp_path / "a.json").write_text(json.dumps({"board": "a", "findings": [DROPOUT]}))
     (tmp_path / "boards" / "a.json").write_text(json.dumps(
-        [_finding(block="ldo", parts=["U3"], failure_mode="dropout")]))
+        [_finding(block="ldo", parts=["U3"], failure_mode="dropout", claim=HEADROOM)]))
     result = score.score_manifest(tmp_path / "manifest.json", tmp_path / "boards", schema=SCHEMA)
     assert result["overall"]["dev"]["recall"] == 1.0
     assert result["skipped"] == [{"board": "b", "split": "held-out", "reason": "expected file not found (missing.json)"}]
@@ -169,3 +215,9 @@ def test_cli_single_board(capsys):
                      "--review", str(EVALS / "example" / "review.json"), "--json"])
     assert rc == 0
     assert json.loads(capsys.readouterr().out)["tp"] == 3
+
+
+def test_expected_items_need_keywords():
+    expected = {"board": "t", "findings": [{"id": "E1", "title": "x", "block": "ldo", "failure_mode": "dropout"}]}
+    r = score.score_board(expected, [], SCHEMA)
+    assert any("missing keywords" in e for e in r["expected_errors"])

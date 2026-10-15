@@ -11,6 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 FINDING_SCHEMA = ROOT / "skill" / "schemas" / "finding.schema.json"
+EXPECTED_SCHEMA = Path(__file__).resolve().parent / "expected.schema.json"
 BUG_CLASSES = Path(__file__).resolve().parent / "bug_classes.json"
 TEXT_FIELDS = ("title", "claim", "mechanism", "fix", "instance", "check")
 SPLITS = ("dev", "held-out")
@@ -75,6 +76,16 @@ MODE_SYNONYMS = {
 }
 
 REFDES_RANGE = re.compile(r"^([A-Z]+)(\d+)\s*-\s*(?:\1)?(\d+)$")
+
+PASS_PHRASE = re.compile(
+    r"\b(?:is|are|was|were|stays|remains|looks|seems|appears|be) (?:stable|fine|ok|okay|correct|adequate"
+    r"|sufficient|acceptable|safe|good|compliant|in spec|within (?:spec|limits|range|rating))\b"
+    r"|\b(?:passes|passed)\b(?! (?:through|into|to|from|via|across|over|along|around)\b)"
+    r"|\bno (?:issue|problem|concern|fault|violation)s?\b|\bno risk of\b|\bnone needed\b"
+    r"|\bno (?:action|change)s? (?:needed|required)\b|\bnot an? (?:issue|problem|concern|bug|fault)\b")
+NEGATED = re.compile(r"\b(?:not|never|t)(?: \w+)? $")
+QUALIFIER = re.compile(r"\b(?:but|however|except|although|though|yet|until|unless|only)\b")
+FAILING_VERDICTS = ("fail", "marginal")
 
 
 def load_json(path: Path):
@@ -201,7 +212,21 @@ def norm_text(s: str) -> str:
 
 
 def finding_text(f: dict) -> str:
-    return norm_text(" ".join(str(f.get(k, "")) for k in TEXT_FIELDS))
+    """Text a mechanism can be read from: the finding's prose plus the reason of each failing calculation."""
+    reasons = [str(c.get("reason", "")) for c in f.get("calculations", [])
+               if c.get("verdict") in FAILING_VERDICTS]
+    return norm_text(" ".join([str(f.get(k, "")) for k in TEXT_FIELDS] + reasons))
+
+
+def asserts_pass(f: dict) -> bool:
+    """True when the finding says the circuit is fine: an unqualified pass phrase, or only passing calculations."""
+    verdicts = [c.get("verdict") for c in f.get("calculations", []) if c.get("verdict") != "info"]
+    if verdicts and all(v == "pass" for v in verdicts):
+        return True
+    text = norm_text(f"{f.get('title', '')} {f.get('claim', '')}")
+    if QUALIFIER.search(text):
+        return False
+    return any(not NEGATED.search(text[:m.start()]) for m in PASS_PHRASE.finditer(text))
 
 
 def keyword_hit(alternatives: str, text: str) -> bool:
@@ -224,7 +249,7 @@ def keywords_needed(keywords: list[str]) -> int:
 
 
 def evaluate(exp: dict, rev: dict, blocks: set[str], modes: set[str]) -> tuple[bool, float]:
-    """Match rule: block, location and failure mode must all agree; returns (match, score)."""
+    """Match rule: block, location and stated mechanism must agree, and the finding must not assert a pass."""
     rb = canon_block(rev.get("block", ""), blocks)
     ok_block = rb == canon_block(exp.get("block", ""), blocks) or rb in {
         canon_block(b, blocks) for b in exp.get("alt_blocks", [])}
@@ -237,8 +262,8 @@ def evaluate(exp: dict, rev: dict, blocks: set[str], modes: set[str]) -> tuple[b
     kws = exp.get("keywords", [])
     text = finding_text(rev)
     hits = sum(keyword_hit(k, text) for k in kws)
-    ok_kw = bool(kws) and hits >= keywords_needed(kws)
-    ok = ok_block and ok_loc and (ok_tag or ok_kw)
+    ok_mech = bool(kws) and hits >= keywords_needed(kws)
+    ok = ok_block and ok_loc and ok_mech and not asserts_pass(rev)
     return ok, overlap + hits + (2 if ok_tag else 0)
 
 
@@ -294,6 +319,7 @@ def score_board(expected: dict, review: list[dict], schema: dict,
             row[0] += ei in e_used
             row[1] += 1
     schema_errors = [f"{r.get('id', '?')}: {msg}" for r in review for msg in validate(r, schema)]
+    expected_errors = validate(expected, load_json(EXPECTED_SCHEMA))
     tp = len(matches)
     return {
         "board": expected.get("board", ""),
@@ -314,6 +340,7 @@ def score_board(expected: dict, review: list[dict], schema: dict,
         "known_good_hits": [{"review": r.get("id"), "known_good": g.get("id")} for r, g in good_hits],
         "duplicate_ids": [r.get("id") for r in dups],
         "schema_errors": schema_errors,
+        "expected_errors": expected_errors,
     }
 
 
@@ -395,6 +422,8 @@ def format_board(b: dict, reveal: bool) -> list[str]:
             f"{k} {h}/{n}" for k, (h, n) in sorted(b["recall_by_severity"].items())))
     if b["schema_errors"]:
         lines.append(f"schema errors in review: {len(b['schema_errors'])}")
+    if b["expected_errors"]:
+        lines.append(f"schema errors in expected file: {len(b['expected_errors'])}")
     if b.get("split") == "held-out" and not reveal:
         lines.append("details hidden for a held-out board (use --reveal-heldout after the checklists are frozen)")
         return lines
@@ -405,6 +434,7 @@ def format_board(b: dict, reveal: bool) -> list[str]:
     lines += [f"DUPLICATE {d}" for d in b["duplicate_ids"]]
     lines += [f"match {m['expected']} <- {m['review']}" for m in b["matches"]]
     lines += [f"schema: {e}" for e in b["schema_errors"]]
+    lines += [f"expected file: {e}" for e in b["expected_errors"]]
     return lines
 
 
