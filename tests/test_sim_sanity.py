@@ -7,7 +7,7 @@ import pytest
 from boardreview.calc.base import Verdict
 from boardreview.sim import sanity
 from boardreview.sim.netlist import parse_netlist, parse_value
-from boardreview.sim.runner import LTspice, run
+from boardreview.sim.runner import LTspice, run, schematic_to_netlist
 
 FIXTURES = Path(__file__).parent / "fixtures" / "sim"
 LOCAL = Path(__file__).parent / "local" / "ltc3633"
@@ -147,7 +147,29 @@ def test_real_ltc3633_netlists():
     floating = {i.message.split(" is on")[0] for i in hand.errors}
     assert floating == {"XU9 pin 9 (VFB2)", "XU9 pin 12 (Von2)", "XU9 pin 13 (SW2), pin 14 (SW2 dup)",
                         "XU9 pin 17 (Boost2)"}
-    if (LOCAL / "FCM_rt_open.net").exists():
-        rt = sanity.check_netlist(LOCAL / "FCM_rt_open.net", allow_open=allow)
-        assert {i.where for i in rt.errors} == {"X§U1", "R47"}
-        assert sanity.check_netlist(LOCAL / "FCM_ok.net", allow_open=allow).ok
+
+
+@needs_ltspice
+def test_schematic_wire_short_of_pin_is_caught(tmp_path):
+    shutil.copy(FIXTURES / "short_wire.asc", tmp_path / "short_wire.asc")
+    rep = sanity.check_netlist(schematic_to_netlist(tmp_path / "short_wire.asc"))
+    assert [i.where for i in rep.errors] == ["C1"]
+
+
+@needs_ltspice
+@pytest.mark.skipif(not (LOCAL / "NEW_3V3_6p8uH_FCM.asc").exists(), reason="local LTC3633 schematic not present")
+def test_real_rt_wire_short_of_pin_runs_at_747_khz(tmp_path):
+    # 2026-10-06: the RT wire in NEW_3V3_6p8uH_FCM.asc stopped 16 units short of the Rt pin; the model ran at 747 kHz
+    allow = ["Pgood1", "Pgood2", "Track/SS1", "Track/SS2"]
+    asc = (LOCAL / "NEW_3V3_6p8uH_FCM.asc").read_bytes()
+    (tmp_path / "ok.asc").write_bytes(asc)
+    (tmp_path / "rt_open.asc").write_bytes(asc.replace(b"WIRE 0 784 0 736", b"WIRE 0 768 0 736"))
+    ok_net, open_net = schematic_to_netlist(tmp_path / "ok.asc"), schematic_to_netlist(tmp_path / "rt_open.asc")
+    assert sanity.check_netlist(ok_net, allow_open=allow).ok
+    static = sanity.check_netlist(open_net, allow_open=allow)
+    assert {i.where for i in static.errors} == {"X§U1", "R47"}
+    text = open_net.read_text(encoding="utf-8").replace(".tran 0 800u 0 20n startup", ".tran 0 600u 0 20n startup")
+    open_net.write_text(text, encoding="utf-8")
+    fsw = sanity.check_run(run(open_net), "SW1", 1.187e6, t_start_s=500e-6).results[0]
+    assert fsw.verdict is Verdict.FAIL
+    assert fsw.outputs["f_sw"].value == pytest.approx(747e3, rel=0.01)
