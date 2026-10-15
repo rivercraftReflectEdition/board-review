@@ -12,7 +12,16 @@ from boardreview.calc.base import Quantity, Result, Verdict
 from boardreview.sim import measure
 from boardreview.sim.netlist import GROUND, Element, norm_name, parse_netlist, read_netlist_text
 from boardreview.sim.runner import RunResult, run, run_many
-from boardreview.sim.sanity import Issue, SanityReport, check_netlist, check_run, injection_slew_check
+from boardreview.sim.sanity import (
+    Issue,
+    SanityReport,
+    check_netlist,
+    check_run,
+    injection_slew_check,
+    trusted_verdict,
+    verdict_line,
+    worst,
+)
 
 ANALYSES = (".tran", ".ac", ".op", ".dc", ".noise", ".tf", ".four", ".fra", ".end", ".backanno", ".step", ".meas",
             ".measure", ".save", ".wave")
@@ -271,20 +280,37 @@ class LoopGainResult:
         return measure.margins_result(self.margins, pm_min_deg, gm_min_db,
                                       f"{len(self.points)} injection points, transient")
 
+    @property
+    def results(self) -> list[Result]:
+        """Measured results: the loop margins, or why there are none."""
+        mr = self.margins_result()
+        if mr is not None:
+            return [mr]
+        return [Result(name="loop margins", formula="needs T at two or more frequencies", inputs={}, outputs={},
+                       verdict=Verdict.UNKNOWN, reason=f"{len(self.points)} measured point(s)")]
+
+    @property
+    def measured(self) -> Verdict:
+        return worst((r.verdict for r in self.results), default=Verdict.UNKNOWN)
+
+    @property
+    def verdict(self) -> Verdict:
+        return trusted_verdict(self.report.verdict, self.measured)
+
     def to_markdown(self) -> str:
         lines = ["| f (Hz) | abs T (dB) | angle T (deg) | V(b) amplitude (mV) | fsw (kHz) |", "|---|---|---|---|---|"]
         for p in self.points:
             fsw = f"{p.fsw_hz / 1e3:.1f}" if p.fsw_hz else "-"
             lines.append(f"| {p.f_hz:.4g} | {p.mag_db:.1f} | {p.phase_deg:.0f} | {abs(p.vb) * 1e3:.3g} | {fsw} |")
-        mr = self.margins_result()
-        if mr is not None:
-            lines += ["", mr.to_markdown()]
-            fc = self.margins.crossover_hz
-            if fc is not None:
-                below = max((p.f_hz for p in self.points if p.f_hz <= fc), default=None)
-                above = min((p.f_hz for p in self.points if p.f_hz >= fc), default=None)
+        for r in self.results:
+            lines += ["", r.to_markdown()]
+        fc = self.margins.crossover_hz if self.margins is not None else None
+        if fc is not None:
+            below = max((p.f_hz for p in self.points if p.f_hz <= fc), default=None)
+            above = min((p.f_hz for p in self.points if p.f_hz >= fc), default=None)
+            if below is not None and above is not None:
                 lines.append(f"- f_c interpolated between measured points at {below:.4g} and {above:.4g} Hz")
-        lines += ["", self.report.to_markdown()]
+        lines += ["", self.report.to_markdown(), "", verdict_line(self.report.verdict, self.measured)]
         return "\n".join(lines)
 
 
@@ -319,7 +345,7 @@ def run_loop_gain(setup: LoopGainSetup, freqs: list[float], workdir: str | Path,
                   **run_kwargs: object) -> LoopGainResult:
     """Checked transients per frequency, margins, optional refinement at crossings and a linearity rerun."""
     report = setup.check(freqs)
-    if not report.ok and not force:
+    if report.failed and not force:
         raise ValueError("fix the setup before running (or pass force=True):\n" + report.to_markdown())
     points: list[LoopGainPoint] = []
     runs: list[RunResult] = []
@@ -434,6 +460,8 @@ class LoadStepSetup:
     tran_flags: str = "startup"
     extra: str = ""
     allow_open: tuple[str, ...] = ()
+    dev_max_v: float | None = None
+    settle_max_s: float | None = None
 
     def netlist(self) -> str:
         pts = [(0.0, self.i_from_a), (self.t_step_s, self.i_from_a), (self.t_step_s + self.edge_s, self.i_to_a)]
@@ -453,27 +481,45 @@ class LoadStepSetup:
         ])
 
 
+def step_results(sr: measure.StepResponse, dev_max_v: float | None = None,
+                 settle_max_s: float | None = None) -> list[Result]:
+    """Measured results of one edge: peak deviation, settling and ring-down."""
+    return [measure.deviation_result(sr, dev_max_v), measure.settling_result(sr, settle_max_s),
+            measure.ring_result(sr)]
+
+
 @dataclass
 class LoadStepResult:
     run: RunResult
     report: SanityReport
     steps: list[measure.StepResponse]
+    results: list[Result] = field(default_factory=list)
+
+    @property
+    def measured(self) -> Verdict:
+        return worst((r.verdict for r in self.results), default=Verdict.UNKNOWN)
+
+    @property
+    def verdict(self) -> Verdict:
+        return trusted_verdict(self.report.verdict, self.measured)
 
     def to_markdown(self) -> str:
         lines = []
+        per_edge = len(self.results) // len(self.steps) if self.steps else 0
         for k, sr in enumerate(self.steps):
             settle = f"settles in {sr.settle_s * 1e6:.1f} us" if sr.settle_s is not None else "not settled in window"
             lines.append(f"**edge {k + 1} at {sr.t_step_s * 1e6:.1f} us**: peak deviation "
                          f"{sr.peak_dev * 1e3:.1f} mV, {settle}")
-            lines.append(measure.ring_result(sr).to_markdown())
-        return "\n".join(lines + ["", self.report.to_markdown()])
+            lines += [r.to_markdown() for r in self.results[k * per_edge:(k + 1) * per_edge]]
+        lines += ["", self.report.to_markdown(), "", verdict_line(self.report.verdict, self.measured)]
+        return "\n".join(lines)
 
 
 def run_load_step(setup: LoadStepSetup, workdir: str | Path, name: str = "load_step", force: bool = False,
                   **run_kwargs: object) -> LoadStepResult:
     """Run the step, check the run, and measure each edge after averaging one switching period."""
     report = check_netlist(setup.netlist(), allow_open=setup.allow_open, expected_fsw_hz=setup.fsw_hz)
-    if not report.ok and not force:
+    if report.failed and not force:
         raise ValueError("fix the setup before running (or pass force=True):\n" + report.to_markdown())
     r = run(setup.netlist(), workdir, name, **run_kwargs)
     report.extend(check_run(r, setup.sw_node, setup.fsw_hz, t_start_s=0.5 * setup.t_step_s))
@@ -486,7 +532,8 @@ def run_load_step(setup: LoadStepSetup, workdir: str | Path, name: str = "load_s
         ends = edges[1:] + [t[-1]]
         for t0, t1 in zip(edges, ends):
             steps.append(measure.step_response(t, v, t0, t_end_s=t1, smooth_period_s=smooth))
-    return LoadStepResult(r, report, steps)
+    results = [x for sr in steps for x in step_results(sr, setup.dev_max_v, setup.settle_max_s)]
+    return LoadStepResult(r, report, steps, results)
 
 
 @dataclass
@@ -507,6 +554,7 @@ class StartupSetup:
     max_step_s: float | None = None
     extra: str = ""
     allow_open: tuple[str, ...] = ()
+    overshoot_max_pct: float = 10.0
 
     def netlist(self) -> str:
         body = self.body
@@ -562,13 +610,19 @@ def startup_metrics(t: np.ndarray, vout: np.ndarray, vin: np.ndarray, v_target_v
 
 
 def startup_result(m: Startup, v_target_v: float, overshoot_max_pct: float = 10.0) -> Result:
-    """Start-up verdict: in regulation at the end, no restarts, overshoot within the limit."""
-    if m.t_reg_s is None or m.restarts:
-        verdict = Verdict.FAIL
-        reason = "never settles in the band" if m.t_reg_s is None else f"{m.restarts} restart(s)"
-    elif m.overshoot_pct > overshoot_max_pct or not m.monotonic:
-        verdict = Verdict.MARGINAL
-        reason = f"overshoot {m.overshoot_pct:.0f} percent" + ("" if m.monotonic else ", rise not monotonic")
+    """Start-up verdict: in regulation at the end, no restarts, overshoot within the limit, monotonic rise."""
+    fails = []
+    if m.t_reg_s is None:
+        fails.append("never settles in the band")
+    if m.restarts:
+        fails.append(f"{m.restarts} restart(s): output fell below half of target after reaching 90 percent, hiccup "
+                     "or UVLO cycling")
+    if m.overshoot_pct > overshoot_max_pct:
+        fails.append(f"overshoot {m.overshoot_pct:.0f} percent exceeds {overshoot_max_pct:.0f} percent")
+    if fails:
+        verdict, reason = Verdict.FAIL, "; ".join(fails)
+    elif not m.monotonic:
+        verdict, reason = Verdict.MARGINAL, "rise not monotonic"
     else:
         verdict, reason = Verdict.PASS, f"in regulation at {m.t_reg_s * 1e6:.0f} us"
     return Result(
@@ -588,37 +642,45 @@ class StartupResult:
     run: RunResult
     report: SanityReport
     metrics: Startup | None
+    results: list[Result] = field(default_factory=list)
+
+    @property
+    def measured(self) -> Verdict:
+        return worst((r.verdict for r in self.results), default=Verdict.UNKNOWN)
+
+    @property
+    def verdict(self) -> Verdict:
+        return trusted_verdict(self.report.verdict, self.measured)
 
     def to_markdown(self) -> str:
         m = self.metrics
-        if m is None:
-            return self.report.to_markdown()
-        t_reg = f"{m.t_reg_s * 1e6:.0f} us" if m.t_reg_s is not None else "never in band"
-        return "\n".join([
-            f"**start-up**: regulation at {t_reg}, overshoot {m.overshoot_pct:.1f} percent, restarts {m.restarts}, "
-            f"final {m.final_v:.3f} V, input minimum after ramp {m.vin_min_after_ramp_v:.3f} V, "
-            f"{'monotonic' if m.monotonic else 'NOT monotonic'}",
-            "", self.report.to_markdown()])
+        lines = []
+        if m is not None:
+            t_reg = f"{m.t_reg_s * 1e6:.0f} us" if m.t_reg_s is not None else "never in band"
+            lines.append(f"**start-up**: regulation at {t_reg}, overshoot {m.overshoot_pct:.1f} percent, restarts "
+                         f"{m.restarts}, final {m.final_v:.3f} V, input minimum after ramp "
+                         f"{m.vin_min_after_ramp_v:.3f} V, {'monotonic' if m.monotonic else 'NOT monotonic'}")
+        lines += [r.to_markdown() for r in self.results]
+        lines += ["", self.report.to_markdown(), "", verdict_line(self.report.verdict, self.measured)]
+        return "\n".join(lines)
 
 
 def run_startup(setup: StartupSetup, workdir: str | Path, name: str = "startup", force: bool = False,
                 **run_kwargs: object) -> StartupResult:
     report = check_netlist(setup.netlist(), allow_open=setup.allow_open, expected_fsw_hz=setup.fsw_hz)
-    if not report.ok and not force:
+    if report.failed and not force:
         raise ValueError("fix the setup before running (or pass force=True):\n" + report.to_markdown())
     r = run(setup.netlist(), workdir, name, **run_kwargs)
     report.extend(check_run(r, setup.sw_node, setup.fsw_hz, t_start_s=0.8 * setup.t_stop_s))
     metrics = None
+    results = []
     if r.ok:
         raw = r.raw()
         smooth = 1.0 / setup.fsw_hz if setup.fsw_hz else None
         metrics = startup_metrics(raw.axis(), raw[setup.out_node], raw[setup.in_node], setup.v_target_v,
                                   setup.ramp_s, smooth_period_s=smooth)
-        report.results.append(startup_result(metrics, setup.v_target_v))
-        if metrics.restarts:
-            report.issues.append(Issue("startup", "warning", f"output fell below half of target {metrics.restarts} "
-                                       "time(s) after reaching 90 percent: hiccup or UVLO cycling"))
-    return StartupResult(r, report, metrics)
+        results.append(startup_result(metrics, setup.v_target_v, setup.overshoot_max_pct))
+    return StartupResult(r, report, metrics, results)
 
 
 @dataclass(frozen=True)

@@ -305,12 +305,11 @@ def step_response(t: np.ndarray, y: np.ndarray, t_step_s: float, t_end_s: float 
         overshoot = float(max(0.0, np.max(np.sign(step) * e)) / abs(step) * 100.0)
     band_v = band if band is not None else (0.02 * abs(step) if overshoot is not None else 0.1 * peak_abs)
     outside = np.nonzero(np.abs(e) > band_v)[0]
+    settle = None
     if len(outside) == 0:
         settle = 0.0
-    elif outside[-1] < len(e) - 1:
+    elif outside[-1] < len(e) - 1 and t_end - tw[outside[-1] + 1] >= 0.2 * (t_end - t_step_s):
         settle = float(tw[outside[-1] + 1] - t_step_s)
-    else:
-        settle = None
     return StepResponse(
         t_step_s=float(t_step_s), initial=float(initial), final=float(final), peak_dev=float(e[k_peak]),
         t_peak_s=float(tw[k_peak]), overshoot_pct=overshoot, peaks=tuple(peaks), decay_ratio=decay,
@@ -359,6 +358,46 @@ def ring_result(sr: StepResponse, pm_pass_deg: float = 45.0, pm_marginal_deg: fl
         verdict=verdict,
         reason=f"PM estimate {pm:.0f} deg against {pm_pass_deg:.0f} deg",
         assumptions=("the ring is one dominant second-order pair", "PM ~ 100 zeta holds below zeta 0.6"),
+    )
+
+
+def settling_result(sr: StepResponse, settle_max_s: float | None = None) -> Result:
+    """Settling time after a step against an optional limit; still outside the band at the window end fails."""
+    if sr.settle_s is None:
+        verdict = Verdict.FAIL
+        reason = "not inside the band for the last 20 percent of the window: the ring has not decayed (lengthen " \
+                 "the window if it is still decaying)"
+    elif settle_max_s is None:
+        verdict, reason = Verdict.INFO, f"settles in {sr.settle_s * 1e6:.1f} us; no limit given"
+    else:
+        verdict = Verdict.PASS if sr.settle_s <= settle_max_s else Verdict.FAIL
+        reason = f"{sr.settle_s * 1e6:.1f} us against {settle_max_s * 1e6:.1f} us"
+    return Result(
+        name="settling after step",
+        formula="t_settle = last time |V - V_final| > band, after the step",
+        inputs={"band": Quantity(sr.band, "V"),
+                "t_settle_max": Quantity(settle_max_s if settle_max_s is not None else float("nan"), "s")},
+        outputs={"t_settle": Quantity(sr.settle_s if sr.settle_s is not None else float("nan"), "s")},
+        verdict=verdict,
+        reason=reason,
+    )
+
+
+def deviation_result(sr: StepResponse, dev_max_v: float | None = None) -> Result:
+    """Peak deviation from the final value after a step against an optional limit."""
+    peak = abs(sr.peak_dev)
+    if dev_max_v is None:
+        verdict, reason = Verdict.INFO, f"{peak * 1e3:.1f} mV; no limit given"
+    else:
+        verdict = Verdict.PASS if peak <= dev_max_v else Verdict.FAIL
+        reason = f"{peak * 1e3:.1f} mV against {dev_max_v * 1e3:.1f} mV"
+    return Result(
+        name="peak deviation after step",
+        formula="dV = max |V - V_final| after the step",
+        inputs={"dV_max": Quantity(dev_max_v if dev_max_v is not None else float("nan"), "V")},
+        outputs={"dV": Quantity(sr.peak_dev, "V"), "t_peak": Quantity(sr.t_peak_s, "s")},
+        verdict=verdict,
+        reason=reason,
     )
 
 

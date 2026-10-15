@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
@@ -40,8 +41,38 @@ class Issue:
         return f"[{self.severity}] {self.rule}: {self.message}"
 
 
+_RANK = {Verdict.INFO: 0, Verdict.PASS: 1, Verdict.MARGINAL: 2, Verdict.UNKNOWN: 3, Verdict.FAIL: 4}
+_HEADS = {
+    Verdict.PASS: "pass",
+    Verdict.MARGINAL: "MARGINAL, not trusted; fix the marginal checks below",
+    Verdict.UNKNOWN: "UNKNOWN, a check could not be made; not trusted",
+    Verdict.FAIL: "FAIL, DO NOT TRUST THIS RUN",
+}
+
+
+def worst(verdicts: Iterable[Verdict], default: Verdict = Verdict.PASS) -> Verdict:
+    """Worst verdict: FAIL, UNKNOWN, MARGINAL, PASS, then INFO."""
+    vs = list(verdicts)
+    return max(vs, key=_RANK.__getitem__) if vs else default
+
+
+def trusted_verdict(setup: Verdict, measured: Verdict) -> Verdict:
+    """A measured verdict stands only on a setup that passed; otherwise the result is unknown."""
+    return measured if setup is Verdict.PASS else Verdict.UNKNOWN
+
+
+def verdict_line(setup: Verdict, measured: Verdict) -> str:
+    v = trusted_verdict(setup, measured)
+    line = f"**Verdict**: {v.value} (setup {setup.value}, measured {measured.value})"
+    if setup is not Verdict.PASS:
+        line += ": a measured result counts only after every setup check passes"
+    return line
+
+
 @dataclass
 class SanityReport:
+    """Setup checks of a run: was the netlist, the run and the injection valid. Not whether the circuit passes."""
+
     issues: list[Issue] = field(default_factory=list)
     results: list[Result] = field(default_factory=list)
 
@@ -50,9 +81,21 @@ class SanityReport:
         return [i for i in self.issues if i.severity == "error"]
 
     @property
+    def verdict(self) -> Verdict:
+        """FAIL on an error issue or a failed check, else the worst check; INFO counts as a pass."""
+        if self.errors:
+            return Verdict.FAIL
+        v = worst(r.verdict for r in self.results)
+        return Verdict.PASS if v is Verdict.INFO else v
+
+    @property
     def ok(self) -> bool:
-        """No error issue and no failed numeric check."""
-        return not self.errors and all(r.verdict is not Verdict.FAIL for r in self.results)
+        """The setup earned trust: no error issue and every check passed."""
+        return self.verdict is Verdict.PASS
+
+    @property
+    def failed(self) -> bool:
+        return self.verdict is Verdict.FAIL
 
     def rules(self, severity: str | None = None) -> set[str]:
         return {i.rule for i in self.issues if severity is None or i.severity == severity}
@@ -64,7 +107,7 @@ class SanityReport:
 
     def to_markdown(self) -> str:
         """Issues worst first and repeats counted; failed or marginal checks in full, passed ones on one line."""
-        head = "**Simulation sanity**: " + ("pass" if self.ok else "DO NOT TRUST THIS RUN YET")
+        head = "**Simulation setup**: " + _HEADS[self.verdict]
         lines = [head]
         order = {"error": 0, "warning": 1, "info": 2}
         counts: dict[str, int] = {}

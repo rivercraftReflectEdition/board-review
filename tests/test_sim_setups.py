@@ -1,14 +1,16 @@
 import math
 import os
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
 import pytest
 
-from boardreview.calc.base import Verdict
+from boardreview.calc.base import Result, Verdict
 from boardreview.sim import measure, setups
-from boardreview.sim.runner import LTspice, run, schematic_to_netlist
-from boardreview.sim.sanity import check_netlist, check_run
+from boardreview.sim.rawfile import RawFile, Variable
+from boardreview.sim.runner import LTspice, RunResult, parse_log, run, schematic_to_netlist
+from boardreview.sim.sanity import SanityReport, check_netlist, check_run
 
 FIXTURES = Path(__file__).parent / "fixtures" / "sim"
 LOCAL = Path(__file__).parent / "local" / "ltc3633"
@@ -102,6 +104,65 @@ def test_startup_metrics_count_hiccups():
     m = setups.startup_metrics(t, v, np.full_like(t, 4.0), 3.3, 1e-4)
     assert m.restarts == 2
     assert m.t_reg_s == pytest.approx(2.3e-3, rel=0.01)
+
+
+def fake_run(tmp_path: Path, t: np.ndarray, **cols: np.ndarray) -> RunResult:
+    """A finished transient run with the given node voltages and a clean log."""
+    raw_path = tmp_path / "fake.raw"
+    raw_path.write_bytes(b"synthetic")
+    variables = [Variable(0, "time", "time")] + [Variable(i + 1, f"V({n})", "voltage") for i, n in enumerate(cols)]
+    raw = RawFile(header={"plotname": "Transient Analysis"}, variables=variables,
+                  data=np.vstack([t, *cols.values()]), step_bounds=[(0, len(t))])
+    return RunResult("ltspice", (), tmp_path / "fake.net", raw_path, None, 0, 0.0, False, parse_log(""), raw)
+
+
+def ring(t: np.ndarray, zeta: float, t_step_s: float = 1e-4, f_hz: float = 20e3) -> np.ndarray:
+    x = np.clip(t - t_step_s, 0, None)
+    return 3.3 - 0.05 * np.exp(-zeta * 2 * np.pi * f_hz * x) * np.sin(2 * np.pi * f_hz * x)
+
+
+def test_load_step_ring_and_settling_verdicts_reach_the_result(tmp_path, monkeypatch):
+    t = np.linspace(0, 1e-3, 200_001)
+    ls = setups.LoadStepSetup(body="V1 out 0 3.3", out_node="out", i_from_a=0.0, i_to_a=1.0, t_step_s=1e-4,
+                              t_stop_s=1e-3)
+    monkeypatch.setattr(setups, "run", lambda *a, **k: fake_run(tmp_path, t, out=ring(t, 0.05)))
+    res = setups.run_load_step(ls, tmp_path)
+    assert res.report.ok
+    rings = [r for r in res.results if r.name == "ring-down after step"]
+    assert rings and rings[0].verdict is Verdict.FAIL
+    assert res.verdict is Verdict.FAIL and "**Verdict**: fail" in res.to_markdown()
+    monkeypatch.setattr(setups, "run", lambda *a, **k: fake_run(tmp_path, t, out=ring(t, 0.0)))
+    res = setups.run_load_step(ls, tmp_path)
+    settle = [r for r in res.results if r.name == "settling after step"]
+    assert settle and settle[0].verdict is Verdict.FAIL
+    assert res.verdict is Verdict.FAIL
+
+
+def test_startup_overshoot_above_the_limit_fails(tmp_path, monkeypatch):
+    m = setups.Startup(1e-3, 100.0, 0, 3.3, 5.0, True)
+    assert setups.startup_result(m, 3.3).verdict is Verdict.FAIL
+    assert setups.startup_result(replace(m, overshoot_pct=5.0), 3.3).verdict is Verdict.PASS
+    assert setups.startup_result(replace(m, overshoot_pct=5.0, monotonic=False), 3.3).verdict is Verdict.MARGINAL
+    t = np.linspace(0, 2e-3, 20_001)
+    vout = 3.3 * np.clip(t / 2e-4, 0, 1) + 3.3 * np.exp(-(((t - 3e-4) / 1e-4) ** 2))
+    su = setups.StartupSetup(body="Vin vin 0 5\nRx vin out 1\nRl out 0 1", in_node="vin", out_node="out", vin_v=5.0,
+                             ramp_s=1e-4, t_stop_s=2e-3, v_target_v=3.3, input_source="Vin")
+    monkeypatch.setattr(setups, "run", lambda *a, **k: fake_run(tmp_path, t, out=vout, vin=np.full_like(t, 5.0)))
+    res = setups.run_startup(su, tmp_path)
+    assert res.metrics.overshoot_pct == pytest.approx(100.0, abs=1.0)
+    assert res.report.ok and res.verdict is Verdict.FAIL
+
+
+def test_loop_gain_verdict_keeps_setup_and_margins_apart():
+    good = measure.LoopMargins(5e3, 60.0, 50e3, 12.0, (5e3,), (60.0,))
+    thin = measure.LoopMargins(5e3, 10.0, 20e3, 2.0, (5e3,), (10.0,))
+    marginal = SanityReport(results=[Result("edge", "", {}, {}, Verdict.MARGINAL)])
+    assert setups.LoopGainResult([], good, SanityReport()).verdict is Verdict.PASS
+    assert setups.LoopGainResult([], thin, SanityReport()).verdict is Verdict.MARGINAL
+    res = setups.LoopGainResult([], good, marginal)
+    assert res.verdict is Verdict.UNKNOWN
+    assert "setup marginal" in res.to_markdown()
+    assert setups.LoopGainResult([], None, SanityReport()).verdict is Verdict.UNKNOWN
 
 
 def test_impedance_netlist_shape():
@@ -214,13 +275,20 @@ def test_switching_load_step_and_startup(tmp_path):
     assert "Vbr_ramp vin 0 PWL(0 0 0.0002 5)" in su.netlist()
     windup = setups.run_startup(su, tmp_path)
     assert windup.metrics.overshoot_pct > 20
-    assert not windup.report.ok
+    assert windup.results[0].verdict is Verdict.FAIL
+    assert windup.verdict is not Verdict.PASS
     clamp = "Dclamp comp vclamp DIDEAL\nVclamp vclamp 0 2.6\n.model DIDEAL D(Ron=0.1 Roff=1e9 Vfwd=0)"
     su.body = body + "\n" + clamp
     st = setups.run_startup(su, tmp_path, name="startup_clamped")
     assert st.metrics.restarts == 0 and st.metrics.t_reg_s is not None
     assert st.metrics.final_v == pytest.approx(3.3, abs=0.05)
     assert st.report.ok, st.to_markdown()
+    assert st.metrics.overshoot_pct == pytest.approx(23.5, abs=2.0)
+    assert st.verdict is Verdict.FAIL
+    su.body = su.body.replace("Vref ref 0 0.6", "Vref ref 0 PWL(0 0 300u 0.6)")
+    soft = setups.run_startup(su, tmp_path, name="startup_soft")
+    assert soft.metrics.overshoot_pct < 1.0
+    assert soft.verdict is Verdict.PASS, soft.to_markdown()
 
 
 @needs_ltspice

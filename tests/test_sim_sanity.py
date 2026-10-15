@@ -117,6 +117,29 @@ def test_injection_slew_limit_bench_records():
     assert sanity.slew_limited_amplitude(177e3, 115e3, 17e-6) == pytest.approx(20e-3, rel=0.02)
 
 
+def test_marginal_or_unknown_setup_check_is_not_a_pass():
+    t = np.arange(0, 100e-6, 40e-9)
+    edge = sanity.edge_resolution_check(t, np.where((t * 500e3) % 1.0 < 0.66, 4.0, 0.0))
+    assert edge.verdict is Verdict.MARGINAL
+    rep = sanity.SanityReport(results=[edge])
+    assert rep.verdict is Verdict.MARGINAL and not rep.ok and not rep.failed
+    assert "pass" not in rep.to_markdown().splitlines()[0]
+    unknown = sanity.edge_resolution_check(t, np.linspace(0.0, 4.0, len(t)))
+    assert unknown.verdict is Verdict.UNKNOWN
+    assert sanity.SanityReport(results=[unknown]).verdict is Verdict.UNKNOWN
+    assert sanity.SanityReport(issues=[sanity.Issue("run", "error", "x")]).failed
+    assert sanity.SanityReport().ok and "pass" in sanity.SanityReport().to_markdown()
+
+
+def test_measured_verdict_stands_only_on_a_passed_setup():
+    assert sanity.trusted_verdict(Verdict.PASS, Verdict.FAIL) is Verdict.FAIL
+    assert sanity.trusted_verdict(Verdict.PASS, Verdict.PASS) is Verdict.PASS
+    for setup in (Verdict.MARGINAL, Verdict.UNKNOWN, Verdict.FAIL):
+        assert sanity.trusted_verdict(setup, Verdict.PASS) is Verdict.UNKNOWN
+    assert sanity.worst([Verdict.INFO, Verdict.PASS]) is Verdict.PASS
+    assert sanity.worst([Verdict.MARGINAL, Verdict.UNKNOWN, Verdict.PASS]) is Verdict.UNKNOWN
+
+
 def test_switching_frequency_check_on_synthetic_747khz():
     t = np.linspace(0, 50e-6, 500_001)
     v = np.where((t * 747e3) % 1.0 < 0.8, 4.0, 0.0)
