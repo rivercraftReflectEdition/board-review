@@ -13,8 +13,10 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Compute: `calc.divider.divider_output` with the internal pull in parallel with the external
   low side (or high side), at resistor and pull tolerance corners.
 - Pass: inside the intended level window with margin at every corner.
-- Not published: internal pull only typical; use a wide bound (for example 0.5x to 2x typical)
-  and show the level holds at both ends.
+- Not published: internal pull only typical. The level is monotonic in the pull value, so the
+  ends of a range decide it, but a range such as 0.5x to 2x typical is a default, not a
+  guarantee. Run it to see whether the strap is sensitive; the result stays unknown, with the
+  STR-6 readback and a vendor question for the pull range. Pass only on a published range.
 - Example: [strap pairs fitted on both sides](../../docs/lessons/strap-pairs-fitted-both-sides.md)
 
 ## STR-2 Fitted state from the released variant

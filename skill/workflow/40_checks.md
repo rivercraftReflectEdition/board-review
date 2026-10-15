@@ -29,8 +29,13 @@ For every item record one of: pass, marginal, fail, not applicable (with the rea
 ## Not-published rule
 
 1. Say what is missing and where you looked.
-2. If a physical bound exists, run the check at both ends of the bound.
-3. If the verdict holds at both ends, record it with the bound as an assumption.
+2. If a published or physical bound exists, run the check across it: at the two ends only when
+   the result is monotonic in the missing value (say why), otherwise as a sweep that includes
+   every value inside the bound where the result turns (for example the L that puts a resonance
+   on fsw).
+3. If the verdict holds across the bound, record it with the bound as an assumption. A range
+   that is an engineering default rather than a published or physical bound (for example 0.5x
+   to 2x a typical value) cannot make a pass: the result stays unknown, with the range named.
 4. If it does not, or there is no bound: the result is unknown. Require a footprint that lets
    the bench fix it, and a bench test that settles it. File a finding at the severity the failure
    would have.

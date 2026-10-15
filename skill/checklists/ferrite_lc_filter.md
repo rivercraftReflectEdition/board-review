@@ -10,12 +10,15 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
   converter on or near that rail, their harmonics, and the edge rate of load steps.
 - Why: an undamped bead plus a few hundred nF of ceramics forms a high-Q tank. If f0 lands near
   fsw the filter amplifies the ripple it was meant to remove.
-- Compute: `calc.lc_tank.lc_filter` gain `|H(f)|` at each fsw across L and C tolerance.
+- Compute: `calc.lc_tank.lc_filter` gain `|H(f)|` at each fsw, swept across L and C tolerance;
+  the corners alone miss a resonance that crosses fsw between them.
 - Pass: `|H(fsw)| < 1` at every corner and peak gain under 6 dB, or the peak frequency has no
   source of excitation.
 - Not published: bead datasheets often give only impedance at 100 MHz. Use the vendor's SPICE or
-  S-parameter model. If none, bound L over a plausible range and show the verdict holds at both
-  ends. If it does not, require the FLT-2 damper footprint. Silence is not an option.
+  S-parameter model. If none, sweep L over a plausible range, including any L that puts f0 on
+  an fsw harmonic. A plausible range is an assumption, not a published bound, so the result stays
+  unknown even when the sweep is clean: require the FLT-2 damper footprint and a bench check of
+  the rail ripple. Silence is not an option.
 - Example: [bead tank at the switching frequency](../../docs/lessons/bead-tank-at-switching-frequency.md)
 
 ## FLT-2 Damping
