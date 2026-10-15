@@ -12,8 +12,9 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
   fsw the filter amplifies the ripple it was meant to remove.
 - Compute: `calc.lc_tank.lc_filter` gain `|H(f)|` at each fsw, swept across L and C tolerance;
   the corners alone miss a resonance that crosses fsw between them.
-- Pass: `|H(fsw)| < 1` at every corner and peak gain under 6 dB, or the peak frequency has no
-  source of excitation.
+- Pass: `|H(fsw)| < 1` across the sweep and peak gain under 6 dB (default: a gain of 2 on
+  whatever excites the tank, the same as Q of about 2 in FLT-2), or no switcher harmonic, clock
+  or load-step edge reaches the peak frequency (list them).
 - Not published: bead datasheets often give only impedance at 100 MHz. Use the vendor's SPICE or
   S-parameter model. If none, sweep L over a plausible range, including any L that puts f0 on
   an fsw harmonic. A plausible range is an assumption, not a published bound, so the result stays
@@ -27,7 +28,8 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
   near f0 rings.
 - Compute: `calc.lc_tank.lc_filter` with a damper in `dampers`: series R-C across the output,
   `Rd ~ Z0`, `Cd >= 3 C`; `calc.lc_tank.damping_options` gives Rd for a chosen Cd.
-- Pass: Q <= 2 with the damper or a lossy element fitted.
+- Pass: Q <= 2 with the damper or a lossy element fitted (default: peak gain about 6 dB and a
+  ring that dies in a few cycles; tighten it when the load's ripple budget needs it).
 - Example: [bead tank at the switching frequency](../../docs/lessons/bead-tank-at-switching-frequency.md)
 
 ## FLT-3 Bead DC bias and rating

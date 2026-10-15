@@ -9,7 +9,8 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
   not to the I/O rail. Check VDD and OE of the oscillator too.
 - Why: a 3.3 V clock into a 1.8 V-referenced input exceeds abs max; changing the part number alone
   leaves the oscillator powered from the wrong rail.
-- Compute: `calc.divider.divider_output` if levels are shifted by a network; otherwise digest VOH and VIH.
+- Compute: `calc.divider.divider_output` if levels are shifted by a network; otherwise digest VOH
+  and VIH.
 - Pass: VOH max below the input's abs max and VIH met at minimum supply.
 - Example: [oscillator output domain](../../docs/lessons/oscillator-output-domain.md)
 
@@ -19,7 +20,10 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Why: wrong load capacitance pulls frequency; low gain margin fails to start at cold or with age.
 - Compute: `calc.crystal.load_capacitance`, `calc.crystal.oscillation_margin`,
   `calc.crystal.drive_level`.
-- Pass: CL within 1 pF, gain margin at least 5 (3 if the MCU vendor says so), drive under maximum.
+- Pass: CL within 1 pF of the crystal's CL (default: 1 pF pulls a common crystal by roughly 3 to
+  20 ppm, from a pull of `C1 / (2 (C0 + CL)^2)` per farad of CL error; when C0 and C1 are known, use the pulling from
+  `calc.crystal.load_capacitance` in the CLK-3 budget instead), gain margin at least 5 (ST AN2867
+  guidance; 3 if the MCU vendor says so), drive under maximum.
 
 ## CLK-3 Frequency budget
 - Check: initial tolerance plus temperature plus aging plus supply and load pull against the

@@ -26,7 +26,8 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
   unpowered rail rises to.
 - Why: back-powering violates sequencing rules, latches parts up, and can hold a module half
   powered.
-- Compute: `calc.divider.divider_output` with the clamp diode as a source; current into the dead rail.
+- Compute: `calc.divider.divider_output` with the clamp diode as a source; current into the dead
+  rail.
 - Pass: current below the datasheet's injection limit and the dead rail stays below its
   power-on threshold.
 

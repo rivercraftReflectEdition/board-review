@@ -111,8 +111,9 @@ See [simulation setup errors](../../docs/lessons/simulation-setup-errors.md).
 Write each failure as a finding JSON (schemas/finding.schema.json) with `verification.status`
 PENDING and the `check` id. Lint results arrive this way in `lint_findings.json` from stage 1,
 mapped to a checklist item and one severity step below blocker; confirm each against the
-datasheet, set its severity, and keep the ones that hold. Also list the passes of high-risk items (BR-1, BR-2, CR-1, EN-2,
-STR-1, RST-1, RST-2) with their numbers; the verifier samples them.
+datasheet, set its severity, and keep the ones that hold. Also list the passes of high-risk
+items (BR-1, BR-2, CR-1, EN-2, STR-1, RST-1, RST-2) with their numbers; the verifier samples
+them.
 
 Severity: blocker if the board fails as built; major if it fails at a corner, over life or in a
 likely fault; minor for bounded margin or cost; note for firmware, test or next-spin items.

@@ -12,7 +12,12 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
   and a "datasheet-prescribed" compensation tie say nothing about margin at your operating point.
 - Compute: `calc.buck.duty_cycle` at both VIN extremes; `calc.mlcc_bias.mlcc_effective` for COUT;
   `calc.buck.example_envelope` against the digest `example_envelope`.
-- Pass: every parameter inside the span of the examples for that mode, or BR-2 shows margin.
+- Pass: the datasheet's component selection rules for that mode cover the operating point, or
+  one example circuit of the same mode covers it alone (`calc.buck.example_envelope`: VIN range
+  plus 5 percent, VOUT within a factor of 1.15, fsw 1.25, L and COUT 1.5; these factors are
+  defaults, because the vendor shows behavior only near its examples). Sitting inside the span of
+  several examples is not a pass: each value may come from a different example and the
+  combination was never shown. A BR-1 pass is a screen; BR-2 still runs at the corners.
 - Not published: internal compensation values are usually not given. Then BR-3 footprints are
   required and a bench Bode goes in the test plan.
 - Example: [loop out of envelope](../../docs/lessons/loop-out-of-example-envelope.md)
@@ -25,8 +30,11 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
   Cff); `sim.setups.run_loop_gain` when the plant is not published, after the sanity checks in
   workflow/40_checks.md, judged with `sim.setups.LoopGainResult.margins_result` at
   `gm_min_db=10` (its default is 6 dB).
-- Pass: PM >= 45 deg and GM >= 10 dB at every corner, crossover below fsw/5, unless the datasheet
-  gives its own criterion.
+- Pass: the datasheet's own criterion when it gives one. Otherwise these defaults at every
+  corner: PM >= 45 deg (closed-loop peaking about 2.3 dB at crossover), GM >= 10 dB (room for
+  gain spread the corners do not model), crossover below fsw/5 (the averaged model holds well
+  below fsw; sampling adds phase lag toward fsw/2). They are review defaults, not limits from a
+  standard.
 - Not published: gm, current-sense gain or internal network missing means the result is an
   estimate. Report it as UNVERIFIABLE with a bench Bode and a load step.
 - Example: [simulation setup errors](../../docs/lessons/simulation-setup-errors.md)
@@ -69,7 +77,8 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
   the frequency floor the internal compensation is out of its design range.
 - Compute: `calc.buck.duty_cycle` at each VIN extreme for `t_on = D / fsw`; `calc.buck.dropout`
   for the duty limit that minimum off-time and dead time set.
-- Pass: 20 percent margin on each timing limit at its worst corner; fsw inside the range.
+- Pass: 20 percent margin on each timing limit at its worst corner (default: minimum on and off
+  times vary with temperature and gate drive and are often typical only); fsw inside the range.
 - Not published: timing limits given as typical only; treat as UNSURE and add a bench check of
   the switch node at the VIN extremes.
 
@@ -91,7 +100,9 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Why: an undersized internal supply sags, gate drive weakens, and the FETs run hot or the part
   never starts.
 - Compute: `calc.mlcc_bias.mlcc_effective`; gate-drive current `sum(Qg) * fsw` (no calculator yet).
-- Pass: effective capacitance above the minimum; gate current below 70 percent of the limit.
+- Pass: effective capacitance above the minimum; gate current below 70 percent of the
+  guaranteed limit (default: datasheet Qg is at one VGS and VDS, the real charge at the board's
+  drive and VIN can be higher, and the internal regulator also feeds the control circuits).
 
 ## BR-9 Feedback divider accuracy and impedance
 - Check: VOUT tolerance from reference tolerance and resistor tolerance against every load's
@@ -100,7 +111,8 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Compute: `calc.divider.regulator_output` with tolerance and FB current; lag
   `atan(2 pi fc (R_top||R_bot) C_stray)`, the phase of `calc.loop.Pole` at
   `1/(2 pi (R_top||R_bot) C_stray)`.
-- Pass: worst-case VOUT inside every load's recommended range; lag under 5 deg at crossover.
+- Pass: worst-case VOUT inside every load's recommended range; lag under 5 deg at crossover
+  (default: a small share of a 45 deg phase margin).
 
 ## BR-10 Re-check after late changes
 - Check: any change to mode, L, COUT, fsw, compensation or VIN after the last review reopens
@@ -117,4 +129,6 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Why: an undamped input filter and a regulating converter can oscillate together.
 - Compute: `calc.lc_tank.lc_filter` for the filter peak; `sim.setups.run_impedance` for the
   impedance overlay.
-- Pass: filter output impedance peak at least 6 dB below `VIN^2 / P_in` at every frequency.
+- Pass: filter output impedance at least 6 dB below `VIN^2 / P_in` at every frequency (default:
+  keeps `Z_out / |Z_in|` under 0.5, a common margin on the Middlebrook criterion; a measured input
+  impedance or the datasheet's own rule overrides it).

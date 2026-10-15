@@ -29,7 +29,7 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
   output impedance must stay well below it across frequency, or the two loops interact.
 - Why: two regulators that are each stable alone can ring or oscillate together.
 - Compute: `sim.setups.run_impedance` overlay of `|Z_out_upstream|` and `VIN^2 / P_in_downstream`.
-- Pass: 6 dB separation at every frequency.
+- Pass: 6 dB separation at every frequency (default, as in buck_regulator BR-11).
 
 ## CR-3 Headroom
 - Check: the upstream rail's worst low (tolerance, load step trough, ripple) against the
@@ -59,4 +59,5 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
   efficiency, plus inrush.
 - Why: a rail sized on typical efficiency browns out at cold or at minimum input.
 - Compute: sum of `P_out / (eta_min * VIN_min)` per load, plus `C dV/dt` inrush.
-- Pass: 20 percent margin at the worst corner.
+- Pass: 20 percent margin at the worst corner (default: covers load estimates that grow during
+  development).

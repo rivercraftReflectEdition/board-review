@@ -19,7 +19,8 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
   switch node injects noise into the loop.
 - Compute: `calc.loop.Pole` at `1/(2 pi (R_top||R_bot) C)` with an estimated stray C; its phase
   at crossover is the lag.
-- Pass: lag under 5 deg at crossover; datasheet layout rules met.
+- Pass: lag under 5 deg at crossover (default, as in buck_regulator BR-9); datasheet layout rules
+  met.
 
 ## LAY-3 Decoupling placement
 - Check: smallest capacitor closest to the pin with the shortest via path; same-side or

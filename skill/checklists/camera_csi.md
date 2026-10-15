@@ -16,7 +16,8 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
   receiver's and memory's throughput including padding (for example RAW10 stored as 16 bits).
 - Why: a link that fits on paper overflows the memory bus.
 - Compute: `calc.timing.budget` per stage, required rate against available rate.
-- Pass: 20 percent margin on each stage.
+- Pass: 20 percent margin on each stage (default: covers bursts and blanking that an average
+  rate hides).
 
 ## CSI-3 Power sequencing of the module
 - Check: required rail order, delays and reset-low time of the sensor against the enable chain.
