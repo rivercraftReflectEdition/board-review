@@ -1,4 +1,4 @@
-"""Pick an importer from the file: IPC-D-356, KiCad XML, Protel .NET, eda-agent JSON or board_model.json."""
+"""Pick an importer from the file: IPC-D-356, KiCad XML or board, Protel .NET, eda-agent JSON or board_model.json."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from xml.etree.ElementTree import ParseError
 
-from boardreview.model import bom, eda_agent, ipc356, kicad, protel, serialize
+from boardreview.model import bom, eda_agent, ipc356, kicad, kicad_pcb, protel, serialize
 from boardreview.model.board import SCHEMA_ID, BoardModel
 
 
@@ -16,12 +16,14 @@ def _json_kind(path: Path) -> str:
 
 
 def sniff(path: str | Path) -> str:
-    """Netlist format name for a file: ipc356, kicad_xml, protel_net, eda_agent_json or board_model."""
+    """Netlist format name: ipc356, kicad_xml, kicad_pcb, protel_net, eda_agent_json or board_model."""
     path = Path(path)
     suffix = path.suffix.lower()
     head = path.read_bytes()[:4096].decode("latin-1", errors="replace").lstrip("﻿\xef\xbb\xbf \r\n\t")
     if suffix == ".json" or head.startswith("{"):
         return _json_kind(path)
+    if head.startswith("(kicad_pcb"):
+        return "kicad_pcb"
     if head.startswith("(export"):
         raise ValueError("KiCad s-expression netlist: export with --format kicadxml instead")
     if head.startswith("<"):
@@ -41,6 +43,8 @@ def load(path: str | Path, fmt: str = "", variant: str = "") -> BoardModel:
         return ipc356.read_ipc356(path)
     if fmt == "kicad_xml":
         return kicad.read_kicad_xml(path)
+    if fmt == "kicad_pcb":
+        return kicad_pcb.read_kicad_pcb(path)
     if fmt == "protel_net":
         return protel.read_protel(path)
     if fmt == "eda_agent_json":

@@ -85,6 +85,24 @@ def test_prep_counts_parts_the_schematic_excludes_from_the_bom(tmp_path):
     assert "0 only in the BOM, 0 only in the netlist, 1 excluded from the BOM by the schematic" in facts
 
 
+def test_prep_compares_against_a_kicad_board_and_writes_placement(tmp_path):
+    from test_model_kicad_pcb import KICAD9_PCB
+    pcb = tmp_path / "board.kicad_pcb"
+    pcb.write_text(KICAD9_PCB, encoding="utf-8")
+    out = tmp_path / "f"
+    assert main(["prep", str(FIX / "ti_buck_board.kicad.xml"), "--compare", str(pcb), "--out", str(out)]) == 0
+    facts = (out / "facts.md").read_text(encoding="utf-8")
+    assert "| compare (pcb) | board.kicad_pcb | kicad_pcb |" in facts
+    assert "| placement.md | footprint side, position and rotation from board.kicad_pcb | 3 footprints |" in facts
+    assert "| R7 | bottom | 10 | 20 | 180 |" in (out / "placement.md").read_text(encoding="utf-8")
+
+
+def test_prep_without_a_board_file_says_where_placement_comes_from(tmp_path):
+    out = tmp_path / "f"
+    assert main(["prep", str(FIX / "ti_buck_board.kicad.xml"), "--out", str(out)]) == 0
+    assert "- placement: no .kicad_pcb given" in (out / "facts.md").read_text(encoding="utf-8")
+
+
 def test_prep_names_the_bom_when_the_bom_fails(tmp_path):
     bom = tmp_path / "bom.csv"
     bom.write_text("Item,Value\n1,10k\n", encoding="utf-8")

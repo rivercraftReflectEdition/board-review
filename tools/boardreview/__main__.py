@@ -10,11 +10,13 @@ import json
 import sys
 from collections import Counter
 from pathlib import Path
+from xml.etree.ElementTree import ParseError
 
 from boardreview import schema
 from boardreview.lint import Finding, to_findings
-from boardreview.model import digest, loaders, serialize
+from boardreview.model import compare, digest, kicad_pcb, loaders, serialize
 from boardreview.model.__main__ import main as model_main
+from boardreview.model.__main__ import write_compare
 from boardreview.report import build as report_build
 
 DEFAULT_LABELS = ["schematic", "pcb", "fab"]
@@ -61,7 +63,7 @@ def _pair_line(pair: dict) -> str:
     return f"{pair['a']} vs {pair['b']}: " + (", ".join(bits) if bits else "no differences")
 
 
-def _written(out: Path, has_bom: bool, compared: bool) -> list[str]:
+def _written(out: Path, has_bom: bool, compared: bool, placed: tuple[str, int] | None) -> list[str]:
     model = _read(out / "board_model.json")
     st = model["stats"]
     lint = _read(out / "lint.json")
@@ -100,10 +102,14 @@ def _written(out: Path, has_bom: bool, compared: bool) -> list[str]:
         if len(cmp["labels"]) == 3:
             text += f"; {len(cmp['disagreements'])} pins where the three disagree"
         rows.append(("compare.md, compare.json", f"connectivity compare, {' / '.join(cmp['labels'])}", text))
+    if placed:
+        rows.append(("placement.md", f"footprint side, position and rotation from {placed[0]}",
+                     f"{placed[1]} footprints"))
     return [f"| {f} | {what} | {n} |" for f, what, n in rows]
 
 
-def _facts(args: argparse.Namespace, out: Path, skipped: dict[str, str], compared: bool) -> str:
+def _facts(args: argparse.Namespace, out: Path, skipped: dict[str, str], compared: bool,
+           placed: tuple[str, int] | None) -> str:
     labels = args.labels.split(",") if args.labels else DEFAULT_LABELS[: 1 + len(args.compare)]
     inputs = [_input_row("netlist" + (f" ({labels[0]})" if compared else ""), args.netlist, args.format)]
     if args.bom:
@@ -115,7 +121,7 @@ def _facts(args: argparse.Namespace, out: Path, skipped: dict[str, str], compare
              "Files in this folder that are not listed here were not written by this run.", "",
              "## Inputs", "", "| Role | File | Format | SHA-256 |", "|---|---|---|---|", *inputs, "",
              "## Written", "", "| File | What | Counts |", "|---|---|---|",
-             *_written(out, bool(args.bom), compared), "",
+             *_written(out, bool(args.bom), compared, placed), "",
              "## Skipped", ""]
     lines += [f"- {k}: {v}" for k, v in skips.items()] or ["Nothing skipped."]
     lines += ["", "## Not run by prep", ""] + [f"- {t}" for t in NOT_IN_PREP] + [""]
@@ -128,13 +134,16 @@ def _prep(args: argparse.Namespace) -> int:
     skipped: dict[str, str] = {}
     compared = False
     # Compare first so a previous board_model.json named as an input is read before build replaces it.
+    boards: list[tuple[str, object]] = []
     if args.compare:
-        argv = ["compare", args.netlist, *args.compare, "--out", str(out)]
-        argv += ["--labels", args.labels] if args.labels else []
+        labels = args.labels.split(",") if args.labels else DEFAULT_LABELS[: 1 + len(args.compare)]
         try:
-            _quiet(argv)
+            models = [(labels[0], loaders.load(args.netlist, args.format, args.variant))]
+            models += [(lab, loaders.load(p)) for lab, p in zip(labels[1:], args.compare)]
+            write_compare(compare.compare(models), out)
             compared = True
-        except (ValueError, OSError) as exc:
+            boards = [(p, m) for p, (_, m) in zip([args.netlist, *args.compare], models) if kicad_pcb.has_placement(m)]
+        except (ValueError, OSError, ParseError) as exc:
             skipped["compare (NET-1)"] = f"could not load a netlist: {exc}"
         if len(args.compare) == 1:
             skipped["3-way compare (NET-1)"] = "two netlists given; the pin table where sources disagree needs three"
@@ -151,7 +160,18 @@ def _prep(args: argparse.Namespace) -> int:
     lint = _read(out / "lint.json")
     findings = to_findings([Finding(**f) for f in lint["findings"]])
     (out / "lint_findings.json").write_text(json.dumps(findings, indent=1) + "\n", encoding="utf-8", newline="\n")
-    text = _facts(args, out, skipped, compared)
+    own = serialize.read_json(out / "board_model.json")
+    boards += [(args.netlist, own)] if kicad_pcb.has_placement(own) else []
+    placed = None
+    if boards:
+        name = Path(boards[0][0]).name
+        text = kicad_pcb.placement_markdown(boards[0][1], name)
+        (out / "placement.md").write_text(text, encoding="utf-8", newline="\n")
+        placed = (name, sum(1 for c in boards[0][1].components.values() if "x_mm" in c.attrs))
+    else:
+        skipped["placement"] = ("no .kicad_pcb given; side, position and rotation come from the CAD tool or the"
+                                " pick-and-place file, by hand")
+    text = _facts(args, out, skipped, compared, placed)
     (out / "facts.md").write_text(text, encoding="utf-8", newline="\n")
     sys.stdout.write(text)
     return 1 if args.compare and not compared else 0

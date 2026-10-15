@@ -41,12 +41,16 @@ def _compare(args: argparse.Namespace) -> int:
     if len(labels) != len(args.netlists):
         raise SystemExit("--labels needs one label per netlist")
     report = compare.compare([(lab, loaders.load(p)) for lab, p in zip(labels, args.netlists)])
-    out = Path(args.out)
+    write_compare(report, Path(args.out))
+    print(report.to_markdown(limit=10))
+    return 0
+
+
+def write_compare(report: compare.CompareReport, out: Path) -> None:
+    """compare.md and compare.json in out."""
     out.mkdir(parents=True, exist_ok=True)
     (out / "compare.md").write_text(report.to_markdown(), encoding="utf-8")
     (out / "compare.json").write_text(json.dumps(report.to_dict(), indent=1) + "\n", encoding="utf-8")
-    print(report.to_markdown(limit=10))
-    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -56,7 +60,7 @@ def main(argv: list[str] | None = None) -> int:
     b = sub.add_parser("build", help="board_model.json, digests, lint and blocks from a netlist and BOM")
     b.add_argument("netlist")
     b.add_argument("--bom")
-    b.add_argument("--format", default="", help="ipc356, kicad_xml, protel_net, eda_agent_json, board_model")
+    b.add_argument("--format", default="", help="ipc356, kicad_xml, kicad_pcb, protel_net, eda_agent_json, board_model")
     b.add_argument("--variant", default="")
     b.add_argument("--out", required=True)
     b.add_argument("--model-only", action="store_true")
