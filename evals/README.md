@@ -21,7 +21,8 @@ live in `evals/<board>/local/` (ignored by git).
   lessons. Sauron rev1 is dev.
 - **held-out**: boards chosen, and their expected lists written and sealed, before checklist
   work starts. Nobody editing checklists or lessons reads their sources, notes or expected lists.
-  The scorer prints only counts for held-out boards unless `--reveal-heldout` is given. Reveal
+  The scorer prints only counts for held-out boards, in the text report and in `--json`,
+  unless `--reveal-heldout` is given. Reveal
   only to measure a frozen checklist version; after that the board moves to dev.
 
 ## Running

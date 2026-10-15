@@ -18,6 +18,8 @@ EXPECTED_SCHEMA = Path(__file__).resolve().parent / "expected.schema.json"
 BUG_CLASSES = Path(__file__).resolve().parent / "bug_classes.json"
 TEXT_FIELDS = ("title", "claim", "mechanism", "fix", "instance", "check")
 SPLITS = ("dev", "held-out")
+DETAIL_KEYS = ("matches", "misses", "false_positives", "known_good_hits", "duplicate_ids",
+               "schema_errors", "expected_errors")
 
 BLOCK_ALIASES = {
     "buck": "buck_regulator", "smps": "buck_regulator", "switcher": "buck_regulator",
@@ -459,6 +461,13 @@ def score_manifest(manifest_path: Path, reviews_dir: Path | None = None,
             "unknown_bug_classes": unknown}
 
 
+def hide_heldout(result: dict) -> dict:
+    """Copy of a manifest result with held-out boards cut to their counts."""
+    boards = [{k: v for k, v in b.items() if k not in DETAIL_KEYS} | {"details_hidden": True}
+              if b.get("split") == "held-out" else b for b in result["boards"]]
+    return result | {"boards": boards}
+
+
 def fmt_ratio(num: int, den: int) -> str:
     return f"{num}/{den} = {num / den:.2f}" if den else f"{num}/0 = n/a"
 
@@ -524,7 +533,10 @@ def main(argv: list[str] | None = None) -> int:
     schema = load_schema()
     if args.manifest:
         result = score_manifest(args.manifest, args.reviews, args.include_refuted, schema)
-        print(json.dumps(result, indent=2) if args.json else format_report(result, args.reveal_heldout))
+        if args.json:
+            print(json.dumps(result if args.reveal_heldout else hide_heldout(result), indent=2))
+        else:
+            print(format_report(result, args.reveal_heldout))
         return 0
     if args.expected and args.review:
         row = score_board(load_json(args.expected), review_list(load_json(args.review)),

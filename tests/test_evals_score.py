@@ -272,6 +272,17 @@ def test_heldout_details_hidden_unless_revealed():
     assert "MISS H2" in shown
 
 
+def test_heldout_details_hidden_in_json_unless_revealed(capsys):
+    def heldout(*flags):
+        assert score.main(["--manifest", str(EVALS / "manifest.json"), "--json", *flags]) == 0
+        return next(b for b in json.loads(capsys.readouterr().out)["boards"] if b["split"] == "held-out")
+    hidden = heldout()
+    assert (hidden["tp"], hidden["expected"], hidden["fp"]) == (1, 2, 1)
+    assert "H1" not in json.dumps(hidden) and "H2" not in json.dumps(hidden) and "Q2" not in json.dumps(hidden)
+    assert hidden["details_hidden"] is True
+    assert heldout("--reveal-heldout")["misses"][0]["id"] == "H2"
+
+
 def test_cli_single_board(capsys):
     rc = score.main(["--expected", str(EVALS / "example" / "expected.json"),
                      "--review", str(EVALS / "example" / "review.json"), "--json"])
