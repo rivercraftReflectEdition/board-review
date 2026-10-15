@@ -2,6 +2,7 @@ import copy
 from pathlib import Path
 
 from boardreview.model import compare, ipc356, kicad, protel
+from boardreview.model.board import BoardModel
 
 FIX = Path(__file__).parent / "fixtures" / "model"
 
@@ -113,3 +114,18 @@ def test_three_way_with_a_netlist_that_omits_open_pins():
     rows = {k: (v, odd) for k, v, odd in report.disagreements}
     assert "U2.4" not in rows
     assert rows["U1.1"] == (["<absent>", "VIN", "VIN"], "schematic")
+
+
+def test_rail_used_only_by_missing_parts_joins_their_group():
+    full = BoardModel(pin_list_complete=True)
+    for ref, pin, net in [("U9", "1", "5V_AUX"), ("U9", "2", "GND"), ("C1", "1", "5V_AUX"), ("C1", "2", "GND"),
+                          ("C2", "1", "5V_AUX"), ("C2", "2", "GND"), ("C3", "1", "3V3"), ("C3", "2", "GND"),
+                          ("U2", "1", "3V3"), ("U2", "2", "GND")]:
+        full.add_pin(ref, pin, net)
+    full.finalize()
+    part = copy.deepcopy(full)
+    for key in [k for k in part.pins if k[0] in ("U9", "C1", "C2")]:
+        del part.pins[key]
+    part.invalidate()
+    pair = compare.compare([("schematic", part), ("pcb", full)]).pairs[0]
+    assert pair.groups_only_b == [["C1", "C2", "U9"]]

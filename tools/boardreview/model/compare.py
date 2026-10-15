@@ -94,7 +94,7 @@ def _match(a: Side, b: Side, common: set[str]) -> tuple[Counter, dict[str, str]]
 
 
 def _groups(side: Side, refs: list[str]) -> list[list[str]]:
-    """Cluster refdes that share signal nets (rails and grounds excluded) on their own side."""
+    """Cluster refdes that share signal nets, or rails that only they touch, on their own side."""
     wanted = set(refs)
     parent = {r: r for r in refs}
 
@@ -105,7 +105,8 @@ def _groups(side: Side, refs: list[str]) -> list[list[str]]:
         return r
 
     for net, keys in side.nets().items():
-        if naming.net_kind(net) != "signal":
+        inside = all(_part(k) in wanted for k in keys)
+        if naming.net_kind(net) != "signal" and not inside:
             continue
         members = sorted({_part(k) for k in keys if _part(k) in wanted})
         for other in members[1:]:
