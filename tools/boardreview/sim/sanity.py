@@ -347,17 +347,26 @@ def up_slew(vin_v: float, d_max: float, vout_v: float, l_h: float) -> float:
     return (vin_v * d_max - vout_v) / l_h
 
 
+def down_slew(vout_v: float, l_h: float, vin_v: float = 0.0, d_min: float = 0.0) -> float:
+    """Largest inductor current down-slope of a buck, A/s: (VOUT - VIN Dmin) / L."""
+    return (vout_v - vin_v * d_min) / l_h
+
+
 def slew_limited_amplitude(slew_a_per_s: float, f_hz: float, c_out_f: float) -> float:
     """Largest output sine amplitude the inductor can follow: S / ((2 pi f)^2 C)."""
     return slew_a_per_s / ((2 * math.pi * f_hz) ** 2 * c_out_f)
 
 
-def injection_slew_check(amplitude_v: float, f_hz: float, slew_a_per_s: float, c_out_f: float,
-                         margin: float = 0.5) -> Result:
-    """An injected or measured output sine above S/((2 pi f)^2 C) slew-limits the inductor and fakes the loop gain."""
-    a_max = slew_limited_amplitude(slew_a_per_s, f_hz, c_out_f)
-    ratio = amplitude_v / a_max
-    if ratio > 1:
+def injection_slew_check(amplitude_v: float, f_hz: float, slew_up_a_per_s: float, slew_down_a_per_s: float,
+                         c_out_f: float, margin: float = 0.5) -> Result:
+    """An output sine above min(S_up, S_down)/((2 pi f)^2 C) slew-limits the inductor and fakes the loop gain."""
+    slew = min(slew_up_a_per_s, slew_down_a_per_s)
+    w = 2 * math.pi * f_hz
+    a_max = slew_limited_amplitude(slew, f_hz, c_out_f) if slew > 0 else 0.0
+    ratio = amplitude_v / a_max if a_max > 0 else float("inf")
+    if slew <= 0:
+        verdict, reason = Verdict.FAIL, "no slew available: S_up or S_down is not positive"
+    elif ratio > 1:
         verdict, reason = Verdict.FAIL, f"{amplitude_v * 1e3:.3g} mV exceeds the {a_max * 1e3:.3g} mV slew limit"
     elif ratio > margin:
         verdict, reason = Verdict.MARGINAL, f"{ratio:.0%} of the slew limit; halve the amplitude to be safe"
@@ -365,13 +374,20 @@ def injection_slew_check(amplitude_v: float, f_hz: float, slew_a_per_s: float, c
         verdict, reason = Verdict.PASS, f"{ratio:.0%} of the slew limit"
     return Result(
         name="injection amplitude vs inductor slew",
-        formula="A_max = S_up / ((2 pi f)^2 C_out); S_up = (VIN Dmax - VOUT) / L",
+        formula="A_max = min(S_up, S_down) / ((2 pi f)^2 C_out); S_up = (VIN Dmax - VOUT) / L, "
+                "S_down = (VOUT - VIN Dmin) / L; I_sine = A 2 pi f C_out",
         inputs={"A": Quantity(amplitude_v, "V"), "f": Quantity(f_hz, "Hz"),
-                "S_up": Quantity(slew_a_per_s, "A/s"), "C_out": Quantity(c_out_f, "F")},
-        outputs={"A_max": Quantity(a_max, "V"), "A/A_max": Quantity(ratio, "")},
+                "S_up": Quantity(slew_up_a_per_s, "A/s"), "S_down": Quantity(slew_down_a_per_s, "A/s"),
+                "C_out": Quantity(c_out_f, "F")},
+        outputs={"A_max": Quantity(a_max, "V"), "A/A_max": Quantity(ratio, ""),
+                 "I_sine": Quantity(amplitude_v * w * c_out_f, "A", "peak sine current in C_out")},
         verdict=verdict,
         reason=reason,
-        assumptions=("the output sine is carried by C_out alone", "S_up is the inductor's largest up-slope",
+        assumptions=("the output sine is carried by C_out alone",
+                     "the converter sinks current on the down-slope (synchronous, forced continuous); in diode, DCM "
+                     "or pulse-skipping mode the inductor current stops at zero and S_down is smaller",
+                     "load current plus ripple plus I_sine stays below the current limit; this check does not see "
+                     "the current limit",
                      "near crossover the output sine is A/|1+T|, about 1.4 A at 40 deg PM; check the measured V(b)"),
     )
 

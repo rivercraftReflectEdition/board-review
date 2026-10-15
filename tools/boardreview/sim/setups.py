@@ -164,7 +164,8 @@ class LoopGainSetup:
     out_node: str
     fsw_hz: float
     c_out_f: float
-    slew_a_per_s: float
+    slew_up_a_per_s: float
+    slew_down_a_per_s: float
     sw_node: str | None = None
     amplitude_v: float = 2e-3
     t_settle_s: float = 300e-6
@@ -229,7 +230,8 @@ class LoopGainSetup:
         rep = check_netlist(self.netlist(freqs[0]), allow_open=self.allow_open, expected_fsw_hz=self.fsw_hz)
         rep.issues.append(Issue("injection", "info", f"moved to {INJ_NODE}: {', '.join(self.branches())}"))
         for f in freqs:
-            res = injection_slew_check(self.amplitude_v, f, self.slew_a_per_s, self.c_out_f)
+            res = injection_slew_check(self.amplitude_v, f, self.slew_up_a_per_s, self.slew_down_a_per_s,
+                                       self.c_out_f)
             if res.verdict is not Verdict.PASS:
                 rep.results.append(res)
             if subharmonic_fraction(f, self.fsw_hz) < 0.1:
@@ -334,7 +336,8 @@ def measure_loop_gain_point(run_result: RunResult, setup: LoopGainSetup, f_hz: f
     xa = measure.lockin(ta, va, f_hz, t_start_s=t0)
     xb = measure.lockin(tb, vb, f_hz, t_start_s=t0)
     if report is not None:
-        res = injection_slew_check(abs(xb), f_hz, setup.slew_a_per_s, setup.c_out_f)
+        res = injection_slew_check(abs(xb), f_hz, setup.slew_up_a_per_s, setup.slew_down_a_per_s,
+                                   setup.c_out_f)
         if res.verdict is not Verdict.PASS:
             report.results.append(res)
     return LoopGainPoint(f_hz=f_hz, t=-xb / xa, va=xa, vb=xb, fsw_hz=fsw_meas)

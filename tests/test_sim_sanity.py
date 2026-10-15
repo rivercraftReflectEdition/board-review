@@ -111,10 +111,24 @@ def test_up_slew_bench_record():
 def test_injection_slew_limit_bench_records():
     # 2026-10-06 loop-gain review: 57 mA/us at 6.8 uH and 18 uF limits a 20 mV sine above about 63 kHz
     assert sanity.slew_limited_amplitude(57e3, 63e3, 18e-6) == pytest.approx(20e-3, rel=0.02)
-    assert sanity.injection_slew_check(20e-3, 80e3, 57e3, 18e-6).verdict is Verdict.FAIL
-    assert sanity.injection_slew_check(3e-3, 80e3, 57e3, 18e-6).verdict is Verdict.PASS
+    down = sanity.down_slew(3.3, 6.8e-6)
+    assert sanity.injection_slew_check(20e-3, 80e3, 57e3, down, 18e-6).verdict is Verdict.FAIL
+    assert sanity.injection_slew_check(3e-3, 80e3, 57e3, down, 18e-6).verdict is Verdict.PASS
     # 2026-10-07 residual ring: 177 mA/us, 115 kHz, 17 uF clamps at 20 mV (40 mV pk-pk on the scope)
     assert sanity.slew_limited_amplitude(177e3, 115e3, 17e-6) == pytest.approx(20e-3, rel=0.02)
+
+
+def test_injection_slew_limit_uses_the_slower_direction():
+    # 12 V to 1 V, Dmax 0.95, 10 uH, 10 uF, 100 kHz: (2 pi 100k)^2 x 10u = 3.948e6 A/(s V)
+    up, down = sanity.up_slew(12.0, 0.95, 1.0, 10e-6), sanity.down_slew(1.0, 10e-6)
+    assert (up, down) == (pytest.approx(1.04e6), pytest.approx(1e5))
+    assert sanity.slew_limited_amplitude(up, 100e3, 10e-6) == pytest.approx(263.4e-3, rel=1e-3)
+    res = sanity.injection_slew_check(50e-3, 100e3, up, down, 10e-6)
+    assert res.verdict is Verdict.FAIL
+    assert res.outputs["A_max"].value == pytest.approx(25.33e-3, rel=1e-3)
+    assert any("sink" in a for a in res.assumptions) and any("current limit" in a for a in res.assumptions)
+    assert sanity.down_slew(1.0, 10e-6, vin_v=12.0, d_min=0.1) < 0
+    assert sanity.injection_slew_check(1e-3, 100e3, up, -2e5, 10e-6).verdict is Verdict.FAIL
 
 
 def test_marginal_or_unknown_setup_check_is_not_a_pass():

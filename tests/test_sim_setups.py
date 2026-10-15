@@ -15,7 +15,8 @@ from boardreview.sim.sanity import SanityReport, check_netlist, check_run
 FIXTURES = Path(__file__).parent / "fixtures" / "sim"
 LOCAL = Path(__file__).parent / "local" / "ltc3633"
 needs_ltspice = pytest.mark.skipif(not LTspice().available(), reason="LTspice not installed")
-COMMON = dict(top_resistor="Rtop", out_node="out", fsw_hz=500e3, c_out_f=10e-6, slew_a_per_s=1.6e6)
+COMMON = dict(top_resistor="Rtop", out_node="out", fsw_hz=500e3, c_out_f=10e-6, slew_up_a_per_s=1.6e6,
+              slew_down_a_per_s=3.3e6)
 
 
 def vm_buck_t(f: np.ndarray) -> np.ndarray:
@@ -88,8 +89,8 @@ def test_loop_gain_refuses_a_feedback_path_it_cannot_move():
 
 def test_loop_gain_check_flags_slew_and_high_frequency():
     s = setups.LoopGainSetup(body=setups.body_from_netlist(FIXTURES / "vm_buck_switching.net"),
-                             top_resistor="Rtop", out_node="out", fsw_hz=500e3, c_out_f=18e-6, slew_a_per_s=57e3,
-                             amplitude_v=20e-3)
+                             top_resistor="Rtop", out_node="out", fsw_hz=500e3, c_out_f=18e-6, slew_up_a_per_s=57e3,
+                             slew_down_a_per_s=485e3, amplitude_v=20e-3)
     rep = s.check([80e3, 150e3])
     assert any(r.verdict is Verdict.FAIL for r in rep.results)
     assert any("above fsw/5" in i.message for i in rep.issues)
@@ -246,7 +247,7 @@ def test_load_step_ring_estimates_phase_margin_of_a_standard_loop(tmp_path):
     # cm_loop_averaged is an integrator times one pole: the standard second-order loop where PM ~ 100 zeta holds
     body = setups.body_from_netlist(FIXTURES / "cm_loop_averaged.net")
     lg = setups.LoopGainSetup(body=body, top_resistor="Rtop", out_node="out", fsw_hz=1e6, c_out_f=10e-6,
-                              slew_a_per_s=1e6)
+                              slew_up_a_per_s=1e6, slew_down_a_per_s=1e6)
     f, t = setups.loop_gain_from_ac(run(lg.ac_netlist(100, 1e6, 50), tmp_path, "ac"), "out")
     pm = measure.loop_margins(f, t).phase_margin_deg
     assert pm == pytest.approx(35.0, abs=1.0)
@@ -328,8 +329,8 @@ def test_real_ltc3633_loop_gain(tmp_path):
     (tmp_path / "fcm.asc").write_bytes((LOCAL / "NEW_3V3_6p8uH_FCM.asc").read_bytes())
     body = setups.body_from_netlist(schematic_to_netlist(tmp_path / "fcm.asc"))
     s = setups.LoopGainSetup(body=body, top_resistor="R48", out_node="OUT1", fsw_hz=1.187e6, c_out_f=18e-6,
-                             slew_a_per_s=57e3, sw_node="SW1", amplitude_v=1e-3, t_settle_s=500e-6,
-                             allow_open=("Pgood1", "Pgood2", "Track/SS1", "Track/SS2"))
+                             slew_up_a_per_s=57e3, slew_down_a_per_s=485e3, sw_node="SW1", amplitude_v=1e-3,
+                             t_settle_s=500e-6, allow_open=("Pgood1", "Pgood2", "Track/SS1", "Track/SS2"))
     freqs = setups.injection_frequencies(30e3, 200e3, 6, 1.187e6)
     res = setups.run_loop_gain(s, freqs, tmp_path, max_workers=3, refine=2, linearity=True)
     assert res.report.ok, res.to_markdown()
