@@ -74,11 +74,15 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
   the switch node at the VIN extremes.
 
 ## BR-7 Inductor saturation and ripple
-- Check: Isat at the current-limit peak, not the load peak, including the overshoot from current
-  sense delay; ripple ratio within the datasheet's guidance; DCR loss and temperature rise.
+- Check: Isat at the current-limit peak, not the load peak. Use the limit type the datasheet
+  states: a peak limit plus the overshoot from current-sense delay, or a valley limit plus the
+  full ripple above it. Ripple ratio within the datasheet's guidance; DCR loss and temperature
+  rise.
 - Why: an inductor that saturates in a fault defeats the current limit.
-- Compute: peak `I_limit_max + VIN_max * t_delay / L_min` (no calculator yet);
-  `calc.buck.inductor_ripple` for ripple and the peak at full load.
+- Compute: peak limit: `I_peak_limit_max + VIN_max * t_delay / L_min`. Valley limit:
+  `I_valley_limit_max + dI`, with dI the larger of the ripple at VIN_max and L_min
+  (`calc.buck.inductor_ripple`) and `VIN_max * t_on_min / L_min` into a short. No calculator for
+  either peak yet.
 - Pass: Isat (at the vendor's roll-off definition, hot) above the worst peak.
 
 ## BR-8 Internal supply, bootstrap and gate-drive budget

@@ -11,11 +11,17 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
   sink rating, and the modes and conditions where sinking is inhibited), a bleed load, or a clamp.
 - Why: a pulse-skipping or diode-emulating upstream regulator cannot sink. Returned charge pumps
   the rail up until something gives.
-- Compute: `C_rail dV/dt = I_up - I_down - I_other`; worst returned current from
-  `calc.buck.inductor_ripple` valley current; charge per event `I_return * t_event`.
+- Compute: `C_rail_min dV/dt = I_up - I_down - I_other` at minimum load. A downstream buck
+  returns `D * I_L` while its inductor current is negative. Steady state at light load: the
+  negative valley from `calc.buck.inductor_ripple`. Events (load release with output overshoot,
+  soft-stop, pre-bias start, an oscillating loop): integrate the input current over the event,
+  bounded by the downstream part's negative current limit; the steady-state valley does not
+  bound them. Charge per event over `C_rail_min` gives the excursion.
 - Pass: the rail's worst excursion stays under every load's abs max and under the upstream
   regulator's OV threshold, at minimum load.
-- Not published: sink current unspecified; treat as zero.
+- Not published: upstream sink current unspecified: treat as zero. Downstream negative current
+  limit unspecified: the event bound is unknown; require a bleed or clamp footprint and a bench
+  capture of the rail during load release.
 - Example: [reverse current into a non-sinking rail](../../docs/lessons/fcm-reverse-current-into-non-sinking-rail.md)
 
 ## CR-2 Source and load impedance
