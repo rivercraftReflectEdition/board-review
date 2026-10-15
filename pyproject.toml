@@ -1,0 +1,16 @@
+[project]
+name = "boardreview"
+version = "0.0.1"
+description = "Calculators, board model and checks behind the board-review skill"
+requires-python = ">=3.11"
+dependencies = ["numpy>=1.26", "scipy>=1.11"]
+
+[project.optional-dependencies]
+test = ["pytest>=8"]
+
+[tool.setuptools.packages.find]
+where = ["tools"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["tools"]

@@ -31,6 +31,8 @@ tools/boardreview/        Python package the skill calls
   blocks/                 find regulators, filters, interfaces, clocks and resets in the netlist
   calc/                   calculators: buck, loop (Bode, PM/GM, Cff), lc_tank, mlcc_bias, divider,
                           crystal, i2c, tvs, thermal
+  sim/                    LTspice batch runs (ngspice optional): loop-gain injection, load step,
+                          PDN and filter impedance, with netlist sanity checks before trusting a run
   report/                 markdown and HTML report
 tests/                    calculator and model tests with worked numbers
 evals/                    expected findings per board and the scorer (board data stays local)
@@ -38,6 +40,8 @@ docs/lessons/             one page per real miss: what, why, which check now cat
 ```
 
 ## Data policy
+
+See docs/CONVENTIONS.md for code and writing rules.
 
 Board files, BOMs, schematics and vendor PDFs are never committed. Evals point to local paths
 listed in `evals/<board>/sources.local.json` (ignored by git). Datasheet digests (our own notes with
