@@ -212,3 +212,32 @@ def test_board_model_json_matches_schema_and_round_trips(name, tmp_path):
     path = serialize.write_json(m, tmp_path / "board_model.json")
     back = loaders.load(path)
     assert serialize.to_dict(back) == data
+
+
+def _ti_with_bom(tmp_path, text):
+    path = tmp_path / "bom.csv"
+    path.write_text(text, encoding="utf-8")
+    m = kicad.read_kicad_xml(FIX / "ti_buck_board.kicad.xml")
+    bom.apply_bom(m, bom.read_bom(path), str(path))
+    return m
+
+
+def test_bom_without_population_column_keeps_netlist_dnp(tmp_path):
+    m = _ti_with_bom(tmp_path, "Designator,MPN\nR7,RC0402FR-0710KL\nR6,RC0402FR-0710KL\n")
+    assert [ln.fitted for ln in bom.read_bom(tmp_path / "bom.csv")] == [None, None]
+    assert not m.components["R7"].fitted and m.components["R6"].fitted
+    assert not any("R7" in w for w in m.warnings)
+
+
+def test_bom_dnp_marker_in_value_keeps_the_netlist_value(tmp_path):
+    m = _ti_with_bom(tmp_path, "Designator,Value\nR7,DNP\n")
+    assert not m.components["R7"].fitted
+    assert m.components["R7"].value == "10k" and m.components["R7"].value_si == pytest.approx(10e3)
+
+
+def test_bom_population_that_contradicts_the_netlist_is_flagged(tmp_path):
+    m = _ti_with_bom(tmp_path, "Designator,MPN,DNP\nR7,RC0402FR-0710KL,\nR6,RC0402FR-0710KL,DNP\n")
+    assert m.components["R7"].fitted and not m.components["R6"].fitted
+    assert "netlist DNP" in m.components["R7"].attrs["fitted_conflict"]
+    assert "netlist fitted" in m.components["R6"].attrs["fitted_conflict"]
+    assert sum("R6" in w or "R7" in w for w in m.warnings) == 2

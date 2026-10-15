@@ -20,7 +20,7 @@ class BomLine:
     comment: str = ""
     footprint: str = ""
     description: str = ""
-    fitted: bool = True
+    fitted: bool | None = None
     variant: str = ""
     row: int = 0
     extra: dict[str, str] = field(default_factory=dict)
@@ -33,10 +33,22 @@ def _header_index(rows: list[list[str]]) -> int:
     raise ValueError("no designator column found in the first 40 rows")
 
 
+def _population(got: dict[str, str], has_dnp_column: bool) -> bool | None:
+    """Fitted state a BOM row states: True, False, or None when the row says nothing about it."""
+    if fields.value_says_dnp(got.get("value", "")) or fields.value_says_dnp(got.get("comment", "")):
+        return False
+    if "dnp" in got and fields.is_dnp_flag(got["dnp"]):
+        return False
+    if "fitted" in got:
+        return not fields.is_not_fitted(got["fitted"])
+    return True if has_dnp_column else None
+
+
 def parse_rows(rows: list[list[str]]) -> list[BomLine]:
     """BOM lines from a table whose header row has a designator column."""
     h = _header_index(rows)
     headers = [c.strip() for c in rows[h]]
+    has_dnp_column = any(fields.canonical(c) == "dnp" for c in headers)
     out = []
     for n, raw in enumerate(rows[h + 1:], start=h + 2):
         row = {headers[i]: (raw[i] if i < len(raw) else "") for i in range(len(headers)) if headers[i]}
@@ -44,13 +56,7 @@ def parse_rows(rows: list[list[str]]) -> list[BomLine]:
         refs = fields.expand_refdes(got.get("refdes", ""))
         if not refs:
             continue
-        fitted = True
-        if "fitted" in got and fields.is_not_fitted(got["fitted"]):
-            fitted = False
-        if "dnp" in got and fields.is_dnp_flag(got["dnp"]):
-            fitted = False
-        if fields.value_says_dnp(got.get("value", "")) or fields.value_says_dnp(got.get("comment", "")):
-            fitted = False
+        fitted = _population(got, has_dnp_column)
         known = {h for h in row if fields.canonical(h)}
         out.append(BomLine(
             refdes=refs, mpn=got.get("mpn", ""), manufacturer=got.get("manufacturer", ""),
@@ -79,7 +85,7 @@ def read_bom(path: str | Path, sheet: str | int = 0) -> list[BomLine]:
 
 
 def _value_for(line: BomLine, kind: str) -> tuple[str, str]:
-    if line.value:
+    if line.value and not fields.value_says_dnp(line.value):
         return line.value, "bom value"
     if line.comment and parts.value_si(line.comment, kind) is not None:
         return line.comment, "bom comment"
@@ -87,10 +93,34 @@ def _value_for(line: BomLine, kind: str) -> tuple[str, str]:
     return (derived, "bom description") if derived else ("", "")
 
 
+_POPULATION_SOURCES = {"kicad_xml", "eda_agent_json"}
+
+
+def _netlist_population(model: BoardModel) -> dict[str, bool]:
+    """Fitted state per part where the netlist states one: any DNP mark, or every part for KiCad and eda-agent."""
+    every = any(s.get("kind") in _POPULATION_SOURCES for s in model.sources)
+    return {r: c.fitted for r, c in model.components.items() if every or not c.fitted}
+
+
+def _apply_population(model: BoardModel, ref: str, line: BomLine, netlist: dict[str, bool]) -> None:
+    """Take the BOM's fitted state when it states one; flag it when the netlist said otherwise."""
+    if line.fitted is None:
+        return
+    c = model.components[ref]
+    said = netlist.get(ref)
+    if said is not None and said != line.fitted:
+        was, now = ("fitted" if said else "DNP"), ("fitted" if line.fitted else "DNP")
+        c.attrs["fitted_conflict"] = f"netlist {was}, BOM row {line.row} {now}; BOM kept"
+        model.warnings.append(f"{ref} is {was} in the netlist but {now} in BOM row {line.row}; kept the BOM")
+    c.fitted = line.fitted
+    c.attrs["fitted_from"] = f"bom row {line.row}"
+
+
 def apply_bom(model: BoardModel, lines: list[BomLine], path: str = "") -> dict[str, list[str]]:
     """Merge BOM attributes into components; return refdes only in the BOM and only in the netlist."""
     seen: set[str] = set()
     bom_only: list[str] = []
+    netlist = _netlist_population(model)
     for line in lines:
         for ref in line.refdes:
             if ref in seen:
@@ -103,7 +133,7 @@ def apply_bom(model: BoardModel, lines: list[BomLine], path: str = "") -> dict[s
             c.manufacturer = line.manufacturer or c.manufacturer
             c.description = line.description or c.description
             c.footprint = c.footprint or line.footprint
-            c.fitted = line.fitted
+            _apply_population(model, ref, line, netlist)
             c.variant = line.variant or c.variant
             c.attrs["bom_row"] = str(line.row)
             if line.comment:

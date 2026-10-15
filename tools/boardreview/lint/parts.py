@@ -42,4 +42,9 @@ def bom_netlist_mismatch(model: BoardModel, g: Graph) -> list[Finding]:
         if mech:
             out.append(Finding("bom_netlist_mismatch", "info",
                                f"mechanical or test parts only in the {where}: {', '.join(mech)}", components=mech))
+    for ref in sorted((r for r, c in model.components.items() if c.attrs.get("fitted_conflict")), key=natural_key):
+        why = model.components[ref].attrs["fitted_conflict"]
+        out.append(Finding("bom_netlist_mismatch", "warning",
+                           f"{ref} fitted state differs between netlist and BOM ({why}); confirm which build is meant",
+                           components=[ref], evidence={"fitted_conflict": why}))
     return out

@@ -138,6 +138,16 @@ def test_bom_netlist_mismatch(tmp_path):
     assert ("warning", ["R7"]) in summaries and ("info", ["MH1"]) in summaries and ("warning", ["C1"]) in summaries
 
 
+def test_bom_netlist_mismatch_reports_fitted_state_conflicts(tmp_path):
+    path = tmp_path / "bom.csv"
+    path.write_text("Designator,MPN,DNP\nR7,RC0402FR-0710KL,\nR6,RC0402FR-0710KL,x\n", encoding="utf-8")
+    m = _ti()
+    bom.apply_bom(m, bom.read_bom(path), str(path))
+    found = [f for f in _run(parts.bom_netlist_mismatch, m) if "fitted_conflict" in f.evidence]
+    assert [(f.severity, f.components) for f in found] == [("warning", ["R6"]), ("warning", ["R7"])]
+    assert "netlist DNP" in found[1].summary
+
+
 def test_run_all_orders_by_severity_and_serializes():
     report = lint.run_all(_ti())
     sev = [f.severity for f in report.findings]
