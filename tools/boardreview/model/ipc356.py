@@ -8,7 +8,7 @@ from pathlib import Path
 from boardreview.model.board import BoardModel
 
 _RECORD_CODES = {"317", "327", "367"}
-_ALIAS = re.compile(r"^P\s+NNAME(\d+)\s+(.+?)\s*$")
+_ALIAS = re.compile(r"^P\s+NNAME(\S+)\s+(.+?)\s*$")
 _PARAM = re.compile(r"^P\s+(JOB|TITLE|REV|VER|UNITS|NUM|IMAGE)\s*(.*?)\s*$")
 
 
@@ -38,14 +38,14 @@ def parse_ipc356(text: str, path: str = "") -> BoardModel:
         if line[:3] not in _RECORD_CODES:
             continue
         raw = line[3:17].strip()
-        net = aliases.get(raw.removeprefix("NNAME"), raw) if raw.removeprefix("NNAME").isdigit() else raw
+        net = aliases.get(raw, aliases.get(raw.removeprefix("NNAME"), raw))
         refdes = line[20:26].strip()
-        if not refdes or line[26:27] != "-":
-            continue
         pin, midpoint = _pin_field(line)
         if refdes.upper() == "VIA" or midpoint:
             if net and net.upper() != "N/C":
                 vias[net] = vias.get(net, 0) + 1
+            continue
+        if not refdes or line[26:27] != "-":
             continue
         model.add_pin(refdes, pin, net)
     for net, count in vias.items():

@@ -1,0 +1,32 @@
+C  Synthetic IPC-D-356A in the KiCad export_d356.cpp record layout for board-review tests (no real board)
+P  JOB   synthetic_sensor.kicad_pcb                                             
+P  CODE  00                                                                     
+P  UNITS CUST 0                                                                 
+P  arrayDim   N                                                                 
+P  VER   IPC-D-356A                                                             
+P  IMAGE PRIMARY                                                                
+C
+P  NNAMEM0000 SENSOR_OUTPUT_FILTERED                                            
+P  NNAMEM0001 I2C_SDA_TO_CONNECTOR                                              
+317+3V3             J1    -1    D0400PA00X+010000Y+020000X0600Y0600R000 S3      
+317GND              J1    -2    D0400PA00X+010500Y+020000X0600Y0600R000 S3      
+317M0000            J1    -3    D0400PA00X+011000Y+020000X0600Y0600R000 S3      
+317M0001            J1    -4    D0400PA00X+011500Y+020000X0600Y0600R000 S3      
+327+3V3             U2    -1          A01X+012000Y+020000X0600Y0600R000 S0      
+327GND              U2    -2          A01X+012500Y+020000X0600Y0600R000 S0      
+327M0000            U2    -3          A01X+013000Y+020000X0600Y0600R000 S0      
+327N/C              U2    -4          A01X+013500Y+020000X0600Y0600R000 S0      
+327M0001            U2    -5          A01X+014000Y+020000X0600Y0600R000 S0      
+327+3V3             C1    -1          A01X+014500Y+020000X0600Y0600R000 S0      
+327GND              C1    -2          A01X+015000Y+020000X0600Y0600R000 S0      
+327M0000            R1    -2          A01X+015500Y+020000X0600Y0600R000 S0      
+327+3V3             R1    -1          A01X+016000Y+020000X0600Y0600R000 S0      
+327M0001            R2    -2          A01X+016500Y+020000X0600Y0600R000 S0      
+327+3V3             R2    -1          A01X+017000Y+020000X0600Y0600R000 S0      
+317GND              VIA        MD0120PA00X+017500Y+021000X0600Y0600R000 S3      
+317GND              VIA        MD0120PA00X+018000Y+021000X0600Y0600R000 S3      
+317GND              VIA        MD0120PA00X+018500Y+021000X0600Y0600R000 S3      
+317+3V3             VIA        MD0120PA00X+019000Y+021000X0600Y0600R000 S3      
+317+3V3             VIA        MD0120PA00X+019500Y+021000X0600Y0600R000 S3      
+317M0001            VIA        MD0120PA00X+020000Y+021000X0600Y0600R000 S3      
+999                                                                             

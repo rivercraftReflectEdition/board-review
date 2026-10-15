@@ -23,6 +23,17 @@ def test_ipc356_fixed_columns_alias_nc_and_vias():
     assert m.sources[0]["ver"] == "IPC-D-356A"
 
 
+def test_ipc356_kicad_layout_alphanumeric_aliases_and_vias_without_a_dash():
+    m = ipc356.read_ipc356(FIX / "kicad_d356_aliases.ipc")
+    assert m.nets["SENSOR_OUTPUT_FILTERED"].pins == ["J1.3", "R1.2", "U2.3"]
+    assert m.nets["I2C_SDA_TO_CONNECTOR"].pins == ["J1.4", "R2.2", "U2.5"]
+    assert "M0000" not in m.nets and "M0001" not in m.nets
+    assert (m.nets["GND"].attrs["vias"], m.nets["+3V3"].attrs["vias"]) == (3, 2)
+    assert m.nets["I2C_SDA_TO_CONNECTOR"].attrs["vias"] == 1
+    assert [p.key for p in m.unconnected_pins()] == ["U2.4"] and "VIA" not in m.components
+    assert m.sources[0]["ver"] == "IPC-D-356A"
+
+
 def test_ipc356_pin_overflowing_the_four_column_field():
     line = f"327{'SIG':<14}   {'U9':<6}-AB123     PA01X 000100Y 000200X0100Y0100R000 S0"
     m = ipc356.parse_ipc356("P  JOB X\n" + line + "\n999\n")
