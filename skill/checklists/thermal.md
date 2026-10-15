@@ -22,7 +22,10 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Check: every check that uses leakage, VF, RDS(on), threshold or capacitance uses the value at
   the relevant temperature corner (cold for VF and capacitance, hot for leakage and RDS(on)).
 - Why: room-temperature numbers hide the opposite-corner failures.
-- Compute: digest curves; leakage roughly doubles every 10 C when only one point is given.
+- Compute: digest curves at each corner. Leakage given at one temperature only is not published
+  hot: use the vendor's curve or ask. Doubling every 10 C is a rough default for silicon junction
+  leakage and varies by part type, so a check that passes only on it stays unknown, with a hot
+  bench measurement.
 - Pass: both corners evaluated where they push in opposite directions.
 
 ## TH-4 Derating

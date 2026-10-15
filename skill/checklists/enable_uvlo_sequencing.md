@@ -51,8 +51,8 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Check: high-value pull-downs on enables fed through a transistor, diode or ESD structure whose
   leakage rises with temperature.
 - Why: leakage times a large resistor can cross the enable threshold at the hot corner.
-- Compute: `calc.divider.divider_output` with leakage at the hot corner (leakage roughly doubles
-  every 10 C).
+- Compute: `calc.divider.divider_output` with the published leakage at the hot corner; see
+  thermal TH-3 when only one temperature is given.
 - Pass: pin stays below the low threshold with maximum hot leakage.
 
 ## EN-7 Brownout and restart behavior

@@ -14,10 +14,15 @@ reset path; flight fix planned.
 
 - Cold: the low level delivered to RESET# is the driver's VOL plus the diode's VF. On guaranteed
   limits it reaches 566 mV against the PSRAM's VIL maximum of 540 mV at 1.8 V (510 mV at 1.7 V).
-  Reset is not guaranteed to assert at cold.
+  Reset is not guaranteed to assert at cold. UNSURE: this page does not record the terms of
+  the 566 mV. What settles it: the driver's guaranteed VOL at its actual sink current and the
+  BAT30 VF at the cold corner and that current, each with its datasheet page.
 - Hot: BAT30 reverse leakage (50 uA maximum at 85 C, specified at VR = 10 V; ST DocID12564 Rev 3
   Table 4 p.2) against the PSRAM's internal pull-up. Above roughly 90 to 105 C the leakage can
-  hold the memory in reset.
+  hold the memory in reset. UNSURE: that range extrapolates the 85 C limit and rests on a
+  PSRAM pull-up value this page does not give. What settles it: BAT30 reverse current at the
+  real reverse voltage (about 1.5 V, the 3.3 V net against the 1.8 V pin) and temperature from
+  the vendor curve, the PSRAM pull-up minimum with its page, or a hot bench test.
 - The two failures sit at opposite temperature corners, so no resistor value fixes both. Next
   spin: a 1.8 V open-drain buffer (SN74LVC2G07, VOL 0.45 V maximum at 4 mA) in place of the
   diodes.
