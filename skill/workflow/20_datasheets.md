@@ -27,8 +27,9 @@ is read on the page image. List the pages read in `read_from.pages_read`.
   and whether software can override it.
 - **Absolute maximum** and **recommended operating** rows with conditions.
 - **Electrical** rows the checks use: thresholds (enable, UVLO, VIH and VIL formulas), leakage
-  with its test voltage and temperature, VOL with its test current, timing limits, and whether
-  each value is guaranteed or typical.
+  with its test voltage and temperature, VOL with its test current, timing limits, whether each
+  value is guaranteed or typical, and how a guaranteed value is backed (production test, design
+  or characterization) from the table notes.
 - **Equations** the checks use (output voltage, frequency, ripple, slope, current limit,
   soft-start), with their valid range.
 - **Layout rules** stated in the datasheet.

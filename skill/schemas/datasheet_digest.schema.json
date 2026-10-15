@@ -158,7 +158,8 @@
         "max": {"type": "number"},
         "unit": {"type": "string"},
         "conditions": {"type": "string"},
-        "guaranteed": {"type": "boolean", "description": "False when the value is typical only or 'guaranteed by design'."},
+        "guaranteed": {"type": "boolean", "description": "True when the datasheet guarantees the min or max, whether production tested, guaranteed by design or by characterization; false when the value is typical only."},
+        "basis": {"enum": ["production_tested", "design", "characterization", "typical"], "description": "How the vendor backs the value, from the table notes. A design or characterization limit is guaranteed but not tested on every part; a finding that rests on one says so."},
         "page": {"$ref": "#/$defs/page"}
       }
     },
