@@ -93,6 +93,56 @@ def test_zeta_formula_worked_example():
     assert m.pm_from_zeta(0.1097) == pytest.approx(10.97, abs=0.01)
 
 
+def _standard_loop(f: np.ndarray, zeta: float, fn_hz: float) -> np.ndarray:
+    s = 2j * np.pi * f
+    wn = 2 * np.pi * fn_hz
+    return wn ** 2 / (s * (s + 2 * zeta * wn))
+
+
+@pytest.mark.parametrize("zeta", [0.1, 0.3, 0.5, 0.6])
+def test_pm_rule_of_thumb_against_the_exact_standard_loop(zeta):
+    # T = wn^2 / (s (s + 2 zeta wn)): PM = atan(2 zeta / sqrt(sqrt(1 + 4 zeta^4) - 2 zeta^2)) (Franklin et al. 6.4)
+    exact = math.degrees(math.atan(2 * zeta / math.sqrt(math.sqrt(1 + 4 * zeta ** 4) - 2 * zeta ** 2)))
+    f = np.logspace(2, 6, 4001)
+    assert m.loop_margins(f, _standard_loop(f, zeta, 10e3)).phase_margin_deg == pytest.approx(exact, abs=0.05)
+    assert m.pm_from_zeta(zeta) == pytest.approx(exact, abs=3.5)
+
+
+def _ring(t: np.ndarray, t_step: float, zeta: float, fn_hz: float) -> np.ndarray:
+    x = np.clip(t - t_step, 0, None)
+    wn = 2 * np.pi * fn_hz
+    return 3.3 - 0.05 * np.exp(-zeta * wn * x) * np.sin(wn * math.sqrt(1 - zeta ** 2) * x)
+
+
+def test_ring_pm_is_informational_because_a_zero_breaks_the_rule():
+    # T = (0.9 - 100 s) / (s^2 + 101 s + 0.1): 1 + T = (s^2 + s + 1) / den, so zeta = 0.5, yet PM = 8.98 deg
+    num, den = [-100.0, 0.9], [1.0, 101.0, 0.1]
+    assert np.allclose(np.polyadd(den, num), [1.0, 1.0, 1.0])
+
+    def loop(w: float) -> complex:
+        return np.polyval(num, 1j * w) / np.polyval(den, 1j * w)
+
+    wc = brentq(lambda w: abs(loop(w)) - 1, 1e-4, 10)
+    assert 180 + math.degrees(np.angle(loop(wc))) == pytest.approx(8.98, abs=0.01)
+    t = np.linspace(0, 1e-3, 400_001)
+    sr = m.step_response(t, _ring(t, 1e-4, 0.5, 10e3), 1e-4, min_peak_frac=0.01)
+    assert sr.zeta == pytest.approx(0.5, rel=0.02)
+    assert sr.pm_deg_est == pytest.approx(50.0, abs=1.0)
+    res = m.ring_result(sr)
+    assert res.verdict is Verdict.INFO
+    assert "informational" in res.outputs["PM_est"].note
+    assert any("Franklin" in r for r in res.refs)
+
+
+def test_ring_verdict_rests_on_the_measured_damping():
+    t = np.linspace(0, 1e-3, 400_001)
+    sr = m.step_response(t, _ring(t, 1e-4, 0.35, 10e3), 1e-4, min_peak_frac=0.01)
+    assert m.ring_result(sr).verdict is Verdict.MARGINAL
+    assert m.ring_result(m.step_response(t, _ring(t, 1e-4, 0.0, 10e3), 1e-4)).verdict is Verdict.FAIL
+    flat = m.step_response(t, np.full_like(t, 3.3) + 1e-4 * (t > 1e-4), 1e-4)
+    assert m.ring_result(flat).verdict is Verdict.INFO
+
+
 @pytest.mark.parametrize("zeta", [0.1, 0.3])
 def test_step_response_recovers_zeta_and_overshoot(zeta):
     t = jittered_time(1e-3, 300_000)

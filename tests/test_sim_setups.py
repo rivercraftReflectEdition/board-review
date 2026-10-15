@@ -242,7 +242,8 @@ def test_quantized_switch_edges_are_flagged(tmp_path):
 
 
 @needs_ltspice
-def test_load_step_ring_estimates_phase_margin(tmp_path):
+def test_load_step_ring_estimates_phase_margin_of_a_standard_loop(tmp_path):
+    # cm_loop_averaged is an integrator times one pole: the standard second-order loop where PM ~ 100 zeta holds
     body = setups.body_from_netlist(FIXTURES / "cm_loop_averaged.net")
     lg = setups.LoopGainSetup(body=body, top_resistor="Rtop", out_node="out", fsw_hz=1e6, c_out_f=10e-6,
                               slew_a_per_s=1e6)
@@ -258,7 +259,10 @@ def test_load_step_ring_estimates_phase_margin(tmp_path):
     for sr in res.steps:
         assert sr.pm_deg_est == pytest.approx(pm, abs=6.0)
         assert sr.ring_hz == pytest.approx(measure.loop_margins(f, t).crossover_hz, rel=0.15)
-    assert "PM ~ 100 zeta" in res.to_markdown()
+    rings = [r for r in res.results if r.name == "ring-down after step"]
+    assert [r.verdict for r in rings] == [Verdict.MARGINAL, Verdict.MARGINAL]
+    assert "PM_est ~ 100 zeta" in res.to_markdown() and "informational" in res.to_markdown()
+    assert res.verdict is Verdict.MARGINAL
 
 
 @needs_ltspice

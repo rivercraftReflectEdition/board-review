@@ -266,8 +266,12 @@ def zeta_from_decay_ratio(r: float) -> float:
     return ln / math.sqrt(4 * math.pi ** 2 + ln ** 2)
 
 
+PM_RULE_REF = ("Franklin, Powell, Emami-Naeini, Feedback Control of Dynamic Systems, section 6.4: zeta ~ PM/100 for "
+               "the standard loop T = wn^2 / (s (s + 2 zeta wn)), PM below about 60 deg")
+
+
 def pm_from_zeta(zeta: float) -> float:
-    """Second-order rule of thumb PM ~ 100 zeta degrees (fair below zeta 0.6)."""
+    """Rule of thumb PM ~ 100 zeta deg; holds only for the standard second-order loop (PM_RULE_REF)."""
     return 100.0 * zeta
 
 
@@ -295,9 +299,10 @@ def step_response(t: np.ndarray, y: np.ndarray, t_step_s: float, t_end_s: float 
     decay = ring = zeta = pm = None
     if len(use) >= 3 and use[0][1] != 0:
         r = use[2][1] / use[0][1]
-        if 0 < r < 1:
+        if r > 0:
             decay = float(r)
             ring = float(1.0 / (use[2][0] - use[0][0]))
+        if 0 < r < 1:
             zeta = zeta_from_decay_ratio(r)
             pm = pm_from_zeta(zeta)
     overshoot = None
@@ -331,33 +336,44 @@ def _alternating_peaks(t: np.ndarray, e: np.ndarray, min_height: float) -> list[
     return [(float(t[i]), v) for i, v in out]
 
 
-def ring_result(sr: StepResponse, pm_pass_deg: float = 45.0, pm_marginal_deg: float = 30.0) -> Result:
-    """Show the ring-down math: r from same-sign peaks, zeta, PM estimate, with a verdict."""
+def ring_result(sr: StepResponse, zeta_marginal: float = 0.42, zeta_fail: float = 0.27) -> Result:
+    """Ring-down math; a light ring fails, a damped ring passes nothing, and the PM estimate is informational."""
+    formula = "r = peak_3 / peak_1; zeta = ln(1/r) / sqrt(4 pi^2 + ln(1/r)^2)"
     inputs = {
         "peak_1": Quantity(sr.peaks[0][1] if sr.peaks else float("nan"), "V", "first deviation peak"),
         "peak_3": Quantity(sr.peaks[2][1] if len(sr.peaks) > 2 else float("nan"), "V", "next same-sign peak"),
     }
     if sr.decay_ratio is None:
-        return Result(
-            name="ring-down after step", formula="r = peak_3 / peak_1; zeta = ln(1/r) / sqrt(4 pi^2 + ln(1/r)^2)",
-            inputs=inputs, outputs={}, verdict=Verdict.UNKNOWN,
-            reason="no second same-sign peak above the noise: overdamped, or the window is too short",
-        )
-    pm = sr.pm_deg_est
-    verdict = Verdict.PASS if pm >= pm_pass_deg else Verdict.MARGINAL if pm >= pm_marginal_deg else Verdict.FAIL
+        return Result(name="ring-down after step", formula=formula, inputs=inputs, outputs={}, verdict=Verdict.INFO,
+                      reason="no second same-sign peak above the noise: damped, or the window is too short; this "
+                             "does not show margin, use the loop gain")
+    outputs = {"r": Quantity(sr.decay_ratio, ""), "f_ring": Quantity(sr.ring_hz, "Hz")}
+    if sr.zeta is None:
+        return Result(name="ring-down after step", formula=formula, inputs=inputs, outputs=outputs,
+                      verdict=Verdict.FAIL, reason=f"the ring does not decay (r = {sr.decay_ratio:.2f}): sustained or "
+                                                   "growing oscillation")
+    inputs["zeta_marginal"] = Quantity(zeta_marginal, "", "default 0.42, the standard loop's zeta at PM 45 deg")
+    inputs["zeta_fail"] = Quantity(zeta_fail, "", "default 0.27, the standard loop's zeta at PM 30 deg")
+    outputs["zeta"] = Quantity(sr.zeta, "", "closed-loop damping of the ring")
+    outputs["PM_est"] = Quantity(sr.pm_deg_est, "deg", "informational: standard second-order loop only")
+    if sr.zeta < zeta_fail:
+        verdict, reason = Verdict.FAIL, f"lightly damped ring, zeta {sr.zeta:.2f} below {zeta_fail:.2f}"
+    elif sr.zeta < zeta_marginal:
+        verdict, reason = Verdict.MARGINAL, f"ring damping zeta {sr.zeta:.2f} below {zeta_marginal:.2f}"
+    else:
+        verdict = Verdict.INFO
+        reason = f"ring damping zeta {sr.zeta:.2f}; a damped ring does not show margin, use the loop gain"
     return Result(
         name="ring-down after step",
-        formula="r = peak_3 / peak_1; zeta = ln(1/r) / sqrt(4 pi^2 + ln(1/r)^2); PM ~ 100 zeta deg",
+        formula=formula + "; PM_est ~ 100 zeta deg",
         inputs=inputs,
-        outputs={
-            "r": Quantity(sr.decay_ratio, ""),
-            "f_ring": Quantity(sr.ring_hz, "Hz"),
-            "zeta": Quantity(sr.zeta, ""),
-            "PM_est": Quantity(pm, "deg", "second-order estimate"),
-        },
+        outputs=outputs,
         verdict=verdict,
-        reason=f"PM estimate {pm:.0f} deg against {pm_pass_deg:.0f} deg",
-        assumptions=("the ring is one dominant second-order pair", "PM ~ 100 zeta holds below zeta 0.6"),
+        reason=reason,
+        refs=(PM_RULE_REF,),
+        assumptions=("the ring is one dominant second-order pair",
+                     "PM_est holds only for T = wn^2 / (s (s + 2 zeta wn)); a loop zero or a third pole breaks it: "
+                     "T = (0.9 - 100 s) / (s^2 + 101 s + 0.1) rings at zeta 0.5 with PM 9 deg"),
     )
 
 
