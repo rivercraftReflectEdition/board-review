@@ -2,7 +2,7 @@
 
 **Rule:** decide what the watchdog does with blank flash and under a debugger, and provide a
 solder-free way to disable it for programming
-([resets_supervisors_watchdogs RST-6, RST-7](../../skill/checklists/resets_supervisors_watchdogs.md)).
+([resets_supervisors_watchdogs RST-6, RST-7](../checklists/resets_supervisors_watchdogs.md)).
 
 Board: Sauron rev1. Parts: TPS3435 external watchdog, STM32N657, S28HS01GT boot NOR.
 Status: flagged as a bring-up hazard before release; handled with a strap that needed soldering.
@@ -25,8 +25,8 @@ Status: flagged as a bring-up hazard before release; handled with a strap that n
 
 ## The checks that catch it now
 
-- [RST-6](../../skill/checklists/resets_supervisors_watchdogs.md): armed state against blank flash
+- [RST-6](../checklists/resets_supervisors_watchdogs.md): armed state against blank flash
   and debug.
-- [RST-7](../../skill/checklists/resets_supervisors_watchdogs.md): configuration pins strapped.
-- [RST-4](../../skill/checklists/resets_supervisors_watchdogs.md): open-drain output pull-up.
-- [LAY-8](../../skill/checklists/layout.md): test and rework access.
+- [RST-7](../checklists/resets_supervisors_watchdogs.md): configuration pins strapped.
+- [RST-4](../checklists/resets_supervisors_watchdogs.md): open-drain output pull-up.
+- [LAY-8](../checklists/layout.md): test and rework access.

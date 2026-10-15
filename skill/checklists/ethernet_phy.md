@@ -10,7 +10,7 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
   software fix.
 - Compute: `calc.divider.divider_output` per strap.
 - Pass: every strap decodes to the intended mode, address and options.
-- Example: [strap pairs fitted on both sides](../../docs/lessons/strap-pairs-fitted-both-sides.md)
+- Example: [strap pairs fitted on both sides](../lessons/strap-pairs-fitted-both-sides.md)
 
 ## ETH-2 Reference clock
 - Check: source and direction of the reference clock (50 MHz for RMII, 25 MHz crystal or
@@ -48,7 +48,7 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Why: floating ground pins look like a blocker or an intent; the schematic must say which.
 - Compute: none; digest pin configuration.
 - Pass: matches a configuration the datasheet shows.
-- Example: [verifier dispute on ESD grounds](../../docs/lessons/verifier-dispute-esd-grounds.md)
+- Example: [verifier dispute on ESD grounds](../lessons/verifier-dispute-esd-grounds.md)
 
 ## ETH-7 Bench readback
 - Check: the bench plan reads PHY ID, strap status and interface mode registers before link tests.

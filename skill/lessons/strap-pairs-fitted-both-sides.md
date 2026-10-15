@@ -2,8 +2,8 @@
 
 **Rule:** compute every strap pin's voltage from the parts fitted in the released variant plus
 the internal pull, and read the fitted state from the BOM that goes to assembly
-([straps_and_boot_pins STR-1 to STR-3](../../skill/checklists/straps_and_boot_pins.md),
-[netlist_integrity NET-7](../../skill/checklists/netlist_integrity.md)).
+([straps_and_boot_pins STR-1 to STR-3](../checklists/straps_and_boot_pins.md),
+[netlist_integrity NET-7](../checklists/netlist_integrity.md)).
 
 Board: Sauron rev1. Part: ADIN1200 Ethernet PHY.
 Status: found in July, found again in August, reached the boards anyway; reworked 2026-10-07.
@@ -29,9 +29,9 @@ Status: found in July, found again in August, reached the boards anyway; reworke
 
 ## The checks that catch it now
 
-- [STR-1](../../skill/checklists/straps_and_boot_pins.md): pin voltage with the internal pull.
-- [STR-2](../../skill/checklists/straps_and_boot_pins.md): fitted state from the released variant.
-- [STR-3](../../skill/checklists/straps_and_boot_pins.md): trace through series resistors.
-- [STR-6](../../skill/checklists/straps_and_boot_pins.md): strap readback in the bench plan.
-- [NET-7](../../skill/checklists/netlist_integrity.md): variant data present.
-- [NET-4](../../skill/checklists/netlist_integrity.md): prior fixes re-verified in the data.
+- [STR-1](../checklists/straps_and_boot_pins.md): pin voltage with the internal pull.
+- [STR-2](../checklists/straps_and_boot_pins.md): fitted state from the released variant.
+- [STR-3](../checklists/straps_and_boot_pins.md): trace through series resistors.
+- [STR-6](../checklists/straps_and_boot_pins.md): strap readback in the bench plan.
+- [NET-7](../checklists/netlist_integrity.md): variant data present.
+- [NET-4](../checklists/netlist_integrity.md): prior fixes re-verified in the data.

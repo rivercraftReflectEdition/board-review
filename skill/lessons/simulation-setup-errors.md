@@ -2,8 +2,8 @@
 
 **Rule:** a simulation result counts only after its netlist, operating point and injection pass
 sanity checks, and a nominal model never passes a loop whose real compensation is unknown
-([40_checks sanity checks](../../skill/workflow/40_checks.md),
-[buck_regulator BR-2](../../skill/checklists/buck_regulator.md)).
+([40_checks sanity checks](../workflow/40_checks.md),
+[buck_regulator BR-2](../checklists/buck_regulator.md)).
 
 Board: Sauron rev1. Part: LTC3633A, vendor LTspice model.
 Status: three wrong conclusions during the 3V3 debug, 2026-10-06, each corrected the same day.
@@ -28,6 +28,6 @@ model uses typical silicon and an ideal comparator.
 
 ## The checks that catch it now
 
-- [40_checks sanity checks](../../skill/workflow/40_checks.md): pins connected, fsw from RT within
+- [40_checks sanity checks](../workflow/40_checks.md): pins connected, fsw from RT within
   5 percent, injection amplitude independence, model limits written down, corners run.
-- [BR-2](../../skill/checklists/buck_regulator.md): a nominal model is an estimate, not a pass.
+- [BR-2](../checklists/buck_regulator.md): a nominal model is an estimate, not a pass.

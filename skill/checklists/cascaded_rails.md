@@ -22,7 +22,7 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Not published: upstream sink current unspecified: treat as zero. Downstream negative current
   limit unspecified: the event bound is unknown; require a bleed or clamp footprint and a bench
   capture of the rail during load release.
-- Example: [reverse current into a non-sinking rail](../../docs/lessons/fcm-reverse-current-into-non-sinking-rail.md)
+- Example: [reverse current into a non-sinking rail](../lessons/fcm-reverse-current-into-non-sinking-rail.md)
 
 ## CR-2 Source and load impedance
 - Check: a regulated converter has negative incremental input impedance. The upstream rail's

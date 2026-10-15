@@ -12,7 +12,8 @@ failures into candidate findings.
 4. Interfaces: ethernet_phy, camera_csi, xspi_memory, clocks_crystals.
 5. protection_tvs, thermal, then layout when placement exists.
 
-Agents may split by block. Each agent gets the checklist, the block record, the digests and the
+Agents may split by block (subagents in Claude Code, separate `codex exec` runs in Codex, or one
+block after another). Each agent gets the checklist, the block record, the digests and the
 staging views, not the whole board.
 
 ## Run each item
@@ -130,7 +131,7 @@ measured result (margins, ring, settling, overshoot, impedance). Quote the measu
 when the setup verdict is pass; a marginal or unknown setup makes the result unknown. A ring-down
 PM estimate is informational; quote PM from the loop gain.
 
-See [simulation setup errors](../../docs/lessons/simulation-setup-errors.md).
+See [simulation setup errors](../lessons/simulation-setup-errors.md).
 
 ## Candidate findings
 

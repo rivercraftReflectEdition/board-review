@@ -2,7 +2,7 @@
 
 **Rule:** compute the resonance and Q of every bead filter against nearby switching frequencies,
 and when the bead's inductance is not published, bound it instead of staying silent
-([ferrite_lc_filter FLT-1, FLT-2](../../skill/checklists/ferrite_lc_filter.md)).
+([ferrite_lc_filter FLT-1, FLT-2](../checklists/ferrite_lc_filter.md)).
 
 Board: Sauron rev1. Parts: TDK KPZ1608SHR121ATDH5 beads (120 ohm at 100 MHz) on MCU analog
 supplies, fed from a 1V8 rail made by an LTC3633A at about 1.2 MHz.
@@ -30,8 +30,8 @@ Status: caught before fab (pre-route review, 2026-08-12); fixed in the release.
 
 ## The checks that catch it now
 
-- [FLT-1](../../skill/checklists/ferrite_lc_filter.md): resonance against every nearby fsw, with
+- [FLT-1](../checklists/ferrite_lc_filter.md): resonance against every nearby fsw, with
   a bound when L is not published.
-- [FLT-2](../../skill/checklists/ferrite_lc_filter.md): damping to Q <= 2.
-- [Not-published rule](../../skill/workflow/40_checks.md): an unknown is never a pass and never
+- [FLT-2](../checklists/ferrite_lc_filter.md): damping to Q <= 2.
+- [Not-published rule](../workflow/40_checks.md): an unknown is never a pass and never
   dropped.

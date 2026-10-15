@@ -2,7 +2,7 @@
 
 **Rule:** compare the project's document list with the hierarchy and the files on disk, and diff
 part counts against the last snapshot
-([netlist_integrity NET-3, NET-4](../../skill/checklists/netlist_integrity.md)).
+([netlist_integrity NET-3, NET-4](../checklists/netlist_integrity.md)).
 
 Board: Sauron rev1 (Altium project).
 Status: caught in release week, 2026-08-27, before the package was sent.
@@ -23,6 +23,6 @@ Status: caught in release week, 2026-08-27, before the package was sent.
 
 ## The checks that catch it now
 
-- [NET-3](../../skill/checklists/netlist_integrity.md): project contents against hierarchy and disk.
-- [NET-4](../../skill/checklists/netlist_integrity.md): snapshot diff and one source per power net.
-- [NET-1](../../skill/checklists/netlist_integrity.md): 3-way compare with the PCB and fab netlists.
+- [NET-3](../checklists/netlist_integrity.md): project contents against hierarchy and disk.
+- [NET-4](../checklists/netlist_integrity.md): snapshot diff and one source per power net.
+- [NET-1](../checklists/netlist_integrity.md): 3-way compare with the PCB and fab netlists.

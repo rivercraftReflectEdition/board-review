@@ -1,8 +1,8 @@
 # Forced-continuous buck returning current into a rail that cannot sink
 
 **Rule:** for every rail, list what can push current back into it and what absorbs it
-([cascaded_rails CR-1](../../skill/checklists/cascaded_rails.md),
-[buck_regulator BR-5](../../skill/checklists/buck_regulator.md)).
+([cascaded_rails CR-1](../checklists/cascaded_rails.md),
+[buck_regulator BR-5](../checklists/buck_regulator.md)).
 
 Board: Sauron rev1. Parts: LTC3633A (downstream, forced continuous) on a 4 V rail made by a base
 LT8640 (SYNC/MODE floating, pulse skipping).
@@ -32,7 +32,7 @@ Status: never reviewed; seen at bring-up while debugging the 3V3 oscillation.
 
 ## The checks that catch it now
 
-- [CR-1](../../skill/checklists/cascaded_rails.md): returned current against what absorbs it.
-- [BR-5](../../skill/checklists/buck_regulator.md): light-load mode and negative inductor current.
-- [CR-4](../../skill/checklists/cascaded_rails.md): every load on the rail against its worst high.
-- [CR-3](../../skill/checklists/cascaded_rails.md): headroom when the upstream rail sags.
+- [CR-1](../checklists/cascaded_rails.md): returned current against what absorbs it.
+- [BR-5](../checklists/buck_regulator.md): light-load mode and negative inductor current.
+- [CR-4](../checklists/cascaded_rails.md): every load on the rail against its worst high.
+- [CR-3](../checklists/cascaded_rails.md): headroom when the upstream rail sags.

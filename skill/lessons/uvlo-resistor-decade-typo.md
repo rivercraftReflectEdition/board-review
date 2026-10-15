@@ -2,8 +2,8 @@
 
 **Rule:** compute every enable and UVLO divider from BOM values, and scan for resistor values a
 decade or more off from their partners
-([enable_uvlo_sequencing EN-1](../../skill/checklists/enable_uvlo_sequencing.md),
-[netlist_integrity NET-6](../../skill/checklists/netlist_integrity.md)).
+([enable_uvlo_sequencing EN-1](../checklists/enable_uvlo_sequencing.md),
+[netlist_integrity NET-6](../checklists/netlist_integrity.md)).
 
 Board: Sauron rev1, early front end. Part: LM5116 buck controller (later replaced by an LT8640
 when the input bus changed to 12 V).
@@ -27,5 +27,5 @@ Status: caught in the July schematic review.
 
 ## The checks that catch it now
 
-- [EN-1](../../skill/checklists/enable_uvlo_sequencing.md): every divider computed from BOM values.
-- [NET-6](../../skill/checklists/netlist_integrity.md): value outlier scan.
+- [EN-1](../checklists/enable_uvlo_sequencing.md): every divider computed from BOM values.
+- [NET-6](../checklists/netlist_integrity.md): value outlier scan.

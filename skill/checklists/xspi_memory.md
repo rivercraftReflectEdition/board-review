@@ -15,7 +15,7 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Compute: none; `model.compare` 3-way compare.
 - Pass: every memory signal is on the net the intended topology puts it on, in all three
   netlists, and the chip selects match the controller mode.
-- Example: [bus net name collision](../../docs/lessons/bus-net-name-collision.md)
+- Example: [bus net name collision](../lessons/bus-net-name-collision.md)
 
 ## MEM-2 Every signal reaches the right controller port pin
 - Check: CS, CK, DQS and data land on pins of the same controller port with the right alternate

@@ -2,7 +2,7 @@
 
 **Rule:** compare every regulator's operating point with the datasheet's examples for the same
 compensation mode, and give any loop that paper cannot settle a Cff and compensation footprint
-([buck_regulator BR-1 to BR-4](../../skill/checklists/buck_regulator.md)).
+([buck_regulator BR-1 to BR-4](../checklists/buck_regulator.md)).
 
 Board: Sauron rev1 star tracker carrier (STM32N657). Part: LTC3633A dual buck, channel 1 (3V3).
 Status: missed by three reviews; found at bring-up on all three boards, 2026-10-06.
@@ -40,9 +40,9 @@ Status: missed by three reviews; found at bring-up on all three boards, 2026-10-
 
 ## The checks that catch it now
 
-- [BR-1](../../skill/checklists/buck_regulator.md): operating point against the example envelope.
-- [BR-2](../../skill/checklists/buck_regulator.md): margin at corners; a nominal model is not a pass.
-- [BR-3](../../skill/checklists/buck_regulator.md): Cff, compensation and injection footprints.
-- [BR-4](../../skill/checklists/buck_regulator.md): slew headroom against the examples.
-- [BR-10](../../skill/checklists/buck_regulator.md): re-check after late changes.
-- [50_verify](../../skill/workflow/50_verify.md): high-risk passes go to the verifier.
+- [BR-1](../checklists/buck_regulator.md): operating point against the example envelope.
+- [BR-2](../checklists/buck_regulator.md): margin at corners; a nominal model is not a pass.
+- [BR-3](../checklists/buck_regulator.md): Cff, compensation and injection footprints.
+- [BR-4](../checklists/buck_regulator.md): slew headroom against the examples.
+- [BR-10](../checklists/buck_regulator.md): re-check after late changes.
+- [50_verify](../workflow/50_verify.md): high-risk passes go to the verifier.

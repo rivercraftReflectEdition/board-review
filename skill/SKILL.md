@@ -10,6 +10,21 @@ a regulator outside the conditions its compensation was designed for, a bead and
 ring at the switching frequency, a rail that cannot absorb returned current, a strap at mid-rail,
 a reset that does not assert at cold. This skill finds those, with numbers.
 
+## Setup (once per machine)
+
+The skill runs the `boardreview` Python package from the board-review repo; this folder is the
+repo's `skill/` folder, linked into the agent's skills folder.
+
+1. `python -m pip install -e <board-review repo>` (Python 3.11+, numpy, scipy). It needs network
+   access and a writable Python; in a sandbox, ask the user to run it.
+2. Check from any folder: `python -m boardreview --help` lists `prep` and `validate`. If it fails,
+   resolve this folder's link to find the repo (its parent) and run step 1.
+3. KiCad boards need `kicad-cli` from KiCad 8 or newer (workflow/10_extract.md says where it is).
+
+Paths in this skill (`workflow/`, `checklists/`, `schemas/`, `lessons/`) are relative to the folder
+that holds this SKILL.md. Python names are relative to the `boardreview` package:
+`calc.buck.current_slew` is `boardreview.calc.buck.current_slew`.
+
 ## When to use
 
 - A schematic or PCB review before fab, before routing, or before an ECO is released.
@@ -42,7 +57,7 @@ the calculator, the pass criterion, and what to do when the data is not publishe
    finding.
 2. **Cite everything.** Every claim names a pin (`U4.12`), a net, a schematic page, a datasheet
    document with revision and page, or a calculator result. No citation, no claim.
-3. **Show the math.** Every number comes from a calculator in `tools/boardreview/calc` and the
+3. **Show the math.** Every number comes from a calculator in `boardreview.calc` and the
    report prints its formula, inputs and outputs (`Result.to_markdown()`). Where a checklist
    says no calculator exists yet, write the formula, inputs and result the same way. Use
    worst-case corners: tolerance, temperature, bias, aging. Typical values are labeled typical.
@@ -51,7 +66,8 @@ the calculator, the pass criterion, and what to do when the data is not publishe
    becomes a required footprint, a bench test, or a vendor question. Never guess a value and
    never drop the check.
 5. **Every finding survives refutation.** A second agent with fresh context tries to break each
-   finding against the sources (workflow/50_verify.md). WRONG findings are dropped. UNVERIFIABLE
+   finding against the sources (workflow/50_verify.md says how in Claude Code, Codex and other
+   agents). WRONG findings are dropped. UNVERIFIABLE
    findings carry a bench test. High-risk passes get the same treatment: a wrong pass is how
    real misses happen.
 6. **Compare with the example envelope.** For every regulator, compare the operating point with
@@ -66,7 +82,8 @@ the calculator, the pass criterion, and what to do when the data is not publishe
 
 ## Finding format
 
-Each finding is one JSON object that validates against `schemas/finding.schema.json`. Required:
+Each finding is one JSON object that validates against `schemas/finding.schema.json`; check the
+file with `python -m boardreview validate findings.json` before reporting. Required:
 
 - `id`, `title` (one line: part or net, what fails), `severity` (blocker, major, minor, note)
 - `block` (a checklist name) and `check` (the item, for example `buck_regulator#BR-1`)
@@ -89,13 +106,12 @@ verification. Severity:
 
 ## Tools
 
-Python names in this skill are relative to the `boardreview` package in `tools/boardreview`:
-`calc.buck.current_slew` is `boardreview.calc.buck.current_slew`.
-
 - `python -m boardreview prep`: board model, staging views, lint, block candidates and the
   netlist compare in one folder, indexed by `facts.md` (workflow/10_extract.md).
-- `model`: board model from IPC-D-356, KiCad XML, Protel .NET, eda-agent JSON and a BOM;
-  `model.compare` for the 3-way compare and the snapshot diff.
+- `python -m boardreview validate FILE`: schema check for findings.json (`--schema digest` or
+  `--schema board_model` for the others).
+- `model`: board model from IPC-D-356, KiCad XML, `.kicad_pcb`, Protel .NET, eda-agent JSON and
+  a BOM; `model.compare` for the 3-way compare and the snapshot diff.
 - `lint`: single-pin nets, unconnected IC pins, ground and supply pins on the wrong net,
   floating protection grounds, near-duplicate rail names, parts without MPN, DNP-only links,
   BOM against netlist. `lint.to_findings` writes results as PENDING candidate findings.
@@ -106,10 +122,21 @@ Python names in this skill are relative to the `boardreview` package in `tools/b
 - `sim`: LTspice batch runs from `sim.setups` (`run_loop_gain`, `run_load_step`, `run_startup`,
   `run_impedance`) with the checks in `sim.sanity`. A simulation is evidence only after its
   checks pass.
-- Altium: the eda-agent MCP tools. KiCad: `kicad-cli`.
+- Altium: the eda-agent MCP tools (any agent that speaks MCP). KiCad: `kicad-cli`.
 
-## Evals and lessons (in the board-review repo)
+## Running in different agents
 
-- `docs/lessons/`: one page per real miss, linked to the checklist item that now catches it.
-- `evals/`: expected findings per board and `evals/score.py`. A miss on a dev board is a
-  checklist bug. Held-out boards are never read while editing checklists.
+The skill needs a shell, file reads and writes, and a second context for stage 5.
+- A second agent with fresh context: a subagent in Claude Code; a separate `codex exec` run or a
+  fresh session in Codex; elsewhere, a new pass that sees only the finding JSON and the cited
+  sources (workflow/50_verify.md).
+- Work split across agents (one per MPN, one per block) can run in the same ways, or one piece
+  after another in one session. The output files are the same.
+- Datasheet pages are read as images (workflow/20_datasheets.md). Without network access, ask
+  the user for the PDFs; never fill a digest from memory.
+
+## Lessons and evals
+
+- `lessons/`: one page per real miss, linked to the checklist item that now catches it.
+- In the board-review repo only: `evals/` holds expected findings per board and the scorer. A
+  miss on a dev board is a checklist bug. Held-out boards are never read while editing checklists.

@@ -122,8 +122,9 @@ finding or bench id: `{done, at, by, verified, verifyNote}`. A tick updates `don
 
 ## findings.json
 
-A list of findings that validates against `schemas/finding.schema.json`. This is the file
-`evals/score.py` scores.
+A list of findings that validates against `schemas/finding.schema.json`. Check it with
+`python -m boardreview validate findings.json` and fix every error before the report goes out.
+This is the file the eval scorer in the board-review repo reads.
 
 ## Bench test plan
 

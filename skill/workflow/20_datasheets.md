@@ -19,6 +19,11 @@ Render the pages to images and read the image. Text extraction may help find a v
 smear columns, footnotes detach and figure labels move. A value goes in the digest only after it
 is read on the page image. List the pages read in `read_from.pages_read`.
 
+Render with whatever is installed, for example `pdftoppm -r 150 -f 12 -l 12 -png ds.pdf page`
+(poppler) or PyMuPDF (`fitz`). Claude Code reads a PNG, or a PDF page range, with its file read
+tool; Codex opens a PNG with its image viewer tool. An agent that cannot see images marks every
+value it could not read on a page image UNSURE.
+
 ## Required content
 
 - **Pin table** with type, reference supply (domain), function, internal pull with its range,
@@ -47,7 +52,7 @@ question, or a model. Common ones: internal compensation network; error amplifie
 gain; bead inductance at low frequency and its DC-bias drop; sink current in a given mode;
 guaranteed minimum on and off times; internal pull tolerance; leakage at the board's bias; VF at
 cold at the real current. A check that needs a missing value must not be skipped or passed. See
-[bead tank at the switching frequency](../../docs/lessons/bead-tank-at-switching-frequency.md),
+[bead tank at the switching frequency](../lessons/bead-tank-at-switching-frequency.md),
 where a missing bead value led a reviewer to stay silent.
 
 ## Curves
@@ -65,7 +70,10 @@ from a value used outside its conditions.
 
 ## Running it
 
-One agent per MPN, in parallel, each given the schema and the questions its block checklist will
-ask of that part. The main agent then spot-checks three values per digest against the page image.
+One agent per MPN, in parallel where the agent allows it (subagents in Claude Code, separate
+`codex exec` runs in Codex), or one MPN after another. Each gets the schema and the questions its
+block checklist will ask of that part. The main agent then spot-checks three values per digest
+against the page image, and checks each digest with
+`python -m boardreview validate <digest>.json --schema digest`.
 Reviewed digests may be committed to the repo per docs/CONVENTIONS.md and reused on later boards
 after checking the revision.

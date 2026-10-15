@@ -17,7 +17,7 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
   ends of a range decide it, but a range such as 0.5x to 2x typical is a default, not a
   guarantee. Run it to see whether the strap is sensitive; the result stays unknown, with the
   STR-6 readback and a vendor question for the pull range. Pass only on a published range.
-- Example: [strap pairs fitted on both sides](../../docs/lessons/strap-pairs-fitted-both-sides.md)
+- Example: [strap pairs fitted on both sides](../lessons/strap-pairs-fitted-both-sides.md)
 
 ## STR-2 Fitted state from the released variant
 - Check: read fitted and DNP state from the BOM variant that goes to assembly, not from design
@@ -27,7 +27,7 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Compute: variant table against the netlist; STR-1 for the level.
 - Pass: in the released variant, the fitted parts (or the internal pull alone, where the
   datasheet gives its range) set the intended level with the STR-1 margin.
-- Example: [strap pairs fitted on both sides](../../docs/lessons/strap-pairs-fitted-both-sides.md)
+- Example: [strap pairs fitted on both sides](../lessons/strap-pairs-fitted-both-sides.md)
 
 ## STR-3 Trace through series resistors and other loads
 - Check: a strap network may sit one series resistor away from the pin. Follow the net through
@@ -52,7 +52,7 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
   corners.
 - Pass: production mode is the default with margin; every other mode is reachable through a
   documented jumper, DNP or test point.
-- Example: [boot pin divider](../../docs/lessons/boot-pin-divider.md)
+- Example: [boot pin divider](../lessons/boot-pin-divider.md)
 
 ## STR-6 Readback in the bench plan
 - Check: the bench plan reads back latched strap values (status registers, address scans) on

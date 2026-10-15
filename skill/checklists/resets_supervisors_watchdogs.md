@@ -13,7 +13,7 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Compute: `calc.divider.divider_output` for the network, with VF and VOL from the digest at the
   cold corner.
 - Pass: delivered low below VIL max on guaranteed limits, not typicals.
-- Example: [reset diode-OR margins](../../docs/lessons/reset-diode-or-margins.md)
+- Example: [reset diode-OR margins](../lessons/reset-diode-or-margins.md)
 
 ## RST-2 Released level at the hot corner
 - Check: pull-up current against the sum of all leakage on the net (reverse diode leakage at
@@ -23,7 +23,7 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Compute: `calc.divider.divider_output` with leakage at the hot corner; `calc.timing.rc_edge`
   for the release time with any reset capacitor.
 - Pass: released level above VIH min with maximum hot leakage; release time inside limits.
-- Example: [reset diode-OR margins](../../docs/lessons/reset-diode-or-margins.md)
+- Example: [reset diode-OR margins](../lessons/reset-diode-or-margins.md)
 
 ## RST-3 Domains in the reset network
 - Check: a reset net that idles at one rail and drives inputs on a lower rail; back-powering and
@@ -57,7 +57,7 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Compute: `calc.timing.budget` boot time against the minimum watchdog period.
 - Pass: a documented, solder-free way to disable it for programming, and boot time below the
   minimum period with margin.
-- Example: [watchdog armed with blank flash](../../docs/lessons/watchdog-armed-with-blank-flash.md)
+- Example: [watchdog armed with blank flash](../lessons/watchdog-armed-with-blank-flash.md)
 
 ## RST-7 Watchdog configuration pins
 - Check: timeout select and enable pins strapped (not floating); WDI connected to a pin that
@@ -83,4 +83,4 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Pass: the symbol's cathode pin maps to the footprint pad under the package's cathode marking
   in the datasheet drawing, and the silkscreen polarity mark is at that pad. Libraries number
   diode pads differently; check the mapping, not the pad number.
-- Example: [reset diode-OR margins](../../docs/lessons/reset-diode-or-margins.md)
+- Example: [reset diode-OR margins](../lessons/reset-diode-or-margins.md)

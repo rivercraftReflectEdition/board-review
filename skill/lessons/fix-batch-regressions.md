@@ -2,7 +2,7 @@
 
 **Rule:** after every fix batch, re-extract and diff against the last snapshot, and re-verify
 every fix in the data instead of the fix log
-([netlist_integrity NET-4](../../skill/checklists/netlist_integrity.md)).
+([netlist_integrity NET-4](../checklists/netlist_integrity.md)).
 
 Board: Sauron rev1.
 Status: caught by re-running the mechanical checks, 2026-07-31 and 2026-08-24.
@@ -25,9 +25,9 @@ Status: caught by re-running the mechanical checks, 2026-07-31 and 2026-08-24.
 
 ## The checks that catch it now
 
-- [NET-4](../../skill/checklists/netlist_integrity.md): diff after every change, one source per
+- [NET-4](../checklists/netlist_integrity.md): diff after every change, one source per
   power net, prior fixes checked in the data.
-- [NET-3](../../skill/checklists/netlist_integrity.md): project contents complete.
-- [IO-3](../../skill/checklists/io_levels_and_domains.md): back-powering.
-- [MEM-2](../../skill/checklists/xspi_memory.md): every memory signal reaches the controller.
-- [Intake item 5](../../skill/workflow/00_intake.md): prior findings re-verified.
+- [NET-3](../checklists/netlist_integrity.md): project contents complete.
+- [IO-3](../checklists/io_levels_and_domains.md): back-powering.
+- [MEM-2](../checklists/xspi_memory.md): every memory signal reaches the controller.
+- [Intake item 5](../workflow/00_intake.md): prior findings re-verified.

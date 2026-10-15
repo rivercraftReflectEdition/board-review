@@ -26,7 +26,8 @@ Goal: fix the scope and the facts the review judges against, before reading any 
 
 Create a review folder outside this repo, for example `outputs/<board>_review_<date>/`, with
 `sources.local.json` listing every input path. Everything extracted from the board stays there.
-For eval boards, `evals/<board>/sources.local.json` points at it (ignored by git).
+For eval boards in the board-review repo, `evals/<board>/sources.local.json` points at it
+(ignored by git).
 
 ## Ask only what the files cannot answer
 

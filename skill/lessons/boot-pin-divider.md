@@ -2,7 +2,7 @@
 
 **Rule:** compute each boot pin's level from the fitted parts, and make every boot mode the board
 needs reachable without soldering
-([straps_and_boot_pins STR-5](../../skill/checklists/straps_and_boot_pins.md)).
+([straps_and_boot_pins STR-5](../checklists/straps_and_boot_pins.md)).
 
 Board: Sauron rev1. Part: STM32N657 BOOT0 and BOOT1 (PA6).
 Status: July, both boot pins floated (fixed). August 24, BOOT0 had both resistors fitted (fixed
@@ -25,7 +25,7 @@ before fab). Bring-up: mode changes needed soldering.
 
 ## The checks that catch it now
 
-- [STR-5](../../skill/checklists/straps_and_boot_pins.md): boot pin levels and reachable modes.
-- [STR-1](../../skill/checklists/straps_and_boot_pins.md) and
-  [STR-2](../../skill/checklists/straps_and_boot_pins.md): level and fitted state.
-- [NET-7](../../skill/checklists/netlist_integrity.md): variant data present.
+- [STR-5](../checklists/straps_and_boot_pins.md): boot pin levels and reachable modes.
+- [STR-1](../checklists/straps_and_boot_pins.md) and
+  [STR-2](../checklists/straps_and_boot_pins.md): level and fitted state.
+- [NET-7](../checklists/netlist_integrity.md): variant data present.

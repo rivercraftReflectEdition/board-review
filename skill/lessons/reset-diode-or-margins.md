@@ -2,7 +2,7 @@
 
 **Rule:** check every reset input's asserted level at the cold corner and its released level at
 the hot corner, on guaranteed values
-([resets_supervisors_watchdogs RST-1, RST-2](../../skill/checklists/resets_supervisors_watchdogs.md)).
+([resets_supervisors_watchdogs RST-1, RST-2](../checklists/resets_supervisors_watchdogs.md)).
 
 Board: Sauron rev1. Parts: TPS3435 watchdog (open-drain output) and the MCU reset on a 3.3 V
 net, BAT30 Schottky diodes into the 1.8 V RESET# pins of the NOR (S28HS01GT) and PSRAM
@@ -40,8 +40,8 @@ reset path; flight fix planned.
 
 ## The checks that catch it now
 
-- [RST-1](../../skill/checklists/resets_supervisors_watchdogs.md): asserted level at cold.
-- [RST-2](../../skill/checklists/resets_supervisors_watchdogs.md): released level at hot.
-- [RST-3](../../skill/checklists/resets_supervisors_watchdogs.md): domains in the reset network.
-- [RST-9](../../skill/checklists/resets_supervisors_watchdogs.md): polarity of two-terminal parts.
-- [TH-3](../../skill/checklists/thermal.md): both temperature corners where they oppose.
+- [RST-1](../checklists/resets_supervisors_watchdogs.md): asserted level at cold.
+- [RST-2](../checklists/resets_supervisors_watchdogs.md): released level at hot.
+- [RST-3](../checklists/resets_supervisors_watchdogs.md): domains in the reset network.
+- [RST-9](../checklists/resets_supervisors_watchdogs.md): polarity of two-terminal parts.
+- [TH-3](../checklists/thermal.md): both temperature corners where they oppose.

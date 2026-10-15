@@ -2,8 +2,8 @@
 
 **Rule:** list every irreversible I/O range setting the board needs, the one that must never be
 set, and the bit positions checked against the reference manual
-([io_levels_and_domains IO-4](../../skill/checklists/io_levels_and_domains.md),
-[xspi_memory MEM-4](../../skill/checklists/xspi_memory.md)).
+([io_levels_and_domains IO-4](../checklists/io_levels_and_domains.md),
+[xspi_memory MEM-4](../checklists/xspi_memory.md)).
 
 Board: Sauron rev1. Part: STM32N657 HSLV (high-speed low-voltage) OTP fuses.
 Status: near miss; handled by a fuse plan written during review.
@@ -26,6 +26,6 @@ Status: near miss; handled by a fuse plan written during review.
 
 ## The checks that catch it now
 
-- [IO-4](../../skill/checklists/io_levels_and_domains.md): irreversible I/O range settings.
-- [MEM-4](../../skill/checklists/xspi_memory.md): memory I/O voltage and speed range.
-- [60_report firmware handoff](../../skill/workflow/60_report.md).
+- [IO-4](../checklists/io_levels_and_domains.md): irreversible I/O range settings.
+- [MEM-4](../checklists/xspi_memory.md): memory I/O voltage and speed range.
+- [60_report firmware handoff](../workflow/60_report.md).

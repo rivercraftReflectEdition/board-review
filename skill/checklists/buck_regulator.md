@@ -20,7 +20,7 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
   combination was never shown. A BR-1 pass is a screen; BR-2 still runs at the corners.
 - Not published: internal compensation values are usually not given. Then BR-3 footprints are
   required and a bench Bode goes in the test plan.
-- Example: [loop out of envelope](../../docs/lessons/loop-out-of-example-envelope.md)
+- Example: [loop out of envelope](../lessons/loop-out-of-example-envelope.md)
 
 ## BR-2 Loop margin at the corners
 - Check: phase and gain margin at worst corners of VIN, load, L tolerance, COUT (bias, temperature,
@@ -37,7 +37,7 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
   standard.
 - Not published: gm, current-sense gain or internal network missing means the result is an
   estimate. Report it as UNVERIFIABLE with a bench Bode and a load step.
-- Example: [simulation setup errors](../../docs/lessons/simulation-setup-errors.md)
+- Example: [simulation setup errors](../lessons/simulation-setup-errors.md)
 
 ## BR-3 Rework options for a loop paper cannot settle
 - Check: a DNP Cff footprint across the top feedback resistor; a 0 ohm plus DNP R-C on the
@@ -47,7 +47,7 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Compute: `calc.loop.cff_lead` for the Cff zero `1/(2 pi R_top Cff)` and pole
   `1/(2 pi (R_top||R_bot) Cff)`.
 - Pass: all three present whenever BR-2 is not a measured pass.
-- Example: [loop out of envelope](../../docs/lessons/loop-out-of-example-envelope.md)
+- Example: [loop out of envelope](../lessons/loop-out-of-example-envelope.md)
 
 ## BR-4 Large-signal slew headroom
 - Check: inductor current slew available to correct a disturbance:
@@ -57,7 +57,7 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Compute: `calc.buck.current_slew`; compare with the same number for the datasheet examples.
 - Pass: slew covers the load-step dI/dt. Slew more than 3x below the slowest example is a
   review trigger, not a verdict: run BR-2 at the corners and require BR-3 footprints.
-- Example: [loop out of envelope](../../docs/lessons/loop-out-of-example-envelope.md)
+- Example: [loop out of envelope](../lessons/loop-out-of-example-envelope.md)
 
 ## BR-5 Light-load mode and negative inductor current
 - Check: which mode the MODE/SYNC pin and the orderable suffix select (forced continuous, pulse
@@ -67,7 +67,7 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Compute: `calc.buck.inductor_ripple` valley current `I_load - dI/2` at minimum load and maximum
   ripple.
 - Pass: either the mode cannot return current, or CR-1 passes for the input rail.
-- Example: [reverse current into a non-sinking rail](../../docs/lessons/fcm-reverse-current-into-non-sinking-rail.md)
+- Example: [reverse current into a non-sinking rail](../lessons/fcm-reverse-current-into-non-sinking-rail.md)
 
 ## BR-6 On-time, off-time and frequency limits
 - Check: `t_on = D / fsw` and `t_off = (1 - D) / fsw` against minimum on and off times at the VIN
@@ -121,7 +121,7 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Compute: `model.compare` against the previous snapshot to list the changed parts; then BR-1
   to BR-5.
 - Pass: the review log shows BR-1 to BR-5 re-run on the released values.
-- Example: [loop out of envelope](../../docs/lessons/loop-out-of-example-envelope.md)
+- Example: [loop out of envelope](../lessons/loop-out-of-example-envelope.md)
 
 ## BR-11 Input capacitance and input filter interaction
 - Check: input capacitor ripple current rating; input filter output impedance against the

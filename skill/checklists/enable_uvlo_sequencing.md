@@ -11,7 +11,7 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Compute: `calc.divider.enable_thresholds`: `V_on = V_th_rise * (R_top + R_bot) / R_bot`, same
   for falling.
 - Pass: turn-on and turn-off inside the intended input window.
-- Example: [UVLO resistor decade typo](../../docs/lessons/uvlo-resistor-decade-typo.md)
+- Example: [UVLO resistor decade typo](../lessons/uvlo-resistor-decade-typo.md)
 
 ## EN-2 Margin against threshold spread and leakage
 - Check: margin between the pin voltage at the worst rail and the threshold's min/max, including
@@ -21,14 +21,14 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Compute: `calc.divider.enable_thresholds` with tolerance and leakage: shift
   `= I_leak * (R_top || R_bot)` at the pin.
 - Pass: margin at the worst corner exceeds the tolerance plus leakage shift, at both thresholds.
-- Example: [enable divider with thin margin](../../docs/lessons/enable-divider-thin-margin.md)
+- Example: [enable divider with thin margin](../lessons/enable-divider-thin-margin.md)
 
 ## EN-3 Recompute when the source changes
 - Check: any change to the rail feeding a divider, or to either resistor, reopens EN-1 and EN-2.
 - Why: dividers verified once are not rechecked when the upstream regulator or setpoint changes.
 - Compute: as EN-1 and EN-2.
 - Pass: the review log shows the calculation on the released rail and values.
-- Example: [enable divider with thin margin](../../docs/lessons/enable-divider-thin-margin.md)
+- Example: [enable divider with thin margin](../lessons/enable-divider-thin-margin.md)
 
 ## EN-4 Order and timing match every part's requirement
 - Check: power-up and power-down order, delays and tracking required by each IC (MCU, FPGA,
@@ -45,7 +45,7 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Why: pull-ups to a higher rail put pins above abs max permanently.
 - Compute: `calc.divider.divider_output` for the pin voltage.
 - Pass: pin voltage below abs max at the rail's worst high; defined default state.
-- Example: [pull-ups above pin abs max](../../docs/lessons/pullups-above-pin-abs-max.md)
+- Example: [pull-ups above pin abs max](../lessons/pullups-above-pin-abs-max.md)
 
 ## EN-6 Leakage that enables something on its own
 - Check: high-value pull-downs on enables fed through a transistor, diode or ESD structure whose

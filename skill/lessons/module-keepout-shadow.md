@@ -1,7 +1,7 @@
 # Parts under a mezzanine module taller than the stack gap
 
 **Rule:** check part heights inside every module, connector or shield footprint against the
-mating stack height ([layout LAY-6](../../skill/checklists/layout.md)).
+mating stack height ([layout LAY-6](../checklists/layout.md)).
 
 Board: Sauron rev1. Part: camera module (FRAMOS FSM:GO, about 26.5 mm) on a 1.5 mm stack.
 Status: caught in the 2026-08-24 pre-fab review.
@@ -20,5 +20,5 @@ Status: caught in the 2026-08-24 pre-fab review.
 
 ## The checks that catch it now
 
-- [LAY-6](../../skill/checklists/layout.md): mechanical keepouts and stack height.
-- [CSI-6](../../skill/checklists/camera_csi.md): connector and keepout.
+- [LAY-6](../checklists/layout.md): mechanical keepouts and stack height.
+- [CSI-6](../checklists/camera_csi.md): connector and keepout.

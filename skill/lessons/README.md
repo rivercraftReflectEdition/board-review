@@ -36,4 +36,5 @@ Status: missed = reached hardware; near miss = caught late or by luck; caught = 
 2. What happened, with numbers and document pages. Public part numbers only. No netlists,
    schematic images or BOM extracts.
 3. Why the review missed or caught it.
-4. Add the expected finding to the board's local eval file (`evals/<board>/local/expected.json`).
+4. In the board-review repo, add the expected finding to the board's local eval file
+   (`evals/<board>/local/expected.json`).

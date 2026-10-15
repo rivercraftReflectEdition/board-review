@@ -2,7 +2,7 @@
 
 **Rule:** an enable divider's margin must exceed resistor tolerance plus pin leakage times the
 divider's Thevenin resistance, recomputed whenever the source rail or a resistor changes
-([enable_uvlo_sequencing EN-2, EN-3](../../skill/checklists/enable_uvlo_sequencing.md)).
+([enable_uvlo_sequencing EN-2, EN-3](../checklists/enable_uvlo_sequencing.md)).
 
 Board: Sauron rev1. Part: LTC3633A RUN1 pin, divided down from the 4 V rail.
 Status: shipped; flagged as a next-spin item at bring-up, 2026-10-06.
@@ -27,6 +27,6 @@ Status: shipped; flagged as a next-spin item at bring-up, 2026-10-06.
 
 ## The checks that catch it now
 
-- [EN-2](../../skill/checklists/enable_uvlo_sequencing.md): margin against tolerance and leakage.
-- [EN-3](../../skill/checklists/enable_uvlo_sequencing.md): recompute when the source changes.
-- [CR-5](../../skill/checklists/cascaded_rails.md): start-up interaction between rails.
+- [EN-2](../checklists/enable_uvlo_sequencing.md): margin against tolerance and leakage.
+- [EN-3](../checklists/enable_uvlo_sequencing.md): recompute when the source changes.
+- [CR-5](../checklists/cascaded_rails.md): start-up interaction between rails.

@@ -2,7 +2,7 @@
 
 **Rule:** check a clock input's reference supply, which may not be the I/O rail, and check the
 oscillator's supply and enable after any part number change
-([clocks_crystals CLK-1](../../skill/checklists/clocks_crystals.md)).
+([clocks_crystals CLK-1](../checklists/clocks_crystals.md)).
 
 Board: Sauron rev1. Parts: SiT2024 oscillator into the STM32N657 HSE input in bypass mode.
 Status: caught in July; the first fix was incomplete and was caught in the next round.
@@ -23,7 +23,7 @@ Status: caught in July; the first fix was incomplete and was caught in the next 
 
 ## The checks that catch it now
 
-- [CLK-1](../../skill/checklists/clocks_crystals.md): output level against the receiver's domain.
-- [CLK-4](../../skill/checklists/clocks_crystals.md): bypass straps per the datasheet.
-- [IO-2](../../skill/checklists/io_levels_and_domains.md): pin abs max.
-- [NET-4](../../skill/checklists/netlist_integrity.md): re-check after the fix.
+- [CLK-1](../checklists/clocks_crystals.md): output level against the receiver's domain.
+- [CLK-4](../checklists/clocks_crystals.md): bypass straps per the datasheet.
+- [IO-2](../checklists/io_levels_and_domains.md): pin abs max.
+- [NET-4](../checklists/netlist_integrity.md): re-check after the fix.

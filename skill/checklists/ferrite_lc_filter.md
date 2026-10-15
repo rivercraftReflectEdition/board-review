@@ -20,7 +20,7 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
   an fsw harmonic. A plausible range is an assumption, not a published bound, so the result stays
   unknown even when the sweep is clean: require the FLT-2 damper footprint and a bench check of
   the rail ripple. Silence is not an option.
-- Example: [bead tank at the switching frequency](../../docs/lessons/bead-tank-at-switching-frequency.md)
+- Example: [bead tank at the switching frequency](../lessons/bead-tank-at-switching-frequency.md)
 
 ## FLT-2 Damping
 - Check: `Q = Z0 / R_series` with `Z0 = sqrt(L / C)`, R_series = bead DCR plus capacitor ESR.
@@ -30,7 +30,7 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
   `Rd ~ Z0`, `Cd >= 3 C`; `calc.lc_tank.damping_options` gives Rd for a chosen Cd.
 - Pass: Q <= 2 with the damper or a lossy element fitted (default: peak gain about 6 dB and a
   ring that dies in a few cycles; tighten it when the load's ripple budget needs it).
-- Example: [bead tank at the switching frequency](../../docs/lessons/bead-tank-at-switching-frequency.md)
+- Example: [bead tank at the switching frequency](../lessons/bead-tank-at-switching-frequency.md)
 
 ## FLT-3 Bead DC bias and rating
 - Check: inductance and impedance drop with DC current; rated current and DCR at the hot corner.

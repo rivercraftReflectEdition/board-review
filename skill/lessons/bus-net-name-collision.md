@@ -2,8 +2,8 @@
 
 **Rule:** zero duplicate-net warnings before any schematic-to-PCB update, and a 3-way netlist
 compare before review
-([netlist_integrity NET-1, NET-2](../../skill/checklists/netlist_integrity.md),
-[xspi_memory MEM-1](../../skill/checklists/xspi_memory.md)).
+([netlist_integrity NET-1, NET-2](../checklists/netlist_integrity.md),
+[xspi_memory MEM-1](../checklists/xspi_memory.md)).
 
 Board: Sauron rev1. Parts: S28HS01GT octal NOR and S80KS5123 PSRAM on separate controller ports.
 Status: caught in the July schematic review, before PCB sync.
@@ -28,7 +28,7 @@ Status: caught in the July schematic review, before PCB sync.
 
 ## The checks that catch it now
 
-- [NET-2](../../skill/checklists/netlist_integrity.md): duplicate names across hierarchy.
-- [NET-1](../../skill/checklists/netlist_integrity.md): schematic, PCB and fab netlists agree.
-- [MEM-1](../../skill/checklists/xspi_memory.md): memory nets match the intended bus topology.
-- [NET-4](../../skill/checklists/netlist_integrity.md): diff after every fix.
+- [NET-2](../checklists/netlist_integrity.md): duplicate names across hierarchy.
+- [NET-1](../checklists/netlist_integrity.md): schematic, PCB and fab netlists agree.
+- [MEM-1](../checklists/xspi_memory.md): memory nets match the intended bus topology.
+- [NET-4](../checklists/netlist_integrity.md): diff after every fix.

@@ -3,7 +3,7 @@
 Star tracker carrier: STM32N657 MCU, LTC3633A dual buck (3V3, 1V8) after an LT8640 12 V to 4 V
 buck, ADIN1200 Ethernet PHY in RMII, S28HS01GT octal NOR, S80KS5123 PSRAM, IMX900 camera module.
 Split: **dev**. Its reviews and bring-up notes were read to write the checklists and
-[lessons](../../docs/lessons/README.md).
+[lessons](../../skill/lessons/README.md).
 
 ## Local files (ignored by git)
 

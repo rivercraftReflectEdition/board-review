@@ -3,12 +3,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SKILL = ROOT / "skill"
-LESSONS = ROOT / "docs" / "lessons"
+LESSONS = SKILL / "lessons"
 LINK = re.compile(r"\]\(([^)#\s]+)(?:#[^)]*)?\)")
 
 
 def _docs():
-    return sorted(list(SKILL.rglob("*.md")) + list(LESSONS.glob("*.md")) + list((ROOT / "evals").rglob("*.md")))
+    return sorted(list(SKILL.rglob("*.md")) + list((ROOT / "evals").rglob("*.md")))
 
 
 def test_relative_links_resolve():
@@ -22,13 +22,30 @@ def test_relative_links_resolve():
     assert broken == []
 
 
+def test_skill_links_stay_inside_the_skill_folder():
+    outside = []
+    for doc in SKILL.rglob("*.md"):
+        for target in LINK.findall(doc.read_text(encoding="utf-8")):
+            if target.startswith("http"):
+                continue
+            if SKILL.resolve() not in (doc.parent / target).resolve().parents:
+                outside.append(f"{doc.relative_to(ROOT)} -> {target}")
+    assert outside == []
+
+
+def test_skill_text_cites_no_repo_only_paths():
+    for doc in SKILL.rglob("*.md"):
+        text = doc.read_text(encoding="utf-8")
+        assert not re.search(r"\btools/boardreview|\bdocs/lessons|PYTHONPATH", text), doc.name
+
+
 def test_lessons_state_a_rule_and_link_a_checklist_item():
     pages = [p for p in LESSONS.glob("*.md") if p.name != "README.md"]
     assert len(pages) >= 10
     for p in pages:
         text = p.read_text(encoding="utf-8")
         assert "**Rule:**" in text, p.name
-        assert "skill/checklists/" in text or "skill/workflow/" in text, p.name
+        assert "](../checklists/" in text or "](../workflow/" in text, p.name
         assert p.name in (LESSONS / "README.md").read_text(encoding="utf-8"), p.name
 
 
@@ -36,7 +53,7 @@ def test_checklist_examples_point_at_lessons():
     for p in (SKILL / "checklists").glob("*.md"):
         for line in p.read_text(encoding="utf-8").splitlines():
             if line.startswith("- Example:"):
-                assert "docs/lessons/" in line, (p.name, line)
+                assert "](../lessons/" in line, (p.name, line)
 
 
 def test_checklists_have_no_board_specific_thresholds():

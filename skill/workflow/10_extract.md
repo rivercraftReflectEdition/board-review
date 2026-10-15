@@ -68,7 +68,8 @@ from the DNP field and any variant tool in use.
 
 ## Build
 
-Run from the board-review repo with `tools/` on `PYTHONPATH`, one output folder per snapshot:
+Run from any folder once the package is installed (SKILL.md, Setup), one output folder per
+snapshot:
 
 ```
 python -m boardreview prep SCH_NETLIST --bom BOM --compare PCB_NETLIST FAB_NETLIST --out <review folder>/facts
@@ -99,6 +100,6 @@ python -m boardreview prep SCH_NETLIST --bom BOM --compare PCB_NETLIST FAB_NETLI
 ## Gate
 
 Run every netlist_integrity item. Record results in the review folder. Lessons behind this gate:
-[bus net name collision](../../docs/lessons/bus-net-name-collision.md),
-[sheet dropped from the compile](../../docs/lessons/sheet-dropped-from-compile.md),
-[fix batch regressions](../../docs/lessons/fix-batch-regressions.md).
+[bus net name collision](../lessons/bus-net-name-collision.md),
+[sheet dropped from the compile](../lessons/sheet-dropped-from-compile.md),
+[fix batch regressions](../lessons/fix-batch-regressions.md).

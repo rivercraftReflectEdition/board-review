@@ -19,7 +19,7 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Compute: compiler messages; `model.compare` nets merged between schematic and PCB;
   `lint.nets.near_duplicate_rails` for names that differ only in spelling or case.
 - Pass: zero duplicate-net warnings before any schematic-to-PCB update.
-- Example: [bus net name collision](../../docs/lessons/bus-net-name-collision.md)
+- Example: [bus net name collision](../lessons/bus-net-name-collision.md)
 
 ## NET-3 Project contents complete
 - Check: documents in the project against documents in the hierarchy and files on disk; part
@@ -28,7 +28,7 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
   error; the netlist simply loses those circuits.
 - Compute: `model.compare` against the previous snapshot; sheet list from the tool.
 - Pass: every sheet in the hierarchy compiles; no unexplained drop in parts or nets.
-- Example: [sheet dropped from the compile](../../docs/lessons/sheet-dropped-from-compile.md)
+- Example: [sheet dropped from the compile](../lessons/sheet-dropped-from-compile.md)
 
 ## NET-4 Diff after every change
 - Check: after each fix batch or ECO, re-extract and diff against the last snapshot: parts and
@@ -39,7 +39,7 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Compute: `model.compare` against the previous snapshot; power-net sources from the power tree
   (no lint check yet).
 - Pass: every change in the diff is explained by an intended edit.
-- Example: [fix batch regressions](../../docs/lessons/fix-batch-regressions.md)
+- Example: [fix batch regressions](../lessons/fix-batch-regressions.md)
 
 ## NET-5 Lint
 - Check: single-pin nets, unconnected IC pins against the datasheet's NC list, floating inputs,
@@ -57,7 +57,7 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
   `calc.divider.enable_thresholds` or `calc.divider.regulator_output` on every divider
   (enable_uvlo_sequencing EN-1).
 - Pass: every outlier explained.
-- Example: [UVLO resistor decade typo](../../docs/lessons/uvlo-resistor-decade-typo.md)
+- Example: [UVLO resistor decade typo](../lessons/uvlo-resistor-decade-typo.md)
 
 ## NET-7 Variant data present
 - Check: the BOM carries fitted and DNP state per variant, and the variant reviewed is the one
@@ -66,7 +66,7 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Compute: `model.bom.read_bom` with the variant columns; `lint.parts.bom_netlist_mismatch` and
   `lint.parts.fitted_without_mpn`.
 - Pass: variant table present and matches the assembly order.
-- Example: [strap pairs fitted on both sides](../../docs/lessons/strap-pairs-fitted-both-sides.md)
+- Example: [strap pairs fitted on both sides](../lessons/strap-pairs-fitted-both-sides.md)
 
 ## NET-8 Symbol pins against the datasheet
 - Check: every IC symbol's pin numbers and names against the digest pin table, including

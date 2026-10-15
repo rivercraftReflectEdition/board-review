@@ -12,7 +12,7 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Compute: `calc.divider.divider_output` if levels are shifted by a network; otherwise digest VOH
   and VIH.
 - Pass: VOH max below the input's abs max and VIH met at minimum supply.
-- Example: [oscillator output domain](../../docs/lessons/oscillator-output-domain.md)
+- Example: [oscillator output domain](../lessons/oscillator-output-domain.md)
 
 ## CLK-2 Crystal load and drive
 - Check: `CL = C1 * C2 / (C1 + C2) + C_stray` against the crystal's CL; oscillator gain margin

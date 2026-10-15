@@ -1,7 +1,7 @@
 # I2C clock and data crossed at the MCU
 
 **Rule:** check every bus signal's pin against the alternate function table, not against the net
-name ([io_levels_and_domains IO-5](../../skill/checklists/io_levels_and_domains.md)).
+name ([io_levels_and_domains IO-5](../checklists/io_levels_and_domains.md)).
 
 Board: Sauron rev1. Part: STM32N657 I2C to the camera module.
 Status: caught in the final July review.
@@ -20,6 +20,6 @@ Status: caught in the final July review.
 
 ## The checks that catch it now
 
-- [IO-5](../../skill/checklists/io_levels_and_domains.md): pin function and order.
-- [IO-1](../../skill/checklists/io_levels_and_domains.md): levels across domains.
-- [NET-8](../../skill/checklists/netlist_integrity.md): symbol pins against the datasheet.
+- [IO-5](../checklists/io_levels_and_domains.md): pin function and order.
+- [IO-1](../checklists/io_levels_and_domains.md): levels across domains.
+- [NET-8](../checklists/netlist_integrity.md): symbol pins against the datasheet.

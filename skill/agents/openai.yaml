@@ -1,0 +1,4 @@
+interface:
+  display_name: "Board Review"
+  short_description: "Schematic and PCB review with calculators"
+  default_prompt: "Use $board-review to review this board before fab and write findings.json and report.md."

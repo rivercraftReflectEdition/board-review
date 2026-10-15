@@ -18,7 +18,7 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Why: a pull-up to a higher rail puts a pin above abs max for the life of the board.
 - Compute: `calc.divider.divider_output`.
 - Pass: below abs max at the rail's worst high, in every power state.
-- Example: [pull-ups above pin abs max](../../docs/lessons/pullups-above-pin-abs-max.md)
+- Example: [pull-ups above pin abs max](../lessons/pullups-above-pin-abs-max.md)
 
 ## IO-3 Back-powering
 - Check: any path from a powered domain into an unpowered one: I/O driving high, pull-ups on the
@@ -40,7 +40,7 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Compute: none; reference manual and digest.
 - Pass: a fuse plan in the report with bit positions checked against the reference manual and a
   per-board go step.
-- Example: [I/O range fuses](../../docs/lessons/io-range-fuses.md)
+- Example: [I/O range fuses](../lessons/io-range-fuses.md)
 
 ## IO-5 Pin function and order
 - Check: every bus signal lands on a pin whose alternate function is that signal: SCL on SCL,
@@ -49,7 +49,7 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Why: a swapped pair has correct net names and passes every connectivity check.
 - Compute: none; digest alternate function table against the netlist.
 - Pass: each signal's pin has the matching function.
-- Example: [I2C pins crossed](../../docs/lessons/i2c-pins-crossed.md)
+- Example: [I2C pins crossed](../lessons/i2c-pins-crossed.md)
 
 ## IO-6 Default state during reset and boot
 - Check: inputs that control something (transceiver enables, load switch enables, triggers)

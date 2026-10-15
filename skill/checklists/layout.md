@@ -49,7 +49,7 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Why: one tall part under a mezzanine module stops it from seating.
 - Compute: none; 3D or height data against the mating drawing.
 - Pass: no part taller than the gap inside any keepout.
-- Example: [module keepout](../../docs/lessons/module-keepout-shadow.md)
+- Example: [module keepout](../lessons/module-keepout-shadow.md)
 
 ## LAY-7 Isolation and creepage
 - Check: copper, parts and vias across isolation barriers (magnetics, isolators) against the

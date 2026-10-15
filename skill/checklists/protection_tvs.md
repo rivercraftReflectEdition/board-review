@@ -35,7 +35,7 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Why: an array with floating grounds only clamps line to line; that may be the intent or a bug.
 - Compute: none; digest application figures.
 - Pass: matches a datasheet configuration; intent written on the schematic.
-- Example: [verifier dispute on ESD grounds](../../docs/lessons/verifier-dispute-esd-grounds.md)
+- Example: [verifier dispute on ESD grounds](../lessons/verifier-dispute-esd-grounds.md)
 
 ## PROT-5 Filter and TVS coordination
 - Check: an input LC filter rings on hot-plug and surge; the ring adds to the clamp.
