@@ -1,0 +1,27 @@
+{
+  "board": "example_heldout",
+  "synthetic": true,
+  "description": "Synthetic held-out board for scorer tests. Real held-out boards are never read while writing checklists.",
+  "findings": [
+    {
+      "id": "H1",
+      "title": "TVS D4 standoff is below the 24 V rail maximum",
+      "severity": "major",
+      "block": "protection_tvs",
+      "parts": ["D4"],
+      "nets": ["VIN"],
+      "failure_mode": "protection_gap",
+      "keywords": ["standoff|vrwm|working voltage", "tvs"]
+    },
+    {
+      "id": "H2",
+      "title": "Boot pin divider reads high, part never boots from flash",
+      "severity": "blocker",
+      "block": "straps_and_boot_pins",
+      "parts": ["R12", "R13", "U1"],
+      "nets": ["BOOT0"],
+      "failure_mode": "boot_mode",
+      "keywords": ["boot", "divider|vih|reads high"]
+    }
+  ]
+}

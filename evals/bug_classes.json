@@ -1,0 +1,54 @@
+{
+  "description": "Bug classes planted by the seeded-bug eval. Each class names the checklist item that should catch it.",
+  "classes": [
+    {
+      "name": "wrong_divider_value",
+      "block": "enable_uvlo_sequencing",
+      "failure_mode": "wrong_value",
+      "checks": ["enable_uvlo_sequencing#EN-1", "netlist_integrity#NET-6"],
+      "mutation": "Change one resistor of a feedback, enable or UVLO divider by a decade or to the wrong unit (k to ohm)."
+    },
+    {
+      "name": "bead_cap_resonance_near_fsw",
+      "block": "ferrite_lc_filter",
+      "failure_mode": "lc_resonance",
+      "checks": ["ferrite_lc_filter#FLT-1", "ferrite_lc_filter#FLT-2"],
+      "mutation": "Remove the damping element of a bead filter, or change its capacitor so the undamped LC resonance lands within a factor of 1.5 of a nearby switching frequency."
+    },
+    {
+      "name": "strap_both_sides_fitted",
+      "block": "straps_and_boot_pins",
+      "failure_mode": "strap_conflict",
+      "checks": ["straps_and_boot_pins#STR-1", "straps_and_boot_pins#STR-2"],
+      "mutation": "Mark both the pull-up and pull-down of a two-level strap as fitted in the released variant."
+    },
+    {
+      "name": "regulator_outside_example_envelope",
+      "block": "buck_regulator",
+      "failure_mode": "loop_instability",
+      "checks": ["buck_regulator#BR-1", "buck_regulator#BR-2", "buck_regulator#BR-3"],
+      "mutation": "On an internally compensated regulator, move L, COUT, VIN or fsw well outside every datasheet example for that compensation mode, with no Cff or compensation footprint."
+    },
+    {
+      "name": "missing_pullup",
+      "block": "io_levels_and_domains",
+      "failure_mode": "missing_pullup",
+      "checks": ["io_levels_and_domains#IO-7", "resets_supervisors_watchdogs#RST-4"],
+      "mutation": "Delete the pull-up of an open-drain output or an I2C line."
+    },
+    {
+      "name": "tvs_standoff_below_rail",
+      "block": "protection_tvs",
+      "failure_mode": "protection_gap",
+      "checks": ["protection_tvs#PROT-1"],
+      "mutation": "Swap a TVS for the next lower standoff voltage so VRWM sits below the rail's worst-case maximum."
+    },
+    {
+      "name": "upstream_cannot_sink",
+      "block": "cascaded_rails",
+      "failure_mode": "reverse_current",
+      "checks": ["cascaded_rails#CR-1", "buck_regulator#BR-5"],
+      "mutation": "Set a downstream synchronous converter to forced-continuous mode while its upstream regulator cannot sink current and the rail has no other load or clamp."
+    }
+  ]
+}

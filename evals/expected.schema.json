@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "board-review/evals/expected.schema.json",
+  "title": "Expected findings for one board",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["board", "findings"],
+  "properties": {
+    "board": {"type": "string"},
+    "synthetic": {"type": "boolean"},
+    "description": {"type": "string"},
+    "findings": {"type": "array", "items": {"$ref": "#/$defs/item"}},
+    "known_good": {
+      "type": "array",
+      "description": "Design choices that look wrong and are right. A review that flags one scores a false positive.",
+      "items": {"$ref": "#/$defs/item"}
+    }
+  },
+  "$defs": {
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "block", "failure_mode"],
+      "properties": {
+        "id": {"type": "string"},
+        "title": {"type": "string"},
+        "severity": {"enum": ["blocker", "major", "minor", "note"]},
+        "block": {"type": "string"},
+        "alt_blocks": {"type": "array", "items": {"type": "string"}},
+        "parts": {"type": "array", "items": {"type": "string"}},
+        "nets": {"type": "array", "items": {"type": "string"}},
+        "failure_mode": {"type": "string"},
+        "alt_failure_modes": {"type": "array", "items": {"type": "string"}},
+        "keywords": {"type": "array", "items": {"type": "string"}, "description": "Each entry is a group of '|' alternatives."},
+        "bug_class": {"type": "string"},
+        "mutation": {"type": "string", "description": "Seeded boards: the edit that planted the bug."},
+        "lesson": {"type": "string"},
+        "reason": {"type": "string", "description": "Known-good items: why it is right, with the page."}
+      }
+    }
+  }
+}

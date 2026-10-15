@@ -1,0 +1,82 @@
+{
+  "board": "example",
+  "synthetic": true,
+  "description": "Synthetic board for scorer tests: 12 V in, U1 buck to 5 V, U2 buck to 3V3, U3 LDO to 1V8, U4 MCU, U5 Ethernet PHY, U6 supervisor, U7 sensor on I2C1.",
+  "findings": [
+    {
+      "id": "E1",
+      "title": "U2 3V3 buck runs outside its example envelope with internal compensation and no Cff footprint",
+      "severity": "blocker",
+      "block": "buck_regulator",
+      "parts": ["U2", "L2", "C20", "C21", "R21"],
+      "nets": ["3V3", "FB2"],
+      "failure_mode": "loop_instability",
+      "keywords": ["envelope|example circuit|example", "phase margin|oscillat|unstable|instab", "cff|feed forward|compensation"]
+    },
+    {
+      "id": "E2",
+      "title": "FB1 bead and C30 resonate near U2's switching frequency with no damping",
+      "severity": "major",
+      "block": "ferrite_lc_filter",
+      "parts": ["FB1", "C30"],
+      "nets": ["AVDD"],
+      "failure_mode": "lc_resonance",
+      "keywords": ["resonan|peak|tank", "damp"]
+    },
+    {
+      "id": "E3",
+      "title": "U5 PHY mode strap has both pull-up and pull-down fitted",
+      "severity": "blocker",
+      "block": "straps_and_boot_pins",
+      "alt_blocks": ["ethernet_phy"],
+      "parts": ["R40-R41", "U5"],
+      "nets": ["PHY_MODE0"],
+      "failure_mode": "strap_conflict",
+      "keywords": ["strap", "both|pull up and pull down|mid level"]
+    },
+    {
+      "id": "E4",
+      "title": "U1 UVLO bottom resistor R11 is 10 ohm instead of 10 kohm",
+      "severity": "blocker",
+      "block": "enable_uvlo_sequencing",
+      "parts": ["R11", "U1"],
+      "nets": ["U1_EN"],
+      "failure_mode": "wrong_value",
+      "alt_failure_modes": ["threshold_margin"],
+      "keywords": ["uvlo|enable|turn on", "10 ohm|decade|typo|wrong unit"]
+    },
+    {
+      "id": "E5",
+      "title": "Reset diode-OR low level misses VIL at cold",
+      "severity": "major",
+      "block": "resets_supervisors_watchdogs",
+      "parts": ["D2", "U6"],
+      "nets": ["RESET_N"],
+      "failure_mode": "threshold_margin",
+      "alt_failure_modes": ["level_mismatch"],
+      "keywords": ["vil|low level|asserted", "cold|vf|forward"]
+    },
+    {
+      "id": "E6",
+      "title": "I2C1 has no pull-ups",
+      "severity": "major",
+      "block": "io_levels_and_domains",
+      "parts": ["U4", "U7"],
+      "nets": ["I2C1_SDA", "I2C1_SCL"],
+      "failure_mode": "missing_pullup",
+      "keywords": ["pull up|pullup", "i2c|sda|scl"]
+    }
+  ],
+  "known_good": [
+    {
+      "id": "K1",
+      "title": "OSC_OUT grounded through R5 is the datasheet's bypass-mode strap",
+      "block": "clocks_crystals",
+      "parts": ["R5"],
+      "nets": ["OSC_OUT"],
+      "failure_mode": "other",
+      "keywords": ["osc out", "ground"],
+      "reason": "Synthetic MCU datasheet: in external-clock bypass mode OSC_OUT may be grounded."
+    }
+  ]
+}

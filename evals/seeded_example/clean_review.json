@@ -1,0 +1,30 @@
+{
+  "board": "seeded_example_clean",
+  "synthetic": true,
+  "findings": [
+    {
+      "id": "C-001",
+      "title": "R90 LED resistor at 40 percent of its power rating",
+      "severity": "note",
+      "block": "thermal",
+      "failure_mode": "thermal_overstress",
+      "parts": ["R90"],
+      "claim": "Inside a 50 percent derating rule; reported as a note.",
+      "evidence": [{"kind": "calculator", "ref": "calc.thermal"}],
+      "fix": "None needed.",
+      "verification": {"status": "CONFIRMED"}
+    },
+    {
+      "id": "C-002",
+      "title": "Y1 load capacitors may be high for the crystal's CL",
+      "severity": "minor",
+      "block": "clocks_crystals",
+      "failure_mode": "clock_fault",
+      "parts": ["Y1", "C80", "C81"],
+      "claim": "With 3 pF stray the effective load is 12.5 pF against CL 12 pF.",
+      "evidence": [{"kind": "calculator", "ref": "calc.crystal"}],
+      "fix": "None; 0.5 pF moves the frequency a few ppm.",
+      "verification": {"status": "CONFIRMED"}
+    }
+  ]
+}

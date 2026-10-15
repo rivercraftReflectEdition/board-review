@@ -1,0 +1,94 @@
+{
+  "board": "seeded_example",
+  "synthetic": true,
+  "description": "Clean base design, mixed vendors: 24 V +/-10 percent input, D1 TVS (Littelfuse SMAJ family), U1 buck 24 V to 5 V with an EN/UVLO divider (TI), U2 buck 5 V to 3V3 with internal compensation at 2.2 MHz (ADI), U3 synchronous buck 5 V to 1V8 in pulse-skip mode (MPS), FB3 bead filter with an R-C damper on AVDD_1V8 (Murata bead), U6 Ethernet PHY with two-level straps (Microchip), U7 pressure sensor on I2C2 (Bosch). One bug per class planted below; each mutation is the only change from the clean base. Part behavior here is the synthetic design's assumption, not a datasheet claim.",
+  "findings": [
+    {
+      "id": "S1",
+      "bug_class": "wrong_divider_value",
+      "mutation": "R11 (U1 EN/UVLO bottom resistor) 10.0k changed to 10.0 ohm.",
+      "title": "U1 EN/UVLO divider bottom resistor is 10 ohm, converter never enables",
+      "severity": "blocker",
+      "block": "enable_uvlo_sequencing",
+      "parts": ["R10", "R11", "U1"],
+      "nets": ["U1_EN_UVLO"],
+      "failure_mode": "wrong_value",
+      "alt_failure_modes": ["threshold_margin"],
+      "keywords": ["uvlo|enable|turn on", "ohm|decade|unit|typo"]
+    },
+    {
+      "id": "S2",
+      "bug_class": "bead_cap_resonance_near_fsw",
+      "mutation": "Damper R33 + C34 removed and C33 changed so FB3 with C33 resonates near 2.1 MHz, next to U2's 2.2 MHz.",
+      "title": "FB3 and C33 resonate next to U2's switching frequency with no damping",
+      "severity": "major",
+      "block": "ferrite_lc_filter",
+      "parts": ["FB3", "C33"],
+      "nets": ["AVDD_1V8"],
+      "failure_mode": "lc_resonance",
+      "keywords": ["resonan|peak|tank", "damp|fsw|switching frequency"]
+    },
+    {
+      "id": "S3",
+      "bug_class": "strap_both_sides_fitted",
+      "mutation": "R60 (pull-up) and R61 (pull-down) on the U6 MODE0 strap both marked fitted.",
+      "title": "U6 PHY MODE0 strap has both pull-up and pull-down fitted",
+      "severity": "blocker",
+      "block": "straps_and_boot_pins",
+      "alt_blocks": ["ethernet_phy"],
+      "parts": ["R60", "R61", "U6"],
+      "nets": ["PHY_MODE0"],
+      "failure_mode": "strap_conflict",
+      "keywords": ["strap", "both|pull up and pull down|mid level"]
+    },
+    {
+      "id": "S4",
+      "bug_class": "regulator_outside_example_envelope",
+      "mutation": "L4 changed from the example value to 4.7x it and C40 removed, halving COUT; no Cff footprint.",
+      "title": "U2 internal-compensation buck runs with L and COUT outside every datasheet example",
+      "severity": "blocker",
+      "block": "buck_regulator",
+      "parts": ["U2", "L4", "C40", "C41"],
+      "nets": ["3V3"],
+      "failure_mode": "loop_instability",
+      "keywords": ["envelope|example", "phase margin|oscillat|unstable|instab|loop", "cff|feed forward|compensation"]
+    },
+    {
+      "id": "S5",
+      "bug_class": "missing_pullup",
+      "mutation": "R70 and R71 (I2C2 pull-ups) deleted.",
+      "title": "I2C2 has no pull-ups",
+      "severity": "major",
+      "block": "io_levels_and_domains",
+      "parts": ["R70", "R71", "U7"],
+      "nets": ["I2C2_SDA", "I2C2_SCL"],
+      "failure_mode": "missing_pullup",
+      "keywords": ["pull up|pullup", "i2c|sda|scl"]
+    },
+    {
+      "id": "S6",
+      "bug_class": "tvs_standoff_below_rail",
+      "mutation": "D1 changed from a 30 V standoff part (SMAJ30A) to a 24 V standoff part (SMAJ24A).",
+      "title": "D1 standoff 24 V is below the 26.4 V input maximum",
+      "severity": "major",
+      "block": "protection_tvs",
+      "parts": ["D1"],
+      "nets": ["VIN_24V"],
+      "failure_mode": "protection_gap",
+      "keywords": ["standoff|vrwm|working voltage", "tvs"]
+    },
+    {
+      "id": "S7",
+      "bug_class": "upstream_cannot_sink",
+      "mutation": "R35 moved so U3 MODE selects forced-continuous; U1 cannot sink and the 5 V rail has no clamp or bleed load.",
+      "title": "U3 forced-continuous mode returns current into a 5 V rail whose regulator cannot sink",
+      "severity": "major",
+      "block": "cascaded_rails",
+      "alt_blocks": ["buck_regulator"],
+      "parts": ["U3", "U1", "R35"],
+      "nets": ["5V", "U3_MODE"],
+      "failure_mode": "reverse_current",
+      "keywords": ["sink|reverse|negative current|pump", "forced continuous|fcm|fpwm"]
+    }
+  ]
+}

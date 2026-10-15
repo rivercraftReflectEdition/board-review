@@ -1,0 +1,130 @@
+{
+  "board": "example",
+  "synthetic": true,
+  "findings": [
+    {
+      "id": "R1",
+      "title": "U2 3V3 buck: operating point outside every internal-compensation example, no Cff footprint",
+      "severity": "blocker",
+      "block": "buck_regulator",
+      "instance": "U2, 5 V to 3V3",
+      "check": "buck_regulator#BR-1",
+      "failure_mode": "loop_instability",
+      "parts": ["U2", "L2", "R21"],
+      "nets": ["3V3"],
+      "pins": ["U2.3"],
+      "claim": "L2 is 3.3x and effective COUT is 0.4x the datasheet examples for internal compensation, so the loop has no published margin at this point.",
+      "evidence": [
+        {"kind": "datasheet", "ref": "synthetic U2 datasheet rev A p.18", "detail": "examples use 1 uH and 44 uF"},
+        {"kind": "bom", "ref": "L2, C20, C21"}
+      ],
+      "calculations": [
+        {
+          "calculator": "calc.buck",
+          "formula": "slew = (vin * dmax - vout) / l",
+          "inputs": {"vin": {"value": 5.0, "unit": "V"}, "dmax": {"value": 0.9, "unit": ""}, "vout": {"value": 3.3, "unit": "V"}, "l": {"value": 3.3e-06, "unit": "H"}},
+          "outputs": {"slew": {"value": 363636.0, "unit": "A/s"}},
+          "verdict": "marginal",
+          "reason": "examples give 1.2e6 A/s"
+        }
+      ],
+      "not_published": [
+        {"item": "internal compensation network", "searched": "datasheet, app notes", "consequence": "footprint", "action": "add Cff and comp RC footprints"}
+      ],
+      "fix": "Use the example L and COUT, add a DNP Cff footprint across R21 and an injection resistor.",
+      "bench_test": "Bode with 50 ohm injection in series with R21 at 5 mV, all load corners.",
+      "confidence": "medium",
+      "verification": {"status": "CONFIRMED", "by": "verifier-1", "sources_checked": ["datasheet p.18", "BOM"]}
+    },
+    {
+      "id": "R2",
+      "title": "U2 loop margin unknown at light load",
+      "severity": "major",
+      "block": "buck_regulator",
+      "failure_mode": "loop_instability",
+      "parts": ["U2"],
+      "claim": "Same loop as R1, raised again from the load-step check.",
+      "evidence": [{"kind": "calculator", "ref": "calc.loop"}],
+      "fix": "See R1.",
+      "verification": {"status": "CONFIRMED"}
+    },
+    {
+      "id": "R3",
+      "title": "U5 mode pin has a pull-up and a pull-down both fitted",
+      "severity": "blocker",
+      "block": "ethernet_phy",
+      "failure_mode": "level_mismatch",
+      "parts": ["R40", "R41"],
+      "nets": ["PHY_MODE0"],
+      "claim": "The MODE0 strap sits near mid-rail, between VIL and VIH, so the latched interface mode is undefined.",
+      "evidence": [{"kind": "variant", "ref": "released BOM, R40 and R41 fitted"}, {"kind": "calculator", "ref": "calc.divider"}],
+      "fix": "DNP R41.",
+      "verification": {"status": "CONFIRMED"}
+    },
+    {
+      "id": "R4",
+      "title": "R11 value makes U1 never enable",
+      "severity": "blocker",
+      "block": "enable_uvlo_sequencing",
+      "failure_mode": "wrong_value",
+      "parts": ["R11"],
+      "nets": ["U1_EN"],
+      "claim": "R11 is 10 ohm; with R10 at 100k the EN pin sees 1.2 mV at 12 V, far below the 1.2 V threshold.",
+      "evidence": [{"kind": "bom", "ref": "R11 10R"}, {"kind": "calculator", "ref": "calc.divider"}],
+      "fix": "R11 to 10.0k.",
+      "verification": {"status": "CONFIRMED"}
+    },
+    {
+      "id": "R5",
+      "title": "Reset low level through D2 at cold",
+      "severity": "major",
+      "block": "resets_supervisors_watchdogs",
+      "failure_mode": "threshold_margin",
+      "parts": ["D2"],
+      "nets": ["RESET_N"],
+      "claim": "VOL plus diode forward voltage at -40 C exceeds the memory VIL.",
+      "evidence": [{"kind": "datasheet", "ref": "synthetic D2 datasheet p.2"}],
+      "fix": "Replace with an open-drain buffer.",
+      "verification": {"status": "WRONG", "notes": "verifier used the wrong VF row; this example keeps it refuted on purpose"}
+    },
+    {
+      "id": "R6",
+      "title": "C50 bulk capacitance on 5V derates below the regulator minimum",
+      "severity": "minor",
+      "block": "pdn_decoupling",
+      "failure_mode": "insufficient_capacitance",
+      "parts": ["C50"],
+      "nets": ["5V"],
+      "claim": "C50 22 uF 6.3 V 0603 keeps about 30 percent at 5 V bias.",
+      "evidence": [{"kind": "calculator", "ref": "calc.mlcc_bias"}],
+      "fix": "Use a 16 V 1206 part.",
+      "verification": {"status": "CONFIRMED"}
+    },
+    {
+      "id": "R7",
+      "title": "OSC_OUT is tied to ground through R5",
+      "severity": "minor",
+      "block": "clocks_crystals",
+      "failure_mode": "open_net",
+      "parts": ["R5"],
+      "nets": ["OSC_OUT"],
+      "claim": "Grounding OSC_OUT may load the oscillator.",
+      "evidence": [{"kind": "netlist", "ref": "net OSC_OUT"}],
+      "fix": "Remove R5.",
+      "verification": {"status": "PENDING"}
+    },
+    {
+      "id": "R8",
+      "title": "Sensor I2C lines have no pull-ups",
+      "severity": "major",
+      "block": "camera_csi",
+      "failure_mode": "missing_pullup",
+      "parts": ["U7"],
+      "nets": ["I2C1_SDA"],
+      "claim": "No resistor to a supply on I2C1_SDA or I2C1_SCL; the bus never reads high.",
+      "evidence": [{"kind": "netlist", "ref": "net I2C1_SDA"}],
+      "fix": "Add 2.2k pull-ups to 3V3.",
+      "verification": {"status": "CONFIRMED"}
+    }
+  ]
+}

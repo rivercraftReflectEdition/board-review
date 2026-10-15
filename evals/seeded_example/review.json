@@ -1,0 +1,91 @@
+{
+  "board": "seeded_example",
+  "synthetic": true,
+  "findings": [
+    {
+      "id": "F-001",
+      "title": "R11 10 ohm in the U1 EN/UVLO divider: converter never turns on",
+      "severity": "blocker",
+      "block": "enable_uvlo_sequencing",
+      "check": "enable_uvlo_sequencing#EN-1",
+      "failure_mode": "wrong_value",
+      "parts": ["R11", "R10"],
+      "nets": ["U1_EN_UVLO"],
+      "claim": "With R10 100k and R11 10 ohm the EN/UVLO pin sees 2.6 mV at 26.4 V; turn-on would need about 12 kV.",
+      "evidence": [{"kind": "bom", "ref": "R11 10R0"}, {"kind": "calculator", "ref": "calc.divider"}],
+      "fix": "R11 to 10.0k.",
+      "verification": {"status": "CONFIRMED"}
+    },
+    {
+      "id": "F-002",
+      "title": "U6 MODE0 strap: pull-up and pull-down both fitted",
+      "severity": "blocker",
+      "block": "straps_and_boot_pins",
+      "check": "straps_and_boot_pins#STR-2",
+      "failure_mode": "strap_conflict",
+      "parts": ["R60", "R61"],
+      "nets": ["PHY_MODE0"],
+      "claim": "The pin settles near half the I/O supply, between VIL and VIH, so the latched mode is undefined.",
+      "evidence": [{"kind": "variant", "ref": "released BOM"}, {"kind": "calculator", "ref": "calc.divider"}],
+      "fix": "DNP R61.",
+      "verification": {"status": "CONFIRMED"}
+    },
+    {
+      "id": "F-003",
+      "title": "U2 3V3 buck outside its example envelope, internal compensation, no Cff footprint",
+      "severity": "blocker",
+      "block": "buck_regulator",
+      "check": "buck_regulator#BR-1",
+      "failure_mode": "loop_instability",
+      "parts": ["U2", "L4"],
+      "nets": ["3V3"],
+      "claim": "L4 is 4.7x the example inductance and COUT is half the example, with no way to add phase without rework.",
+      "evidence": [{"kind": "datasheet", "ref": "synthetic U2 datasheet p.20"}],
+      "not_published": [{"item": "internal compensation values", "consequence": "footprint", "action": "Cff footprint across the top feedback resistor"}],
+      "fix": "Restore example L and COUT; add Cff and injection footprints.",
+      "bench_test": "Load step 10 to 90 percent with 1 us edges; Bode at 5 mV injection.",
+      "verification": {"status": "CONFIRMED"}
+    },
+    {
+      "id": "F-004",
+      "title": "I2C2 SDA and SCL have no pull-up to any supply",
+      "severity": "major",
+      "block": "io_levels_and_domains",
+      "check": "io_levels_and_domains#IO-7",
+      "failure_mode": "missing_pullup",
+      "parts": ["U7"],
+      "nets": ["I2C2_SDA", "I2C2_SCL"],
+      "claim": "Open-drain bus with no pull-up never returns high.",
+      "evidence": [{"kind": "netlist", "ref": "nets I2C2_SDA, I2C2_SCL"}],
+      "fix": "Add 2.2k pull-ups to 3V3; check rise time with calc.i2c.",
+      "verification": {"status": "CONFIRMED"}
+    },
+    {
+      "id": "F-005",
+      "title": "D1 VRWM 24 V below the 26.4 V input maximum",
+      "severity": "major",
+      "block": "protection_tvs",
+      "check": "protection_tvs#PROT-1",
+      "failure_mode": "protection_gap",
+      "parts": ["D1"],
+      "nets": ["VIN_24V"],
+      "claim": "The TVS conducts inside the normal input range.",
+      "evidence": [{"kind": "datasheet", "ref": "SMAJ series datasheet, VRWM column"}, {"kind": "calculator", "ref": "calc.tvs"}],
+      "fix": "Use the 30 V standoff part and recheck clamp against U1 abs max.",
+      "verification": {"status": "CONFIRMED"}
+    },
+    {
+      "id": "F-006",
+      "title": "C12 5 V bulk capacitor rated 6.3 V",
+      "severity": "minor",
+      "block": "pdn_decoupling",
+      "failure_mode": "insufficient_capacitance",
+      "parts": ["C12"],
+      "nets": ["5V"],
+      "claim": "At 5 V bias the 6.3 V part keeps a small fraction of its nominal value.",
+      "evidence": [{"kind": "calculator", "ref": "calc.mlcc_bias"}],
+      "fix": "Use a 16 V part.",
+      "verification": {"status": "CONFIRMED"}
+    }
+  ]
+}

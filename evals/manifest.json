@@ -1,0 +1,10 @@
+{
+  "description": "Boards in the eval set. split is dev or held-out. Held-out boards are never read while writing checklists or lessons. Paths are relative to this file. expected null means a clean board: every finding is a false positive.",
+  "boards": [
+    {"name": "example", "split": "dev", "kind": "synthetic", "expected": "example/expected.json", "review": "example/review.json"},
+    {"name": "example_heldout", "split": "held-out", "kind": "synthetic", "expected": "example_heldout/expected.json", "review": "example_heldout/review.json"},
+    {"name": "seeded_example", "split": "dev", "kind": "seeded", "expected": "seeded_example/expected.json", "review": "seeded_example/review.json"},
+    {"name": "seeded_example_clean", "split": "dev", "kind": "clean", "expected": null, "review": "seeded_example/clean_review.json"},
+    {"name": "sauron_rev1", "split": "dev", "kind": "real", "expected": "sauron_rev1/local/expected.json", "local": true}
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "board": "example_heldout",
+  "synthetic": true,
+  "findings": [
+    {
+      "id": "Q1",
+      "title": "D4 VRWM 22 V sits below the 26.4 V worst-case input",
+      "severity": "major",
+      "block": "protection_tvs",
+      "failure_mode": "protection_gap",
+      "parts": ["D4"],
+      "nets": ["VIN"],
+      "claim": "The TVS starts to conduct within the normal input range and leaks or overheats.",
+      "evidence": [{"kind": "datasheet", "ref": "synthetic TVS datasheet p.2"}, {"kind": "calculator", "ref": "calc.tvs"}],
+      "fix": "Use the 28 V standoff part and recheck the clamp against downstream abs max.",
+      "verification": {"status": "CONFIRMED"}
+    },
+    {
+      "id": "Q2",
+      "title": "Thermal pad of U3 has two vias",
+      "severity": "minor",
+      "block": "thermal",
+      "failure_mode": "thermal_overstress",
+      "parts": ["U3"],
+      "claim": "Two vias under the exposed pad give about 60 C/W.",
+      "evidence": [{"kind": "calculator", "ref": "calc.thermal"}],
+      "fix": "Add a 3x3 via array.",
+      "verification": {"status": "CONFIRMED"}
+    }
+  ]
+}

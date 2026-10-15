@@ -1,0 +1,171 @@
+import importlib.util
+import json
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parent.parent
+EVALS = ROOT / "evals"
+
+
+def _load_score():
+    spec = importlib.util.spec_from_file_location("evals_score", EVALS / "score.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+score = _load_score()
+SCHEMA = score.load_schema()
+BLOCKS, MODES = score.vocab(SCHEMA)
+
+
+def _finding(**kw):
+    base = {
+        "id": "T1", "title": "test finding", "severity": "major", "block": "buck_regulator",
+        "failure_mode": "loop_instability", "claim": "a claim long enough",
+        "evidence": [{"kind": "netlist", "ref": "net X"}], "fix": "fix it",
+        "verification": {"status": "CONFIRMED"},
+    }
+    base.update(kw)
+    return base
+
+
+def test_refdes_range_expands_and_pins_add_parts():
+    assert score.norm_parts(["R14-R17", "u9"]) == {"R14", "R15", "R16", "R17", "U9"}
+    assert score.norm_parts(["R14-17"]) == {"R14", "R15", "R16", "R17"}
+    assert score.finding_parts({"parts": ["L3"], "pins": ["U9.26"]}) == {"L3", "U9"}
+
+
+def test_net_names_normalize_case_separators_and_hierarchy():
+    assert score.norm_net("/Power/1v8_sw1 filt") == "1V8-SW1-FILT"
+    assert score.norm_net("+3V3") == "3V3"
+
+
+def test_block_aliases_and_mode_synonyms():
+    assert score.canon_block("Buck", BLOCKS) == "buck_regulator"
+    assert score.canon_block("ESD", BLOCKS) == "protection_tvs"
+    assert score.canon_mode("limit cycle", MODES) == "loop_instability"
+    assert score.canon_mode("back-powering", MODES) == "back_power"
+    assert score.canon_mode("lc_resonance", MODES) == "lc_resonance"
+
+
+def test_keyword_rule_word_start_alternatives_and_compounds():
+    text = score.norm_text("The rail oscillates; add a feedforward cap.")
+    assert score.keyword_hit("oscillat|unstable", text)
+    assert score.keyword_hit("feed forward", text)
+    assert not score.keyword_hit("pg", score.norm_text("upgrade the part"))
+    assert score.keywords_needed(["a"]) == 1
+    assert score.keywords_needed(["a", "b", "c"]) == 2
+
+
+def test_match_needs_block_location_and_failure_mode():
+    exp = {"block": "buck_regulator", "parts": ["U2"], "failure_mode": "loop_instability"}
+    assert score.evaluate(exp, _finding(parts=["U2"]), BLOCKS, MODES)[0]
+    assert not score.evaluate(exp, _finding(parts=["U3"]), BLOCKS, MODES)[0]
+    assert not score.evaluate(exp, _finding(parts=["U2"], block="ldo"), BLOCKS, MODES)[0]
+    assert not score.evaluate(exp, _finding(parts=["U2"], failure_mode="dropout"), BLOCKS, MODES)[0]
+
+
+def test_keywords_rescue_a_different_failure_tag():
+    exp = {"block": "straps_and_boot_pins", "alt_blocks": ["ethernet_phy"], "parts": ["R40-R41"],
+           "failure_mode": "strap_conflict", "keywords": ["strap", "both|mid level", "latch"]}
+    rev = _finding(block="ethernet_phy", parts=["R41"], failure_mode="level_mismatch",
+                   title="mode strap has pull-up and pull-down both fitted")
+    assert score.evaluate(exp, rev, BLOCKS, MODES)[0]
+    rev_one_hit = _finding(block="ethernet_phy", parts=["R41"], failure_mode="level_mismatch",
+                           title="mode strap reads low")
+    assert not score.evaluate(exp, rev_one_hit, BLOCKS, MODES)[0]
+
+
+def test_expected_without_location_matches_on_block_and_mode():
+    exp = {"block": "thermal", "failure_mode": "thermal_overstress"}
+    assert score.evaluate(exp, _finding(block="thermal", failure_mode="thermal_overstress"), BLOCKS, MODES)[0]
+
+
+def test_one_to_one_pairing_duplicates_and_known_good():
+    expected = {
+        "board": "t",
+        "findings": [{"id": "E1", "block": "buck_regulator", "parts": ["U2", "L2"], "failure_mode": "loop_instability"}],
+        "known_good": [{"id": "K1", "block": "clocks_crystals", "parts": ["R5"], "failure_mode": "other",
+                        "keywords": ["ground"]}],
+    }
+    review = [
+        _finding(id="A", parts=["U2"]),
+        _finding(id="B", parts=["U2", "L2"]),
+        _finding(id="C", block="clocks_crystals", parts=["R5"], failure_mode="open_net", title="OSC_OUT to ground"),
+        _finding(id="D", block="ldo", parts=["U3"], failure_mode="dropout"),
+    ]
+    r = score.score_board(expected, review, SCHEMA)
+    assert r["matches"] == [{"expected": "E1", "review": "B"}]
+    assert r["duplicate_ids"] == ["A"]
+    assert r["known_good_hits"] == [{"review": "C", "known_good": "K1"}]
+    assert (r["tp"], r["fp"], r["recall"], r["precision"]) == (1, 2, 1.0, pytest.approx(1 / 3))
+
+
+def test_refuted_findings_excluded_unless_asked():
+    expected = {"board": "t", "findings": [{"id": "E1", "block": "ldo", "parts": ["U3"], "failure_mode": "dropout"}]}
+    review = [_finding(block="ldo", parts=["U3"], failure_mode="dropout", verification={"status": "WRONG"})]
+    assert score.score_board(expected, review, SCHEMA)["tp"] == 0
+    assert score.score_board(expected, review, SCHEMA, include_refuted=True)["tp"] == 1
+
+
+def test_example_board_scores():
+    r = score.score_board(score.load_json(EVALS / "example" / "expected.json"),
+                          score.review_list(score.load_json(EVALS / "example" / "review.json")), SCHEMA)
+    assert (r["tp"], r["fp"], r["duplicates"], r["refuted_excluded"]) == (3, 3, 1, 1)
+    assert {m["id"] for m in r["misses"]} == {"E2", "E5", "E6"}
+    assert r["known_good_hits"] == [{"review": "R7", "known_good": "K1"}]
+    assert r["recall_by_severity"] == {"blocker": [3, 3], "major": [0, 3]}
+    assert r["schema_errors"] == []
+
+
+def test_manifest_totals_split_and_bug_classes(tmp_path):
+    result = score.score_manifest(EVALS / "manifest.json", schema=SCHEMA)
+    dev, held = result["overall"]["dev"], result["overall"]["held-out"]
+    assert (dev["tp"], dev["expected"], dev["fp"]) == (8, 13, 6)
+    assert (held["tp"], held["expected"], held["fp"]) == (1, 2, 1)
+    classes = result["detected_by_bug_class"]["dev"]
+    assert classes["bead_cap_resonance_near_fsw"] == [0, 1]
+    assert classes["upstream_cannot_sink"] == [0, 1]
+    assert classes["wrong_divider_value"] == [1, 1]
+    assert result["unknown_bug_classes"] == []
+    clean = next(b for b in result["boards"] if b["board"] == "seeded_example_clean")
+    assert (clean["expected"], clean["fp"], clean["precision"]) == (0, 2, 0.0)
+
+
+def test_reviews_dir_overrides_and_missing_files_are_skipped(tmp_path):
+    (tmp_path / "boards").mkdir()
+    manifest = {"boards": [
+        {"name": "a", "split": "dev", "expected": "a.json"},
+        {"name": "b", "split": "held-out", "expected": "missing.json"},
+    ]}
+    (tmp_path / "manifest.json").write_text(json.dumps(manifest))
+    (tmp_path / "a.json").write_text(json.dumps({"board": "a", "findings": [
+        {"id": "E1", "title": "x", "block": "ldo", "parts": ["U3"], "failure_mode": "dropout"}]}))
+    (tmp_path / "boards" / "a.json").write_text(json.dumps(
+        [_finding(block="ldo", parts=["U3"], failure_mode="dropout")]))
+    result = score.score_manifest(tmp_path / "manifest.json", tmp_path / "boards", schema=SCHEMA)
+    assert result["overall"]["dev"]["recall"] == 1.0
+    assert result["skipped"] == [{"board": "b", "split": "held-out", "reason": "expected file not found (missing.json)"}]
+
+
+def test_bad_split_rejected(tmp_path):
+    (tmp_path / "manifest.json").write_text(json.dumps({"boards": [{"name": "a", "split": "test", "expected": None}]}))
+    with pytest.raises(ValueError):
+        score.score_manifest(tmp_path / "manifest.json", schema=SCHEMA)
+
+
+def test_heldout_details_hidden_unless_revealed():
+    result = score.score_manifest(EVALS / "manifest.json", schema=SCHEMA)
+    hidden = score.format_report(result)
+    shown = score.format_report(result, reveal_heldout=True)
+    assert "MISS H2" not in hidden and "details hidden for a held-out board" in hidden
+    assert "MISS H2" in shown
+
+
+def test_cli_single_board(capsys):
+    rc = score.main(["--expected", str(EVALS / "example" / "expected.json"),
+                     "--review", str(EVALS / "example" / "review.json"), "--json"])
+    assert rc == 0
+    assert json.loads(capsys.readouterr().out)["tp"] == 3
