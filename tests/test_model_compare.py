@@ -25,6 +25,7 @@ def test_dropped_sheet_shows_as_one_connected_group():
     assert pair.groups_only_b == [["C2", "L1", "R1", "R2", "U1"]]
     assert pair.added == ["NetC2_1", "NetL1_1", "NetR1_2"]
     assert not pair.moved and not pair.renamed
+    assert pair.pins_only_b == [], "open pins missing from a Protel netlist are not differences"
     text = report.to_markdown()
     assert "5 parts are in fab but not in schematic" in text
     assert "dropped out of the compile" in text
@@ -93,3 +94,22 @@ def test_missing_parts_split_into_unconnected_groups():
     pair = compare.compare([("sch", _ti()), ("pcb", b)]).pairs[0]
     assert pair.only_a == ["C8", "R8", "U4", "Y1"]
     assert sorted(map(sorted, pair.groups_only_a)) == [["C8", "Y1"], ["R8", "U4"]]
+
+
+def test_mechanical_parts_are_listed_apart():
+    b = _ti()
+    b.add_pin("MH1", "1", "GND")
+    b.add_pin("FID1", "1", None)
+    b.finalize()
+    pair = compare.compare([("sch", _ti()), ("pcb", b)]).pairs[0]
+    assert pair.only_b == [] and pair.mech_only_b == ["FID1", "MH1"]
+    assert "Mechanical or test parts only in pcb" in compare.compare([("sch", _ti()), ("pcb", b)]).to_markdown()
+
+
+def test_three_way_with_a_netlist_that_omits_open_pins():
+    sch = protel.read_protel(FIX / "sch_missing_sheet.net")
+    fab = ipc356.read_ipc356(FIX / "adi_buck_nonames.ipc")
+    report = compare.compare([("schematic", sch), ("pcb", fab), ("fab", fab)])
+    rows = {k: (v, odd) for k, v, odd in report.disagreements}
+    assert "U2.4" not in rows
+    assert rows["U1.1"] == (["<absent>", "VIN", "VIN"], "schematic")

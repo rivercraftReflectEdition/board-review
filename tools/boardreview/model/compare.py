@@ -9,6 +9,7 @@ from boardreview.model import naming
 from boardreview.model.board import BoardModel, natural_key
 
 ABSENT = "<absent>"
+MECHANICAL = {"mechanical", "testpoint"}
 
 
 @dataclass
@@ -17,12 +18,19 @@ class Side:
     pins: dict[str, str | None]
     comps: set[str]
     kinds: dict[str, str]
+    complete: bool = True
 
     @classmethod
     def of(cls, label: str, model: BoardModel) -> "Side":
         pins = {p.key: p.net for p in model.pins.values()}
         comps = {p.refdes for p in model.pins.values()}
-        return cls(label, pins, comps, {r: c.kind for r, c in model.components.items()})
+        return cls(label, pins, comps, {r: c.kind for r, c in model.components.items()}, model.pin_list_complete)
+
+    def net_or_absent(self, key: str) -> str | None:
+        """Net of a pin; a missing pin on a present part counts as no net when the source omits open pins."""
+        if key in self.pins:
+            return self.pins[key]
+        return None if not self.complete and _part(key) in self.comps else ABSENT
 
     def nets(self) -> dict[str, list[str]]:
         out: dict[str, list[str]] = {}
@@ -38,6 +46,8 @@ class PairDiff:
     b: str
     only_a: list[str] = field(default_factory=list)
     only_b: list[str] = field(default_factory=list)
+    mech_only_a: list[str] = field(default_factory=list)
+    mech_only_b: list[str] = field(default_factory=list)
     groups_only_a: list[list[str]] = field(default_factory=list)
     groups_only_b: list[list[str]] = field(default_factory=list)
     pins_only_a: list[str] = field(default_factory=list)
@@ -110,12 +120,16 @@ def compare_pair(a: Side, b: Side) -> PairDiff:
     """Differences from a to b: parts, pins, renamed, removed, added, merged, split and moved."""
     d = PairDiff(a.label, b.label)
     common_parts = a.comps & b.comps
-    d.only_a = sorted(a.comps - b.comps, key=natural_key)
-    d.only_b = sorted(b.comps - a.comps, key=natural_key)
+    for refs, side, real, mech in ((a.comps - b.comps, a, d.only_a, d.mech_only_a),
+                                   (b.comps - a.comps, b, d.only_b, d.mech_only_b)):
+        for r in sorted(refs, key=natural_key):
+            (mech if side.kinds.get(r) in MECHANICAL else real).append(r)
     d.groups_only_a = _groups(a, d.only_a)
     d.groups_only_b = _groups(b, d.only_b)
-    d.pins_only_a = sorted((k for k in a.pins if k not in b.pins and _part(k) in common_parts), key=natural_key)
-    d.pins_only_b = sorted((k for k in b.pins if k not in a.pins and _part(k) in common_parts), key=natural_key)
+    d.pins_only_a = sorted((k for k in a.pins if k not in b.pins and _part(k) in common_parts
+                            and (b.complete or a.pins[k] is not None)), key=natural_key)
+    d.pins_only_b = sorted((k for k in b.pins if k not in a.pins and _part(k) in common_parts
+                            and (a.complete or b.pins[k] is not None)), key=natural_key)
     common = {k for k in a.pins if k in b.pins}
     overlap, d.net_map = _match(a, b, common)
     d.renamed = sorted(((na, nb) for na, nb in d.net_map.items() if na != nb), key=lambda t: natural_key(t[0]))
@@ -155,7 +169,7 @@ class CompareReport:
                       for s in self.sides},
             "pairs": [
                 {"a": p.a, "b": p.b, "only_a": p.only_a, "only_b": p.only_b, "groups_only_a": p.groups_only_a,
-                 "groups_only_b": p.groups_only_b, "pins_only_a": p.pins_only_a, "pins_only_b": p.pins_only_b,
+                 "groups_only_b": p.groups_only_b, "mech_only_a": p.mech_only_a, "mech_only_b": p.mech_only_b, "pins_only_a": p.pins_only_a, "pins_only_b": p.pins_only_b,
                  "renamed": p.renamed, "removed": p.removed, "added": p.added, "merged": p.merged,
                  "split": p.split, "moved": p.moved}
                 for p in self.pairs
@@ -186,11 +200,8 @@ def compare(models: list[tuple[str, BoardModel]]) -> CompareReport:
     for key in keys:
         vals = []
         for s, mp in zip(sides, maps):
-            if key not in s.pins:
-                vals.append(ABSENT)
-            else:
-                net = s.pins[key]
-                vals.append("(no net)" if net is None else mp.get(net, net))
+            net = s.net_or_absent(key)
+            vals.append("(no net)" if net is None else net if net == ABSENT else mp.get(net, net))
         if len(set(vals)) > 1:
             counts = Counter(vals)
             odd = ""
@@ -217,6 +228,9 @@ def _pair_findings(p: PairDiff, limit: int) -> list[str]:
                      " A connected group missing from one side usually means a schematic sheet dropped out of"
                      " the compile, or its parts were excluded from the board or the netlist.")
         out.append(line)
+    for mech, here, there in ((p.mech_only_a, p.a, p.b), (p.mech_only_b, p.b, p.a)):
+        if mech:
+            out.append(f"Mechanical or test parts only in {here}, not {there}: {_list(mech, limit)}.")
     if p.renamed:
         out.append(f"{len(p.renamed)} nets renamed from {p.a} to {p.b}: "
                    + _list([f"{x} -> {y}" for x, y in p.renamed], limit) + ".")
