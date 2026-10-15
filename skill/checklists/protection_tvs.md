@@ -16,9 +16,11 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Why: a TVS that conducts but clamps above the IC's abs max protects nothing.
 - Compute: `calc.protection.tvs_clamp` at the surge current the waveform and source impedance
   give.
-- Pass: clamp at surge current below every abs max on the net.
-- Not published: clamp given only at one current; scale with the dynamic resistance from the
-  curve and mark UNSURE.
+- Pass: clamp at surge current below every abs max on the net, with the surge current inside the
+  characterized clamp points and inside the rated IPP or PPP for that pulse shape.
+- Not published: clamp given only up to a lower current, or no pulse rating; `tvs_clamp` returns
+  UNKNOWN. Scaling with the dynamic resistance is an estimate only: mark it UNSURE and ask for the
+  vendor curve or a surge test.
 
 ## PROT-3 Orientation
 - Check: unidirectional TVS cathode toward the positive rail; footprint pin mapping against the
