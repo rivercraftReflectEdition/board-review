@@ -1,4 +1,4 @@
-"""Timing budgets: a sum of terms against a limit, RC edges, timestamp error from slew, sensor line and exposure time, smear."""
+"""Timing budgets: a sum of terms against a limit, RC edges, slew timestamp error, sensor line and exposure time, smear."""
 
 from __future__ import annotations
 
