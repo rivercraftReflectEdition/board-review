@@ -1,7 +1,7 @@
 import copy
 from pathlib import Path
 
-from boardreview.model import compare, ipc356, kicad, protel
+from boardreview.model import bom, compare, ipc356, kicad, protel
 from boardreview.model.board import BoardModel
 
 FIX = Path(__file__).parent / "fixtures" / "model"
@@ -91,6 +91,8 @@ def test_missing_parts_split_into_unconnected_groups():
     b = copy.deepcopy(_ti())
     for key in [k for k in b.pins if k[0] in ("U4", "R8", "Y1", "C8")]:
         del b.pins[key]
+    for ref in ("U4", "R8", "Y1", "C8"):
+        del b.components[ref]
     b.invalidate()
     pair = compare.compare([("sch", _ti()), ("pcb", b)]).pairs[0]
     assert pair.only_a == ["C8", "R8", "U4", "Y1"]
@@ -116,6 +118,25 @@ def test_three_way_with_a_netlist_that_omits_open_pins():
     assert rows["U1.1"] == (["<absent>", "VIN", "VIN"], "schematic")
 
 
+def test_deleted_part_with_no_connected_pins_is_not_clean():
+    full = protel.parse_protel("[\nR5\nR0402\n10k\n]\n[\nU1\nSOIC8\nX\n]\n[\nMH1\nHOLE\nM3\n]\n(\nA\nU1-1\nC1-1\n)\n")
+    cut = protel.parse_protel("[\nU1\nSOIC8\nX\n]\n(\nA\nU1-1\nC1-1\n)\n")
+    pair = compare.compare([("sch", full), ("pcb", cut)]).pairs[0]
+    assert pair.only_a == ["R5"] and pair.mech_only_a == ["MH1"]
+    assert not pair.clean
+
+
+def test_bom_only_parts_are_listed_apart_and_not_compared(tmp_path):
+    path = tmp_path / "bom.csv"
+    path.write_text("Designator,MPN\nU1,X\nZ9,Y\n", encoding="utf-8")
+    with_bom = protel.parse_protel("[\nU1\nSOIC8\nX\n]\n(\nA\nU1-1\nC1-1\n)\n")
+    bom.apply_bom(with_bom, bom.read_bom(path), str(path))
+    plain = protel.parse_protel("[\nU1\nSOIC8\nX\n]\n(\nA\nU1-1\nC1-1\n)\n")
+    report = compare.compare([("sch", with_bom), ("pcb", plain)])
+    assert report.pairs[0].clean
+    assert "| BOM-only parts | 1 | 0 |" in report.to_markdown()
+
+
 def test_rail_used_only_by_missing_parts_joins_their_group():
     full = BoardModel(pin_list_complete=True)
     for ref, pin, net in [("U9", "1", "5V_AUX"), ("U9", "2", "GND"), ("C1", "1", "5V_AUX"), ("C1", "2", "GND"),
@@ -126,6 +147,8 @@ def test_rail_used_only_by_missing_parts_joins_their_group():
     part = copy.deepcopy(full)
     for key in [k for k in part.pins if k[0] in ("U9", "C1", "C2")]:
         del part.pins[key]
+    for ref in ("U9", "C1", "C2"):
+        del part.components[ref]
     part.invalidate()
     pair = compare.compare([("schematic", part), ("pcb", full)]).pairs[0]
     assert pair.groups_only_b == [["C1", "C2", "U9"]]

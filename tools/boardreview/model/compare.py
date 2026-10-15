@@ -19,12 +19,16 @@ class Side:
     comps: set[str]
     kinds: dict[str, str]
     complete: bool = True
+    bom_only: set[str] = field(default_factory=set)
 
     @classmethod
     def of(cls, label: str, model: BoardModel) -> "Side":
+        """Pins and the parts the netlist declares, with or without pins; BOM-only parts are kept apart."""
         pins = {p.key: p.net for p in model.pins.values()}
-        comps = {p.refdes for p in model.pins.values()}
-        return cls(label, pins, comps, {r: c.kind for r, c in model.components.items()}, model.pin_list_complete)
+        bom_only = {r for r, c in model.components.items() if c.attrs.get("bom_only")}
+        comps = (set(model.components) - bom_only) | {p.refdes for p in model.pins.values()}
+        return cls(label, pins, comps, {r: c.kind for r, c in model.components.items()}, model.pin_list_complete,
+                   bom_only)
 
     def net_or_absent(self, key: str) -> str | None:
         """Net of a pin; a missing pin on a present part counts as no net when the source omits open pins."""
@@ -166,8 +170,8 @@ class CompareReport:
     def to_dict(self) -> dict:
         return {
             "labels": self.labels,
-            "stats": {s.label: {"components": len(s.comps), "pins": len(s.pins), "nets": len(s.nets())}
-                      for s in self.sides},
+            "stats": {s.label: {"components": len(s.comps), "pins": len(s.pins), "nets": len(s.nets()),
+                                "bom_only": sorted(s.bom_only, key=natural_key)} for s in self.sides},
             "pairs": [
                 {"a": p.a, "b": p.b, "only_a": p.only_a, "only_b": p.only_b, "groups_only_a": p.groups_only_a,
                  "groups_only_b": p.groups_only_b, "mech_only_a": p.mech_only_a, "mech_only_b": p.mech_only_b, "pins_only_a": p.pins_only_a, "pins_only_b": p.pins_only_b,
@@ -259,9 +263,10 @@ def _markdown(r: CompareReport, limit: int) -> str:
              "Pins are compared as REF.PIN -> net. Net names are matched by shared pins, so a rename is reported",
              "as a rename and not as a removed and an added net. Pins with no net count as '(no net)'.", "",
              "| | " + " | ".join(r.labels) + " |", "|---|" + "---|" * len(r.labels)]
-    for label, getter in (("parts with pins", lambda s: len(s.comps)), ("pins", lambda s: len(s.pins)),
+    for label, getter in (("parts in the netlist", lambda s: len(s.comps)), ("pins", lambda s: len(s.pins)),
                           ("nets", lambda s: len(s.nets())),
-                          ("pins with no net", lambda s: sum(1 for v in s.pins.values() if v is None))):
+                          ("pins with no net", lambda s: sum(1 for v in s.pins.values() if v is None)),
+                          ("BOM-only parts", lambda s: len(s.bom_only))):
         lines.append(f"| {label} | " + " | ".join(str(getter(s)) for s in r.sides) + " |")
     lines.append("")
     for p in r.pairs:
