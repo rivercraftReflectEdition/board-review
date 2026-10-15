@@ -1,5 +1,6 @@
 import math
 import os
+import re
 from dataclasses import replace
 from pathlib import Path
 
@@ -168,6 +169,45 @@ def test_loop_gain_verdict_keeps_setup_and_margins_apart():
     assert setups.LoopGainResult([], None, SanityReport()).verdict is Verdict.UNKNOWN
 
 
+def injection_run(tmp_path: Path, s: setups.LoopGainSetup, f: float, amp: float, tau_s: float = 0.0) -> RunResult:
+    """V(a) and V(b) of an integrator loop T = 5 kHz / (j f); tau_s adds a decaying start transient at f."""
+    t = np.arange(0, s.t_stop(f), 1 / (s.fsw_hz * 64))
+    x = np.clip(t - s.t_settle_s, 0, None)
+    on = t >= s.t_settle_s
+    env = 1 + (0.5 * np.exp(-x / tau_s) if tau_s else 0)
+    a = np.where(on, amp * np.exp(2j * np.pi * f * x), 0)
+    return fake_run(tmp_path, t, lg_a=3.3 + a.real, out=3.3 + np.real(-(5e3 / (1j * f)) * env * a))
+
+
+def test_lockin_flags_an_unsettled_window(tmp_path):
+    s = setups.LoopGainSetup(body="V1 out 0 3.3\nRtop out fb 10k\nRbot fb 0 2.2k", **COMMON)
+    clean, late = SanityReport(), SanityReport()
+    p = setups.measure_loop_gain_point(injection_run(tmp_path, s, 10e3, 2e-3), s, 10e3, clean)
+    assert p.t == pytest.approx(5e3 / (1j * 10e3), rel=1e-3)
+    assert [r.verdict for r in clean.results if r.name == "lock-in convergence"] == [Verdict.PASS]
+    setups.measure_loop_gain_point(injection_run(tmp_path, s, 10e3, 2e-3, tau_s=3 / 10e3), s, 10e3, late)
+    conv = [r for r in late.results if r.name == "lock-in convergence"]
+    assert conv and conv[0].verdict in (Verdict.MARGINAL, Verdict.FAIL) and not late.ok
+
+
+def test_loop_margins_need_the_amplitude_check(tmp_path, monkeypatch):
+    s = setups.LoopGainSetup(body=setups.body_from_netlist(FIXTURES / "vm_buck_switching.net"), **COMMON)
+
+    def fake_many(netlists, workdir, names, **kw):
+        sines = [re.search(r"SINE\(0 (\S+) (\S+)", n) for n in netlists]
+        return [injection_run(tmp_path, s, float(m.group(2)), float(m.group(1))) for m in sines]
+
+    monkeypatch.setattr(setups, "run_many", fake_many)
+    freqs = setups.injection_frequencies(2e3, 20e3, 4, 500e3)
+    unchecked = setups.run_loop_gain(s, freqs, tmp_path, linearity=False)
+    assert unchecked.margins_result().verdict is Verdict.PASS
+    lin = [r for r in unchecked.report.results if r.name == "loop gain linearity"]
+    assert lin and lin[0].verdict is Verdict.UNKNOWN and unchecked.verdict is Verdict.UNKNOWN
+    checked = setups.run_loop_gain(s, freqs, tmp_path)
+    assert checked.report.ok, checked.to_markdown()
+    assert checked.verdict is Verdict.PASS
+
+
 def fake_ac_run(tmp_path: Path, log_text: str) -> RunResult:
     """A finished AC run of ImpedanceSetup with Z = 10 mOhm + s 1 nH at the rail."""
     f = np.logspace(3, 6, 31)
@@ -243,8 +283,9 @@ def test_switching_injection_with_cff_matches_analytic(tmp_path):
 @needs_ltspice
 @slow
 def test_switching_injection_matches_averaged_ac(tmp_path):
+    # f_c 5 kHz: the loop settles over several 1/(2 pi 5 kHz) = 32 us time constants, more than 3 periods at 60 kHz
     s = setups.LoopGainSetup(body=setups.body_from_netlist(FIXTURES / "vm_buck_switching.net"), sw_node="sw",
-                             amplitude_v=5e-3, t_settle_s=1e-3, **COMMON)
+                             amplitude_v=5e-3, t_settle_s=1e-3, min_settle_s=200e-6, **COMMON)
     freqs = setups.injection_frequencies(2e3, 80e3, 7, 500e3)
     res = setups.run_loop_gain(s, freqs, tmp_path, max_workers=3, refine=3, linearity=True)
     assert res.report.ok, res.to_markdown()

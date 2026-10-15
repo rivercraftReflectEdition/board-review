@@ -170,6 +170,7 @@ class LoopGainSetup:
     amplitude_v: float = 2e-3
     t_settle_s: float = 300e-6
     n_settle_periods: int = 3
+    min_settle_s: float = 0.0
     n_meas_periods: int = 6
     max_step_s: float | None = None
     tran_flags: str = "startup"
@@ -182,7 +183,11 @@ class LoopGainSetup:
         return self.max_step_s or 1.0 / (50.0 * self.fsw_hz)
 
     def t_stop(self, f_hz: float) -> float:
-        return self.t_settle_s + (self.n_settle_periods + self.n_meas_periods) / f_hz
+        return self.t_meas_start(f_hz) + self.n_meas_periods / f_hz
+
+    def t_meas_start(self, f_hz: float) -> float:
+        """Injection start plus the longer of n_settle_periods at f_hz and min_settle_s (the loop's own settling)."""
+        return self.t_settle_s + max(self.n_settle_periods / f_hz, self.min_settle_s)
 
     def branches(self) -> list[str]:
         """Parts moved from out_node to the injection node: top_resistor and every other feedback branch."""
@@ -240,7 +245,10 @@ class LoopGainSetup:
                                         "converter can lock to the injection"))
             if f > self.fsw_hz / 5:
                 rep.issues.append(Issue("injection", "warning",
-                                        f"{f:.4g} Hz is above fsw/5; a switching loop gain is not meaningful there"))
+                                        f"{f:.4g} Hz is above fsw/5, a working limit rather than a hard one: the "
+                                        "modulator samples once per period, so its alias at fsw - f is within two "
+                                        "octaves and sampling effects grow toward fsw/2 (Ridley, IEEE Trans. Power "
+                                        "Electronics 6(2), 1991); treat these points as indicative"))
         return rep
 
 
@@ -329,7 +337,7 @@ def measure_loop_gain_point(run_result: RunResult, setup: LoopGainSetup, f_hz: f
             fsw = fsw_meas
         except ValueError:
             fsw_meas = None
-    t0 = setup.t_settle_s + setup.n_settle_periods / f_hz
+    t0 = setup.t_meas_start(f_hz)
     keep = t >= t0 - 2.0 / fsw
     ta, va = measure.box_average(t[keep], raw[INJ_NODE][keep], 1.0 / fsw)
     tb, vb = measure.box_average(t[keep], raw[setup.out_node][keep], 1.0 / fsw)
@@ -340,13 +348,49 @@ def measure_loop_gain_point(run_result: RunResult, setup: LoopGainSetup, f_hz: f
                                    setup.c_out_f)
         if res.verdict is not Verdict.PASS:
             report.results.append(res)
+        half = (setup.n_meas_periods // 2) / f_hz
+        if half > 0:
+            pad = 0.01 / f_hz
+            early = _t_lockin(ta, va, tb, vb, f_hz, t0, t0 + half + pad)
+            late = _t_lockin(ta, va, tb, vb, f_hz, min(ta[-1], tb[-1]) - half - pad, None)
+            report.results.append(lockin_convergence(early, late, f_hz))
+        else:
+            report.results.append(Result(name="lock-in convergence", formula="T(second half) / T(first half)",
+                                         inputs={}, outputs={}, verdict=Verdict.UNKNOWN,
+                                         reason="fewer than 2 measured periods; nothing to compare"))
     return LoopGainPoint(f_hz=f_hz, t=-xb / xa, va=xa, vb=xb, fsw_hz=fsw_meas)
 
 
+def _t_lockin(ta: np.ndarray, va: np.ndarray, tb: np.ndarray, vb: np.ndarray, f_hz: float, t_start_s: float,
+              t_end_s: float | None) -> complex:
+    return -measure.lockin(tb, vb, f_hz, t_start_s, t_end_s) / measure.lockin(ta, va, f_hz, t_start_s, t_end_s)
+
+
+def lockin_convergence(early: complex, late: complex, f_hz: float, max_db: float = 0.25,
+                       max_deg: float = 1.5) -> Result:
+    """T from the first and the last half of the measurement window must agree, or the response has not settled."""
+    r = late / early
+    d_db, d_deg = 20 * math.log10(abs(r)), math.degrees(np.angle(r))
+    if abs(d_db) <= max_db and abs(d_deg) <= max_deg:
+        verdict, reason = Verdict.PASS, "the two halves of the window agree"
+    else:
+        verdict = Verdict.MARGINAL if abs(d_db) <= 4 * max_db and abs(d_deg) <= 4 * max_deg else Verdict.FAIL
+        reason = (f"T moved {d_db:+.2f} dB and {d_deg:+.1f} deg between the halves of the window at {f_hz:.4g} Hz: "
+                  "not settled; raise n_settle_periods or min_settle_s")
+    return Result(
+        name="lock-in convergence",
+        formula=f"dT = T(last half) / T(first half); settled if |dT| <= {max_db} dB and angle <= {max_deg} deg",
+        inputs={"f": Quantity(f_hz, "Hz")},
+        outputs={"d_mag": Quantity(d_db, "dB"), "d_phase": Quantity(d_deg, "deg")},
+        verdict=verdict,
+        reason=reason,
+    )
+
+
 def run_loop_gain(setup: LoopGainSetup, freqs: list[float], workdir: str | Path, max_workers: int = 2,
-                  timeout_s: float = 3600.0, force: bool = False, refine: int = 0, linearity: bool = False,
+                  timeout_s: float = 3600.0, force: bool = False, refine: int = 0, linearity: bool = True,
                   **run_kwargs: object) -> LoopGainResult:
-    """Checked transients per frequency, margins, optional refinement at crossings and a linearity rerun."""
+    """Checked transients per frequency, margins, optional refinement at crossings and the linearity rerun."""
     report = setup.check(freqs)
     if report.failed and not force:
         raise ValueError("fix the setup before running (or pass force=True):\n" + report.to_markdown())
@@ -372,6 +416,10 @@ def run_loop_gain(setup: LoopGainSetup, freqs: list[float], workdir: str | Path,
         f_lin = _off_subharmonic(margins.crossover_hz, setup.fsw_hz)
         report.results.append(linearity_check(setup, f_lin, workdir, max_workers=max_workers, timeout_s=timeout_s,
                                               **run_kwargs))
+    else:
+        why = "linearity=False" if not linearity else "no crossover to rerun at"
+        report.results.append(Result(name="loop gain linearity", formula="T(A) vs T(A ratio)", inputs={}, outputs={},
+                                     verdict=Verdict.UNKNOWN, reason=f"amplitude independence not checked ({why})"))
     return LoopGainResult(points, margins, report, runs)
 
 
