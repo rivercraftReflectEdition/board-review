@@ -22,6 +22,8 @@ LTSPICE_PATHS = (
     "/Applications/LTspice.app/Contents/MacOS/LTspice",
 )
 
+_HEADER_LINES = ("circuit:", "start time:", "ltspice ", "solver =", "maximum thread", "tnom =", "temp =",
+                 "method =", "asciirawfile")
 _FILE_LINE = re.compile(r"\.\w+\(\d+\):")
 _MEAS = re.compile(r"^([A-Za-z_][\w.]*):\s*[^=]*=\s*\(?([-+\d.eE]+)")
 _ERROR_PATTERNS = (
@@ -88,6 +90,8 @@ def parse_log(text: str) -> LogReport:
             files.append(stripped)
             continue
         low = stripped.lower()
+        if low.startswith(_HEADER_LINES):
+            continue
         if low.startswith(".step "):
             steps.append({k: _num(v) for k, v in re.findall(r"([\w.]+)=(\S+)", stripped[6:])})
             continue
@@ -322,7 +326,7 @@ def write_netlist(text: str, path: str | Path) -> Path:
         lines.insert(0, f"* {path.stem}")
     if not any(line.strip().lower() == ".end" for line in lines):
         lines.append(".end")
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
     return path
 
 
