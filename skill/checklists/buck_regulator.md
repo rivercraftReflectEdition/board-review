@@ -1,0 +1,104 @@
+# Buck regulator
+
+Applies to every synchronous or asynchronous buck, integrated switch or controller, any vendor.
+Run once per channel. Inputs: the digest (`example_envelope`, equations, timing, thresholds),
+BOM values, effective capacitance from `calc.mlcc_bias`.
+Missing data: follow the not-published rule in workflow/40_checks.md unless the item says more.
+
+## BR-1 Operating point inside the example envelope
+- Check: compare VIN range, VOUT, duty, fsw, L, effective COUT at bias, compensation mode and
+  light-load mode with the datasheet's example circuits for the same compensation mode.
+- Why: an internally compensated loop is only validated near the vendor's examples. Correct pins
+  and a "datasheet-prescribed" compensation tie say nothing about margin at your operating point.
+- Compute: `calc.buck` operating point; `calc.mlcc_bias` for COUT; digest `example_envelope`.
+- Pass: every parameter inside the span of the examples for that mode, or BR-2 shows margin.
+- Not published: internal compensation values are usually not given. Then BR-3 footprints are
+  required and a bench Bode goes in the test plan.
+- Example: [loop out of envelope](../../docs/lessons/loop-out-of-example-envelope.md)
+
+## BR-2 Loop margin at the corners
+- Check: phase and gain margin at worst corners of VIN, load, L tolerance, COUT (bias, temperature,
+  tolerance, aging) and fsw.
+- Why: nominal margin hides the corner that oscillates; a vendor model is a nominal estimate.
+- Compute: `calc.loop` (Bode, PM, GM, Cff zero and pole); `sim.loop_gain` when the plant is not
+  published, after the sanity checks in workflow/40_checks.md.
+- Pass: PM >= 45 deg and GM >= 10 dB at every corner, crossover below fsw/5, unless the datasheet
+  gives its own criterion.
+- Not published: gm, current-sense gain or internal network missing means the result is an
+  estimate. Report it as UNVERIFIABLE with a bench Bode and a load step.
+- Example: [simulation setup errors](../../docs/lessons/simulation-setup-errors.md)
+
+## BR-3 Rework options for a loop paper cannot settle
+- Check: a DNP Cff footprint across the top feedback resistor; a 0 ohm plus DNP R-C on the
+  compensation pin when the part can take external compensation; an injection point (0 ohm or
+  10 to 50 ohm pad in series with the top feedback resistor).
+- Why: without footprints a margin problem found on the bench becomes tack-soldered rework.
+- Compute: `calc.loop` for the Cff zero `1/(2 pi R_top Cff)` and pole `1/(2 pi (R_top||R_bot) Cff)`.
+- Pass: all three present whenever BR-2 is not a measured pass.
+- Example: [loop out of envelope](../../docs/lessons/loop-out-of-example-envelope.md)
+
+## BR-4 Large-signal slew headroom
+- Check: inductor current slew available to correct a disturbance:
+  up `(VIN_min * Dmax - VOUT) / L`, down `VOUT / L`, with `Dmax = 1 - fsw * (t_off_min + dead times)`.
+- Why: a small up-slew turns a lightly damped ring into a large limit cycle at a much lower
+  frequency.
+- Compute: `calc.buck` slew; compare with the same number for the datasheet examples.
+- Pass: slew covers the load-step dI/dt. Slew more than 3x below the slowest example is a
+  review trigger, not a verdict: run BR-2 at the corners and require BR-3 footprints.
+- Example: [loop out of envelope](../../docs/lessons/loop-out-of-example-envelope.md)
+
+## BR-5 Light-load mode and negative inductor current
+- Check: which mode the MODE/SYNC pin and the orderable suffix select (forced continuous, pulse
+  skip, burst). In forced continuous the valley current goes negative at light load and during
+  output overshoot.
+- Why: negative current flows back into the input rail; see cascaded_rails CR-1.
+- Compute: `calc.buck` valley current `I_load - dI/2` at minimum load and maximum ripple.
+- Pass: either the mode cannot return current, or CR-1 passes for the input rail.
+- Example: [reverse current into a non-sinking rail](../../docs/lessons/fcm-reverse-current-into-non-sinking-rail.md)
+
+## BR-6 On-time, off-time and frequency limits
+- Check: `t_on = D / fsw` and `t_off = (1 - D) / fsw` against minimum on and off times at the VIN
+  extremes; fsw across RT tolerance and temperature against the allowed range and any frequency
+  floor for internal compensation.
+- Why: below minimum off-time the part skips or stretches cycles and loses duty headroom; below
+  the frequency floor the internal compensation is out of its design range.
+- Compute: `calc.buck`.
+- Pass: 20 percent margin on each timing limit at its worst corner; fsw inside the range.
+- Not published: timing limits given as typical only; treat as UNSURE and add a bench check of
+  the switch node at the VIN extremes.
+
+## BR-7 Inductor saturation and ripple
+- Check: Isat at the current-limit peak, not the load peak, including the overshoot from current
+  sense delay; ripple ratio within the datasheet's guidance; DCR loss and temperature rise.
+- Why: an inductor that saturates in a fault defeats the current limit.
+- Compute: `calc.buck` peak `I_limit_max + VIN_max * t_delay / L_min`.
+- Pass: Isat (at the vendor's roll-off definition, hot) above the worst peak.
+
+## BR-8 Internal supply, bootstrap and gate-drive budget
+- Check: INTVCC/VCC and bootstrap capacitors at bias meet the datasheet minimum; for controllers,
+  gate charge `Qg * fsw` summed over FETs is below the internal regulator's guaranteed current.
+- Why: an undersized internal supply sags, gate drive weakens, and the FETs run hot or the part
+  never starts.
+- Compute: `calc.mlcc_bias`; `calc.buck` gate-drive current.
+- Pass: effective capacitance above the minimum; gate current below 70 percent of the limit.
+
+## BR-9 Feedback divider accuracy and impedance
+- Check: VOUT tolerance from reference tolerance and resistor tolerance against every load's
+  supply range; FB pin leakage times the divider Thevenin resistance; stray capacitance at FB.
+- Why: a high-impedance divider adds phase lag with a few pF and moves the setpoint with leakage.
+- Compute: `calc.divider` with tolerance and leakage; lag `atan(2 pi fc (R_top||R_bot) C_stray)`.
+- Pass: worst-case VOUT inside every load's recommended range; lag under 5 deg at crossover.
+
+## BR-10 Re-check after late changes
+- Check: any change to mode, L, COUT, fsw, compensation or VIN after the last review reopens
+  BR-1 to BR-5.
+- Why: late ECOs are applied under schedule pressure and are the least reviewed.
+- Pass: the review log shows BR-1 to BR-5 re-run on the released values.
+- Example: [loop out of envelope](../../docs/lessons/loop-out-of-example-envelope.md)
+
+## BR-11 Input capacitance and input filter interaction
+- Check: input capacitor ripple current rating; input filter output impedance against the
+  converter's negative input impedance `-VIN^2 / P_in`.
+- Why: an undamped input filter and a regulating converter can oscillate together.
+- Compute: `calc.lc_tank` for the filter peak; `sim.pdn` for the impedance overlay.
+- Pass: filter output impedance peak at least 6 dB below `VIN^2 / P_in` at every frequency.
