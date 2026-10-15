@@ -14,6 +14,8 @@ from boardreview.calc.mlcc_bias import mlcc_effective
 from boardreview.calc.protection import tvs_clamp, tvs_standoff
 from boardreview.calc.thermal import junction_temp
 
+POINT = BuckPoint("a", 5, 5, 1.8, 1e6, 1e-6, 1e-5, "internal")
+
 # Every value a calculator uses for its math or its verdict must be in Result.inputs.
 CASES = {
     "dropout": (
@@ -21,18 +23,20 @@ CASES = {
         ["r_top", "r_bot", "r_l", "margin_min"],
     ),
     "inductor_ripple": (
-        lambda: inductor_ripple(4.03, 3.32, 1.185e6, 2.2e-6, 1.0, i_sat_a=4.0, i_valley_limit_a=2.6, i_neg_limit_a=1.2, iout_max_a=3.0),
+        lambda: inductor_ripple(
+            4.03, 3.32, 1.185e6, 2.2e-6, 1.0, i_sat_a=4.0, i_valley_limit_a=2.6, i_neg_limit_a=1.2, iout_max_a=3.0
+        ),
         ["i_sat", "i_valley_limit", "i_neg_limit", "iout_max"],
     ),
     "current_slew": (lambda: current_slew(4.03, 3.32, 2.2e-6, 0.89), ["asymmetry_limit"]),
     "example_envelope": (
-        lambda: example_envelope(BuckPoint("a", 5, 5, 1.8, 1e6, 1e-6, 1e-5, "internal"), [BuckPoint("b", 5, 5, 1.8, 1e6, 1e-6, 1e-5, "internal")]),
+        lambda: example_envelope(POINT, [POINT]),
         ["tol_vin", "tol_vout", "tol_fsw", "tol_l", "tol_cout"],
     ),
     "tvs_standoff": (lambda: tvs_standoff(3.3, 5.0), ["margin_min"]),
     "tvs_clamp": (lambda: tvs_clamp(12.0, 4.0, [(1.0, 5.5), (10.0, 10.5)], i_pp_max_a=25.0), ["margin_min"]),
     "mlcc_effective": (
-        lambda: mlcc_effective(100e-9, "X7R", 0.1, 3.3, np.array([0.0, 5.0]), np.array([1.0, 0.6]), t_min_c=-40, t_max_c=85),
+        lambda: mlcc_effective(100e-9, "X7R", 0.1, 3.3, np.array([0.0, 5.0]), np.array([1.0, 0.6]), -40, 85),
         ["t_min", "t_max", "curve_v_lo", "curve_k_lo", "curve_v_hi", "curve_k_hi"],
     ),
     "load_capacitance": (lambda: load_capacitance(12e-12, 12e-12, 3e-12, cl_spec_f=9e-12), ["tol"]),
@@ -65,7 +69,7 @@ def test_result_carries_every_parameter(name):
 
 
 def test_dropout_reproduces_from_its_inputs():
-    r = dropout(4.03, 3.32, 1.185e6, 45e-9, 10e-9, dmax_measured=0.89, iout_a=2.0, r_top_ohm=0.13, r_bot_ohm=0.065, r_l_ohm=0.05)
+    r = dropout(4.03, 3.32, 1.185e6, 45e-9, 10e-9, 0.89, iout_a=2.0, r_top_ohm=0.13, r_bot_ohm=0.065, r_l_ohm=0.05)
     q = {k: v.value for k, v in r.inputs.items()}
     dmax = min(1 - q["f"] * (q["t_off_min"] + 2 * q["t_dead"]), q["dmax_measured"])
     vin_min = (q["vout"] + q["iout"] * (q["r_bot"] + q["r_l"])) / dmax + q["iout"] * (q["r_top"] - q["r_bot"])

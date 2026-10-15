@@ -222,7 +222,8 @@ def lc_filter(
                 j = int(np.argmax(np.where(m, h_db, -np.inf)))
                 hits.append((h_db[j], fk, f[j], k, fs))
     worst = max(hits) if hits else None
-    checked = [f0, float(f[i_pk])] + [fs * k * (1 + d) for fs in f_switch_hz for k in range(1, harmonics + 1) for d in (-window_frac, window_frac)]
+    edges = (1 - window_frac, 1 + window_frac)
+    checked = [f0, float(f[i_pk])] + [fs * k * e for fs in f_switch_hz for k in range(1, harmonics + 1) for e in edges]
     modeled = [fx for fx in checked if bool(bead.uncharacterized(np.array([fx]))[0])]
     gap = ""
     if modeled:

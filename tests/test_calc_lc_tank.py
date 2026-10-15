@@ -130,7 +130,8 @@ def test_bead_curve_r_includes_rdc_and_sets_the_peak():
 
 def test_export_with_rdc_subtracted_is_flagged():
     rows = BEAD_CSV.splitlines()
-    minus_rdc = "\n".join(rows[:1] + [f"{f},{float(r) - 0.045:.6g},{x}" for f, r, x in (ln.split(",") for ln in rows[1:])])
+    cells = [ln.split(",") for ln in rows[1:]]
+    minus_rdc = "\n".join(rows[:1] + [f"{f},{float(r) - 0.045:.6g},{x}" for f, r, x in cells])
     assert "subtracts RDC" in parse_bead_csv(minus_rdc, rdc_ohm=0.045).note
     assert "subtracts RDC" not in parse_bead_csv(BEAD_CSV, rdc_ohm=0.045).note
 
