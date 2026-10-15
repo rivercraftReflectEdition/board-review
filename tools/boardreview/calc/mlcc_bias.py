@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import numpy as np
 
 from boardreview.calc.base import Quantity, Result, Verdict
@@ -30,7 +32,24 @@ def dielectric_band(code: str) -> tuple[float, float, float, float]:
     raise ValueError(f"unknown dielectric code {code!r}")
 
 
-def bias_curve_from_csv(text: str, c_nom_f: float | None = None) -> tuple[np.ndarray, np.ndarray]:
+_PCT_CHANGE = re.compile(r"change|delta|Δ|δ|(?<![a-z])d\s*c\s*/\s*c", re.IGNORECASE)
+_PCT_OF_NOM = re.compile(r"(?<![a-zΔδ])c\s*/\s*c|of\s*nom", re.IGNORECASE)
+
+
+def percent_kind(header: str) -> str:
+    """'change' or 'of_nominal' for a percent column header; ValueError when the header does not say which."""
+    if _PCT_CHANGE.search(header):
+        return "change"
+    if _PCT_OF_NOM.search(header):
+        return "of_nominal"
+    raise ValueError(
+        f"percent column {header!r} does not say change or percent of nominal; pass percent='change' or 'of_nominal'"
+    )
+
+
+def bias_curve_from_csv(
+    text: str, c_nom_f: float | None = None, percent: str | None = None
+) -> tuple[np.ndarray, np.ndarray]:
     """DC bias in volts and C/Cnom from a vendor DC-bias export (percent change, percent of nominal, or farads)."""
     headers, data = parse_csv_table(text)
     iv = find_column(headers, "bias", "volt", "[v]", "(v)", "vdc")
@@ -39,11 +58,21 @@ def bias_curve_from_csv(text: str, c_nom_f: float | None = None) -> tuple[np.nda
     y = data[:, ic]
     order = np.argsort(v)
     v, y = v[order], y[order]
-    if "%" in headers[ic]:
-        ratio = y / 100.0 if abs(y[0] - 100.0) < abs(y[0]) else 1.0 + y / 100.0
+    if "%" in headers[ic] or percent is not None:
+        kind = percent or percent_kind(headers[ic])
+        if kind not in ("change", "of_nominal"):
+            raise ValueError(f"percent must be 'change' or 'of_nominal', not {kind!r}")
+        ratio = 1.0 + y / 100.0 if kind == "change" else y / 100.0
+        if np.any(ratio <= 0.0) or np.any(ratio > 1.5):
+            raise ValueError(
+                f"reading {headers[ic]!r} as percent {kind} gives C/Cnom from {ratio.min():.3g} to {ratio.max():.3g}; "
+                "check the column semantics"
+            )
     else:
         c = y * unit_scale(headers[ic], "F")
-        ratio = c / (c_nom_f if c_nom_f else c[0])
+        if c_nom_f is None and v[0] != 0.0:
+            raise ValueError(f"absolute curve starts at {v[0]:g} V, not 0 V; pass c_nom_f")
+        ratio = c / (c_nom_f if c_nom_f is not None else c[0])
     return v, ratio
 
 

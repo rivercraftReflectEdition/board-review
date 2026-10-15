@@ -19,6 +19,9 @@ PCT_OF_NOM = "Voltage (V);C/C0 [%]\n0;100\n2,5;80\n5;55\n"
 
 ABSOLUTE = "Voltage (V)\tCapacitance (uF)\n0\t1.00\n2\t0.80\n4\t0.55\n"
 
+# Percent of nominal, exported from 3.3 V up, so the first value is under 50 %.
+PCT_OF_NOM_LOW = "DC Bias [V],C/C0 [%]\n3.3,40\n5,30\n6.3,24\n"
+
 
 def test_dielectric_codes():
     assert dielectric_band("X7R") == (-55.0, 125.0, -0.15, 0.15)
@@ -40,6 +43,39 @@ def test_parse_percent_change_curve():
 def test_parse_percent_of_nominal_with_decimal_comma():
     v, k = bias_curve_from_csv(PCT_OF_NOM)
     assert v[1] == pytest.approx(2.5) and k[1] == pytest.approx(0.80)
+
+
+def test_percent_of_nominal_starting_below_50_pct():
+    v, k = bias_curve_from_csv(PCT_OF_NOM_LOW)
+    assert k[0] == pytest.approx(0.40)
+    r = mlcc_effective(100e-9, "X7R", 0.10, v_bias_v=3.3, curve_v=v, curve_ratio=k)
+    # 100 nF * 0.90 * 0.40 * 0.85
+    assert r.outputs["c_low"].value == pytest.approx(30.6e-9, rel=1e-9)
+
+
+@pytest.mark.parametrize("header", ["Capacitance [%]", "Cap (%)"])
+def test_percent_header_without_semantics_is_rejected(header):
+    with pytest.raises(ValueError, match="percent"):
+        bias_curve_from_csv(f"DC Bias [V],{header}\n0,100\n5,60\n")
+
+
+def test_explicit_percent_semantics_override_header():
+    text = "DC Bias [V],Capacitance [%]\n0,0\n5,-40\n"
+    assert bias_curve_from_csv(text, percent="change")[1][-1] == pytest.approx(0.60)
+    with pytest.raises(ValueError):
+        bias_curve_from_csv(text, percent="of_nominal")
+
+
+@pytest.mark.parametrize("header", ["dC/C0 [%]", "Capacitance Change Rate [%]", "ΔC/C [%]"])
+def test_percent_change_headers(header):
+    assert bias_curve_from_csv(f"DC Bias [V],{header}\n0,0\n5,-40\n")[1][-1] == pytest.approx(0.60)
+
+
+def test_absolute_curve_not_starting_at_zero_needs_nominal():
+    text = "Voltage (V),Capacitance (uF)\n2,0.80\n4,0.55\n"
+    with pytest.raises(ValueError, match="c_nom_f"):
+        bias_curve_from_csv(text)
+    assert bias_curve_from_csv(text, c_nom_f=1e-6)[1][0] == pytest.approx(0.80)
 
 
 def test_unit_scale_prefixes():
