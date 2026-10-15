@@ -64,6 +64,15 @@ def test_kicad_xml_fields_types_dnp_and_unconnected():
     assert m.components["R2"].value_si == pytest.approx(22.1e3)
 
 
+def test_ti_fixture_supervisor_reset_is_push_pull_like_the_real_part():
+    # TPS3839: TI SBVS193D rev D (July 2015), p. 5, Pin Functions: RESET has a push-pull output drive.
+    m = kicad.read_kicad_xml(FIX / "ti_buck_board.kicad.xml")
+    u3 = {p.number: (p.name, p.type) for p in m.pins_of("U3")}
+    assert u3 == {"1": ("GND", "power_in"), "2": ("~{RESET}", "output"), "3": ("VDD", "power_in")}
+    text = (FIX / "ti_buck_board.kicad.xml").read_text(encoding="utf-8")
+    assert "open_collector" not in text.split('part="TPS3839"')[1].split("</libpart>")[0]
+
+
 def test_protel_netlist_classic_layout():
     m = protel.read_protel(FIX / "sch_missing_sheet.net")
     assert not m.pin_list_complete

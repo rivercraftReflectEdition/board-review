@@ -122,9 +122,11 @@
         <pin num="5" name="EN" type="input"/><pin num="6" name="BOOT" type="passive"/>
       </pins>
     </libpart>
+    <!-- TPS3839 SOT23-3 (DBZ): TI SBVS193D rev D (July 2015), p. 5, Pin Functions: pin 1 GND, pin 2 RESET
+         active-low with a push-pull output drive, pin 3 VDD. -->
     <libpart lib="Power_Supervisor" part="TPS3839">
       <pins>
-        <pin num="1" name="GND" type="power_in"/><pin num="2" name="~{RESET}" type="open_collector"/>
+        <pin num="1" name="GND" type="power_in"/><pin num="2" name="~{RESET}" type="output"/>
         <pin num="3" name="VDD" type="power_in"/>
       </pins>
     </libpart>
@@ -231,7 +233,7 @@
     </net>
     <net code="11" name="NRST">
       <node ref="U2" pin="5" pinfunction="NRST" pintype="bidirectional"/>
-      <node ref="U3" pin="2" pinfunction="~{RESET}" pintype="open_collector"/>
+      <node ref="U3" pin="2" pinfunction="~{RESET}" pintype="output"/>
       <node ref="R5" pin="2" pintype="passive"/>
       <node ref="C10" pin="1" pintype="passive"/>
       <node ref="D1" pin="1" pinfunction="A" pintype="passive"/>
