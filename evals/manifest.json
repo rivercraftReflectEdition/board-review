@@ -5,6 +5,7 @@
     {"name": "example_heldout", "split": "held-out", "kind": "synthetic", "expected": "example_heldout/expected.json", "review": "example_heldout/review.json"},
     {"name": "seeded_example", "split": "dev", "kind": "seeded", "expected": "seeded_example/expected.json", "review": "seeded_example/review.json"},
     {"name": "seeded_example_clean", "split": "dev", "kind": "clean", "expected": null, "review": "seeded_example/clean_review.json"},
-    {"name": "sauron_rev1", "split": "dev", "kind": "real", "expected": "sauron_rev1/local/expected.json", "local": true}
+    {"name": "sauron_rev1", "split": "dev", "kind": "real", "expected": "sauron_rev1/local/expected.json", "local": true, "snapshot": "released package Rev 1.5, 2026-08-31"},
+    {"name": "sauron_rev1_2026-07-29", "split": "dev", "kind": "real", "expected": "sauron_rev1/local/expected_2026-07-29.json", "local": true, "snapshot": "schematic at the first full review, 2026-07-29"}
   ]
 }
