@@ -93,6 +93,7 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Check: any change to mode, L, COUT, fsw, compensation or VIN after the last review reopens
   BR-1 to BR-5.
 - Why: late ECOs are applied under schedule pressure and are the least reviewed.
+- Compute: `model` snapshot diff to list the changed parts; then BR-1 to BR-5.
 - Pass: the review log shows BR-1 to BR-5 re-run on the released values.
 - Example: [loop out of envelope](../../docs/lessons/loop-out-of-example-envelope.md)
 

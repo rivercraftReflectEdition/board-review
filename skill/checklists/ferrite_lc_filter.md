@@ -20,6 +20,8 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 
 ## FLT-2 Damping
 - Check: `Q = Z0 / R_series` with `Z0 = sqrt(L / C)`, R_series = bead DCR plus capacitor ESR.
+- Why: low-loss beads and ceramics give Q of 10 or more; even off-resonance, any excitation
+  near f0 rings.
 - Compute: `calc.lc_tank` with a damper: series R-C across the output, `Rd ~ Z0`, `Cd >= 3 C`.
 - Pass: Q <= 2 with the damper or a lossy element fitted.
 - Example: [bead tank at the switching frequency](../../docs/lessons/bead-tank-at-switching-frequency.md)
