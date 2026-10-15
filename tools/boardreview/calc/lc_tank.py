@@ -25,16 +25,19 @@ class Bead(Protocol):
 
     def l_low_h(self) -> float: ...
 
+    def uncharacterized(self, f_hz: np.ndarray) -> np.ndarray: ...
+
 
 @dataclass(frozen=True)
 class BeadRLC:
-    """Rdc in series with L || R_ac || C_par."""
+    """Rdc in series with L || R_ac || C_par; assumed=True when the values are not from vendor data."""
 
     l_h: float
     rdc_ohm: float
     r_ac_ohm: float = math.inf
     c_par_f: float = 0.0
     note: str = ""
+    assumed: bool = False
 
     def z(self, f_hz):
         s = 1j * TWO_PI * np.asarray(f_hz, dtype=float)
@@ -46,10 +49,13 @@ class BeadRLC:
     def l_low_h(self):
         return self.l_h
 
+    def uncharacterized(self, f_hz):
+        return np.full(np.shape(f_hz), self.assumed)
+
 
 @dataclass(frozen=True)
 class BeadCurve:
-    """Vendor R(f) and X(f) table, interpolated on log frequency."""
+    """Vendor R(f) and X(f) table on log frequency; R is the total series resistance, RDC included."""
 
     f_hz: tuple[float, ...]
     r_ohm: tuple[float, ...]
@@ -63,12 +69,17 @@ class BeadCurve:
         r = np.interp(lf, lf0, self.r_ohm)
         x = np.interp(lf, lf0, self.x_ohm)
         below = f < self.f_hz[0]
-        r = np.where(below, max(self.rdc_ohm, self.r_ohm[0]), r)
+        r_low = min(self.rdc_ohm, self.r_ohm[0]) if self.rdc_ohm > 0 else self.r_ohm[0]
+        r = np.where(below, r_low, r)
         x = np.where(below, self.x_ohm[0] * f / self.f_hz[0], x)
         return r + 1j * x
 
     def l_low_h(self):
         return self.x_ohm[0] / (TWO_PI * self.f_hz[0])
+
+    def uncharacterized(self, f_hz):
+        f = np.asarray(f_hz, dtype=float)
+        return (f < self.f_hz[0]) | (f > self.f_hz[-1])
 
 
 @dataclass(frozen=True)
@@ -91,23 +102,27 @@ def bead_from_spec(z_ohm: float, f_hz: float, rdc_ohm: float, part: str = "") ->
         f"{part} modeled from |Z| = {z_ohm:g} ohm at {f_hz:g} Hz as an R = X crossover: "
         f"L = {r / (TWO_PI * f_hz):.4g} H, R = {r:.4g} ohm. UNSURE until the vendor R/X curve is loaded"
     ).strip()
-    return BeadRLC(l_h=r / (TWO_PI * f_hz), rdc_ohm=rdc_ohm, r_ac_ohm=r, note=note)
+    return BeadRLC(l_h=r / (TWO_PI * f_hz), rdc_ohm=rdc_ohm, r_ac_ohm=r, note=note, assumed=True)
 
 
 def parse_bead_csv(text: str, rdc_ohm: float = 0.0, part: str = "") -> BeadCurve:
-    """Bead curve from a vendor export with frequency, R and X columns."""
+    """Bead curve from a vendor export with frequency, R and X columns; R as exported, RDC included."""
     headers, data = parse_csv_table(text)
     i_f = find_column(headers, "freq")
     i_r = next(i for i, h in enumerate(headers) if h.strip().upper().startswith("R"))
     i_x = next(i for i, h in enumerate(headers) if h.strip().upper().startswith("X"))
     f = data[:, i_f] * unit_scale(headers[i_f], "Hz")
     order = np.argsort(f)
+    r = data[order, i_r] * unit_scale(headers[i_r], "Ohm")
+    note = f"{part} from vendor R/X curve, {f[order][0]:g} to {f[order][-1]:g} Hz, R includes RDC".strip()
+    if rdc_ohm > 0 and r.min() < rdc_ohm:
+        note += f"; R falls to {r.min():.4g} ohm, below RDC {rdc_ohm:g} ohm: check whether the export subtracts RDC"
     return BeadCurve(
         tuple(f[order]),
-        tuple(data[order, i_r] * unit_scale(headers[i_r], "Ohm")),
+        tuple(r),
         tuple(data[order, i_x] * unit_scale(headers[i_x], "Ohm")),
         rdc_ohm,
-        f"{part} from vendor R/X curve".strip(),
+        note,
     )
 
 
@@ -178,6 +193,12 @@ def lc_filter(
                 j = int(np.argmax(np.where(m, h_db, -np.inf)))
                 hits.append((h_db[j], fk, f[j], k, fs))
     worst = max(hits) if hits else None
+    checked = [f0, float(f[i_pk])] + [fs * k * (1 + d) for fs in f_switch_hz for k in range(1, harmonics + 1) for d in (-window_frac, window_frac)]
+    modeled = [fx for fx in checked if bool(bead.uncharacterized(np.array([fx]))[0])]
+    gap = ""
+    if modeled:
+        span = f"{min(modeled):.4g} Hz" if len(modeled) == 1 else f"{min(modeled):.4g} to {max(modeled):.4g} Hz"
+        gap = f"bead not characterized at {span}; the vendor R/X curve over that range, or a measurement, settles it"
     outputs = {
         "f0": Quantity(f0, "Hz", "1/(2 pi sqrt(L C)) with low-frequency bead L"),
         "peak": Quantity(h_db[i_pk], "dB"),
@@ -202,8 +223,13 @@ def lc_filter(
     elif h_db[i_pk] > peak_limit_db:
         verdict = Verdict.MARGINAL
         reason = f"{h_db[i_pk]:.1f} dB peak at {f[i_pk] / 1e6:.3g} MHz, away from the given switching frequencies"
+    elif modeled:
+        verdict = Verdict.MARGINAL
+        reason = f"peak {h_db[i_pk]:.1f} dB under the {peak_limit_db:g} dB limit only for the assumed bead model"
     else:
         verdict, reason = Verdict.PASS, f"peak {h_db[i_pk]:.1f} dB under the {peak_limit_db:g} dB limit"
+    if gap:
+        reason += f"; {gap}"
     inputs = {
         "bead_l_low": Quantity(l_low, "H"),
         "c": Quantity(cap.c_f, "F", "use the DC-bias derated value"),
