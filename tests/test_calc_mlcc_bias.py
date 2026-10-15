@@ -42,6 +42,14 @@ def test_parse_percent_of_nominal_with_decimal_comma():
     assert v[1] == pytest.approx(2.5) and k[1] == pytest.approx(0.80)
 
 
+def test_unit_scale_prefixes():
+    assert unit_scale("Capacitance (µF)", "F") == 1e-6
+    assert unit_scale("Capacitance [nF]", "F") == 1e-9
+    assert unit_scale("Frequency(MHz)", "Hz") == 1e6
+    assert unit_scale("Capacitance [F]", "F") == 1.0
+    assert unit_scale("Cap pF", "F") == 1e-12
+
+
 def test_parse_absolute_curve_in_uf():
     headers, data = parse_csv_table(ABSOLUTE)
     assert unit_scale(headers[1], "F") == 1e-6

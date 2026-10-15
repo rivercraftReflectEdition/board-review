@@ -6,7 +6,9 @@ import re
 
 import numpy as np
 
+_MICRO = "µμ"
 _PREFIX = {"p": 1e-12, "n": 1e-9, "u": 1e-6, "µ": 1e-6, "μ": 1e-6, "m": 1e-3, "": 1.0, "k": 1e3, "M": 1e6, "G": 1e9}
+_PREFIX_CLASS = "[pnu" + _MICRO + "mkMG]?"
 
 
 def _delimiter(lines: list[str]) -> str:
@@ -57,8 +59,8 @@ def find_column(headers: list[str], *keys: str) -> int:
 
 def unit_scale(header: str, base: str) -> float:
     """SI scale for a header like 'Capacitance [uF]' or 'Frequency(MHz)' given the base unit."""
-    m = re.search(r"[\[(]\s*([pnuµμmkMG]?)" + re.escape(base) + r"\s*[\])]", header)
+    m = re.search(r"[\[(]\s*(" + _PREFIX_CLASS + ")" + re.escape(base) + r"\s*[\])]", header)
     if m:
         return _PREFIX[m.group(1)]
-    m = re.search(r"(?<![A-Za-z])([pnuµμmkMG]?)" + re.escape(base) + r"(?![A-Za-z])", header)
+    m = re.search(r"(?<![A-Za-z])(" + _PREFIX_CLASS + ")" + re.escape(base) + r"(?![A-Za-z])", header)
     return _PREFIX[m.group(1)] if m else 1.0
