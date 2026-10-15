@@ -1,3 +1,4 @@
+import math
 import os
 import shutil
 import subprocess
@@ -110,6 +111,67 @@ def test_timeout_kills_the_simulator_and_its_children(tmp_path):
     assert res.timed_out and not res.ok
     assert time.monotonic() - t0 < 20
     assert not _alive(int(pid_file.read_text()))
+
+
+LOG_MEAS_FORMS = """Files loaded:
+C:\\x\\meas.net
+
+f_45deg: ph(V(out))=-45 AT 1000.99644414
+g1k: V(out) =(-3.01030150952dB,-45.0000102435\u00b0) at 1000
+gpolar: V(out) =(0.707106654769,-45.0000102435\u00b0) at 1000
+gcart: V(out) =(0.499999821218,-0.5) at 1000
+t63: V(out)=0.632 AT 1.1001720146e-05
+v20: V(out) =0.850356856676 at 2e-05
+vavg: AVG(V(out) )=0.900169485747 FROM 1e-05 TO 5e-05
+trise=2.19722297281e-05 FROM 2.05860642486e-06 TO 2.4030836153e-05
+x: vmax*2=1.99989962578
+"""
+
+LOG_STEPPED_COMPLEX = """
+Measurement: g1k
+  step\tV(out) \tat
+     1\t(-3.01030150952dB,-45.0000102435\u00b0)\t1000
+     2\t(-6.98970252797dB,-63.4349570177\u00b0)\t1000
+
+Measurement: f_45deg
+  step\tph(V(out))=-45
+     1\t999.999658167
+     2\t500.049543835
+"""
+
+
+def test_parse_log_measurement_forms():
+    # Lines as LTspice 26.0.2 prints them: WHEN gives "=target AT value", FIND gives "=value at point"
+    m = parse_log(LOG_MEAS_FORMS).measurements
+    assert m["f_45deg"] == [pytest.approx(1000.99644414)]
+    assert m["t63"] == [pytest.approx(1.1001720146e-05)]
+    for name in ("g1k", "gpolar", "gcart"):
+        assert m[name][0] == pytest.approx(0.5 - 0.5j, abs=1e-6)
+    assert m["v20"] == [pytest.approx(0.850356856676)]
+    assert m["vavg"] == [pytest.approx(0.900169485747)]
+    assert m["trise"] == [pytest.approx(2.19722297281e-05)]
+    assert m["x"] == [pytest.approx(1.99989962578)]
+    assert parse_log(LOG_MEAS_FORMS).measured_text["g1k"] == ["(-3.01030150952dB,-45.0000102435\u00b0)"]
+
+
+def test_parse_log_stepped_complex_meas_table():
+    rep = parse_log(LOG_STEPPED_COMPLEX)
+    assert rep.measurements["g1k"] == [pytest.approx(0.5 - 0.5j, abs=1e-6), pytest.approx(0.2 - 0.4j, abs=1e-6)]
+    assert rep.measurements["f_45deg"] == [pytest.approx(999.999658167), pytest.approx(500.049543835)]
+
+
+@needs_ltspice
+def test_ltspice_meas_results(tmp_path):
+    # RC 1k and 159.155 nF: corner 1000 Hz, H(1 kHz) = 0.5 - 0.5j; step rise 10-90 percent = RC ln 9 = 349.7 us
+    text = ("* meas\nV1 in 0 PULSE(0 1 1u 10n 10n 5m 10m) AC 1\nR1 in out 1k\nC1 out 0 159.155n\n"
+            ".ac dec 50 10 100k\n.meas AC f_45deg WHEN ph(V(out))=-45\n.meas AC g1k FIND V(out) AT 1k\n.end\n")
+    m = run(text, tmp_path, "ac").log.measurements
+    assert m["f_45deg"][0] == pytest.approx(1000.0, rel=1e-3)
+    assert m["g1k"][0] == pytest.approx(0.5 - 0.5j, abs=1e-4)
+    tran = text.replace(".ac dec 50 10 100k", ".tran 0 2m 0 1u").split(".meas")[0]
+    tran += ".meas TRAN trise TRIG V(out) VAL=0.1 RISE=1 TARG V(out) VAL=0.9 RISE=1\n.end\n"
+    assert run(tran, tmp_path, "tran").log.measurements["trise"][0] == pytest.approx(159.155e-6 * math.log(9),
+                                                                                    rel=5e-3)
 
 
 def test_render_refuses_missing_values():

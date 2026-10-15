@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import cmath
+import math
 import os
 import re
 import shutil
@@ -27,7 +29,12 @@ LTSPICE_PATHS = (
 _HEADER_LINES = ("circuit:", "start time:", "ltspice ", "solver =", "maximum thread", "tnom =", "temp =",
                  "method =", "asciirawfile")
 _FILE_LINE = re.compile(r"\.\w+\(\d+\):")
-_MEAS = re.compile(r"^([A-Za-z_][\w.]*):\s*[^=]*=\s*\(?([-+\d.eE]+)")
+_NUMBER = r"[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?"
+_MEAS_HEAD = re.compile(r"^([A-Za-z_][\w.]*)(?::\s*|(?==))(.*)$")
+_MEAS_WHEN = re.compile(rf"=\s*\S+\s+AT\s+({_NUMBER})\s*$")
+_MEAS_VALUE = re.compile(rf"=\s*(\([^()]*\)|{_NUMBER})(?:\s+at\s+{_NUMBER})?"
+                         rf"(?:\s+FROM\s+{_NUMBER}\s+TO\s+{_NUMBER})?\s*$")
+_COMPLEX = re.compile(rf"^\(\s*({_NUMBER})\s*(dB)?\s*,\s*({_NUMBER})\s*(\S*?)\s*\)$")
 _ERROR_PATTERNS = (
     re.compile(r"\berror\b", re.I),
     re.compile(r"time step too small", re.I),
@@ -58,11 +65,37 @@ class LogReport:
     errors: tuple[str, ...]
     warnings: tuple[str, ...]
     notes: tuple[str, ...]
-    measurements: dict[str, list[float]]
+    measurements: dict[str, list[float | complex]]
     failed_measurements: tuple[str, ...]
     steps: tuple[dict[str, float], ...]
     files_loaded: tuple[str, ...]
     elapsed_s: float | None
+    measured_text: dict[str, list[str]] = field(default_factory=dict)
+
+
+def meas_value(text: str) -> float | complex:
+    """A .meas result as printed: a number, or a complex value in bode (dB, deg), polar (mag, deg) or cartesian form."""
+    m = _COMPLEX.match(text.strip())
+    if not m:
+        return _num(text)
+    a, db, b, unit = float(m.group(1)), m.group(2), float(m.group(3)), m.group(4)
+    if db:
+        return 10 ** (a / 20) * cmath.exp(1j * math.radians(b))
+    if unit:
+        return a * cmath.exp(1j * math.radians(b))
+    return complex(a, b)
+
+
+def parse_meas_line(line: str) -> tuple[str, str] | None:
+    """Name and printed result of one .meas line; a WHEN result is the value after 'AT', a FIND result the value."""
+    m = _MEAS_HEAD.match(line)
+    if not m:
+        return None
+    when = _MEAS_WHEN.search(m.group(2))
+    if when:
+        return m.group(1).lower(), when.group(1)
+    value = _MEAS_VALUE.search(m.group(2))
+    return (m.group(1).lower(), value.group(1)) if value else None
 
 
 def parse_log(text: str) -> LogReport:
@@ -70,7 +103,8 @@ def parse_log(text: str) -> LogReport:
     errors: list[str] = []
     warnings: list[str] = []
     notes: list[str] = []
-    measurements: dict[str, list[float]] = {}
+    measurements: dict[str, list[float | complex]] = {}
+    measured_text: dict[str, list[str]] = {}
     failed: list[str] = []
     steps: list[dict[str, float]] = []
     files: list[str] = []
@@ -113,9 +147,10 @@ def parse_log(text: str) -> LogReport:
                 i += 1
             errors.append("\n".join(context))
             continue
-        m = _MEAS.match(stripped)
-        if m and not low.startswith(("circuit", "start time", "warning", "error")):
-            measurements.setdefault(m.group(1).lower(), []).append(float(m.group(2)))
+        meas = None if low.startswith(("circuit", "start time", "warning", "error")) else parse_meas_line(stripped)
+        if meas:
+            measurements.setdefault(meas[0], []).append(meas_value(meas[1]))
+            measured_text.setdefault(meas[0], []).append(meas[1])
             continue
         if any(p.search(stripped) for p in _NOTE_PATTERNS):
             notes.append(stripped)
@@ -125,7 +160,9 @@ def parse_log(text: str) -> LogReport:
             continue
         if any(p.search(stripped) for p in _WARNING_PATTERNS):
             warnings.append(stripped)
-    measurements.update(_meas_tables(lines))
+    for name, printed in _meas_tables(lines).items():
+        measured_text[name] = printed
+        measurements[name] = [meas_value(p) for p in printed]
     return LogReport(
         text=text,
         errors=tuple(errors),
@@ -136,12 +173,13 @@ def parse_log(text: str) -> LogReport:
         steps=tuple(steps),
         files_loaded=tuple(files),
         elapsed_s=elapsed,
+        measured_text=measured_text,
     )
 
 
-def _meas_tables(lines: list[str]) -> dict[str, list[float]]:
-    """Stepped .meas results, which LTspice prints as 'Measurement: name' then a step table."""
-    out: dict[str, list[float]] = {}
+def _meas_tables(lines: list[str]) -> dict[str, list[str]]:
+    """Stepped .meas results as printed, which LTspice lists as 'Measurement: name' then a step table."""
+    out: dict[str, list[str]] = {}
     i = 0
     while i < len(lines):
         m = re.match(r"\s*measurement:\s*(\S+)", lines[i], re.I)
@@ -153,7 +191,7 @@ def _meas_tables(lines: list[str]) -> dict[str, list[float]]:
         while i < len(lines) and lines[i].strip():
             parts = lines[i].split()
             if parts and parts[0].isdigit() and len(parts) >= 2:
-                values.append(_num(parts[1]))
+                values.append(parts[1])
             i += 1
         if values:
             out[name] = values
