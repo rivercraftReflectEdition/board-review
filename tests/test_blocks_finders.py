@@ -1,0 +1,192 @@
+from pathlib import Path
+
+import pytest
+
+from boardreview import blocks
+from boardreview.blocks import clocks, filters, i2c, regulators, resets, straps
+from boardreview.model import eda_agent, ipc356, kicad
+from boardreview.model.board import BoardModel
+from boardreview.model.graph import Graph
+
+FIX = Path(__file__).parent / "fixtures" / "model"
+
+
+def _ti():
+    return kicad.read_kicad_xml(FIX / "ti_buck_board.kicad.xml")
+
+
+def _mps():
+    return eda_agent.read_eda_agent(FIX / "mps_buck.eda_agent.json")
+
+
+def _adi():
+    return ipc356.read_ipc356(FIX / "adi_buck_nonames.ipc")
+
+
+def _board(rows, kinds=None, values=None, desc=None, dnp=()):
+    """Model from (ref, pin, net, pin_name) rows with optional kind, value and description overrides."""
+    m = BoardModel(pin_list_complete=True)
+    for ref, pin, net, name in rows:
+        m.add_pin(ref, pin, net, name)
+    for ref, text in (desc or {}).items():
+        m.component(ref).description = text
+    for c in m.components.values():
+        c.classify()
+    for ref, kind in (kinds or {}).items():
+        m.components[ref].kind = kind
+    for ref, value in (values or {}).items():
+        m.components[ref].value = value
+    for ref in dnp:
+        m.components[ref].fitted = False
+    return m.finalize()
+
+
+def _two(ref, a, b):
+    return [(ref, "1", a, ""), (ref, "2", b, "")]
+
+
+def _only(found, kind):
+    got = [b for b in found if b.kind == kind]
+    assert len(got) == 1, [b.name for b in found]
+    return got[0]
+
+
+def test_ti_buck_with_pin_names():
+    b = _only(regulators.find_switching_regulators(Graph(_ti())), "switching_regulator")
+    assert b.confidence == "high"
+    assert b.roles["controller"] == ["U1"] and b.roles["inductor"] == ["L1"]
+    assert b.roles["switch_node"] == ["SW"] and b.roles["output"] == ["+3V3"]
+    assert b.roles["bootstrap"] == ["C2"] and b.roles["fb_pins"] == ["U1.4"]
+    assert (b.roles["feedback_top"], b.roles["feedback_bottom"], b.roles["feedforward_cap"]) == (["R1"], ["R2"], ["C5"])
+    assert b.roles["input"] == ["VIN"] and b.roles["enable_pins"] == ["U1.5"]
+    assert any(e.startswith("switch pin name SW") for e in b.evidence)
+    assert b.subgraph["nets"]["SW"]["block_pins"] == ["C2.2", "L1.1", "U1.2"]
+
+
+def test_mps_buck_bootstrap_through_series_resistor():
+    b = _only(regulators.find_switching_regulators(Graph(_mps())), "switching_regulator")
+    assert b.confidence == "high"
+    assert b.roles["switch_node"] == ["LX"] and b.roles["output"] == ["+5V"]
+    assert b.roles["bootstrap"] == ["C3", "R6"] and b.roles["bootstrap_pins"] == ["U1.5"]
+    assert b.roles["input"] == ["VIN_12V"]
+    assert b.roles["enable_pins"] == ["U1.6"]
+
+
+def test_adi_buck_found_by_structure_alone():
+    model = _adi()
+    assert not any(p.name for p in model.pins.values())
+    b = _only(regulators.find_switching_regulators(Graph(model)), "switching_regulator")
+    assert b.confidence == "high"
+    assert not any("pin name" in e for e in b.evidence)
+    assert b.roles["switch_node"] == ["NetL1_1"] and b.roles["fb_pins"] == ["U1.8"]
+    assert b.roles["input"] == ["VIN"]
+
+
+def test_regulator_with_lx_vfb_pgood_run_names_and_no_bootstrap():
+    rows = [("U7", "1", "VIN", "VIN"), ("U7", "2", "LX_1V2", "LX"), ("U7", "3", "GND", "GND"),
+            ("U7", "4", "FB_1V2", "VFB"), ("U7", "5", "EN_1V2", "RUN"), ("U7", "6", "PG_1V2", "PGOOD")]
+    rows += _two("L4", "LX_1V2", "1V2") + _two("C1", "1V2", "GND") + _two("C2", "1V2", "GND")
+    rows += _two("R1", "1V2", "FB_1V2") + _two("R2", "FB_1V2", "GND") + _two("C9", "VIN", "GND")
+    b = _only(regulators.find_switching_regulators(Graph(_board(rows))), "switching_regulator")
+    assert b.confidence == "high"
+    assert b.roles["enable_pins"] == ["U7.5"] and b.roles["power_good_pins"] == ["U7.6"]
+    assert "bootstrap" not in b.roles
+
+
+def test_inductor_with_caps_on_both_sides_is_a_filter_not_a_regulator():
+    rows = _two("L9", "5V", "5V_PLL") + _two("C1", "5V", "GND") + _two("C2", "5V_PLL", "GND")
+    rows += [("U3", "1", "5V", "VDD"), ("U3", "2", "5V_PLL", "VDDPLL"), ("U3", "3", "GND", "GND")]
+    g = Graph(_board(rows))
+    assert regulators.find_switching_regulators(g) == []
+    b = _only(filters.find_series_filters(g), "lc_filter")
+    assert b.roles["upstream"] == ["5V"] and b.roles["downstream"] == ["5V_PLL"]
+    assert b.roles["caps_downstream"] == ["C2"] and b.roles["loads_downstream"] == ["U3.2"]
+
+
+def test_ferrite_filter_from_fixture_with_values():
+    b = _only(filters.find_series_filters(Graph(_ti())), "ferrite_filter")
+    assert b.roles["element"] == ["FB1"] and b.roles["downstream"] == ["3V3A"]
+    assert b.roles["caps_downstream"] == ["C6", "C7"]
+    assert any("downstream C total 1.1e-06 F" in n for n in b.notes)
+
+
+def test_crystal_with_load_caps_and_series_resistor():
+    rows = _two("Y3", "X_A", "X_B") + _two("C1", "X_A", "GND") + _two("C2", "X_B", "GND")
+    rows += _two("R5", "X_B", "XOUT_MCU") + [("U1", "1", "X_A", "XIN"), ("U1", "2", "XOUT_MCU", "XOUT"),
+                                             ("U1", "3", "GND", "GND")]
+    b = _only(clocks.find_clocks(Graph(_board(rows))), "crystal")
+    assert b.confidence == "high"
+    assert b.roles["load_caps"] == ["C1", "C2"] and b.roles["series_resistors"] == ["R5"]
+    assert sorted(b.roles["driver_pins"]) == ["U1.1", "U1.2"]
+
+
+def test_oscillator_output_enable_and_open_pin():
+    rows = [("Y5", "1", "OSC_OE", "OE"), ("Y5", "2", "GND", "GND"), ("Y5", "3", "CLK25", "OUT"), ("Y5", "4", "3V3", "VDD"),
+            ("Y5", "5", None, "NC"), ("U2", "1", "CLK25", "CLKIN"), ("U2", "2", "3V3", "VDD")]
+    rows += _two("R7", "3V3", "OSC_OE") + _two("C1", "3V3", "GND") + _two("C2", "3V3", "GND") + _two("C3", "3V3", "GND")
+    b = _only(clocks.find_clocks(Graph(_board(rows, desc={"Y5": "25MHz oscillator"}))), "oscillator")
+    assert b.roles["output"] == ["CLK25"] and b.roles["loads"] == ["U2.1"]
+    assert b.roles["enable_nets"] == ["OSC_OE"] and b.roles["supply"] == ["3V3"]
+    assert any("Y5.5" in n for n in b.notes)
+
+
+def test_reset_tree_roles():
+    found = resets.find_reset_nets(Graph(_ti()))
+    nrst = next(b for b in found if b.roles["net"] == ["NRST"])
+    assert nrst.confidence == "high"
+    assert nrst.roles["pullups"] == ["R5"] and nrst.roles["delay_caps"] == ["C10"]
+    assert nrst.roles["supervisors"] == ["U3"] and nrst.roles["driver_pins"] == ["U3.2"]
+    assert nrst.roles["diodes"] == ["D1"] and nrst.roles["linked_nets"] == ["SYS_RST_N"]
+    sys_rst = next(b for b in found if b.roles["net"] == ["SYS_RST_N"])
+    assert sys_rst.roles["connectors"] == ["J2.3"]
+
+
+def test_reset_found_by_pin_name_when_net_is_auto_named():
+    rows = [("U1", "1", "NetU1_1", "NRST"), ("U2", "3", "NetU1_1", "~{RESET}")] + _two("R1", "NetU1_1", "3V3")
+    rows += _two("C1", "3V3", "GND") + _two("C2", "3V3", "GND") + _two("C3", "3V3", "GND")
+    b = _only(resets.find_reset_nets(Graph(_board(rows))), "reset")
+    assert b.roles["pullups"] == ["R1"] and "reset-named pins U1.1, U2.3" in b.evidence
+
+
+def test_i2c_pairs_by_name_and_flags_split_pullup_rails():
+    b = _only(i2c.find_i2c_buses(Graph(_ti())), "i2c_bus")
+    assert (b.roles["sda"], b.roles["scl"]) == (["I2C1_SDA"], ["I2C1_SCL"])
+    assert b.roles["devices"] == ["U2", "U4"]
+    assert any("different rails" in n for n in b.notes)
+
+
+def test_i2c_pairs_by_pin_names_and_shared_devices():
+    rows = [("U5", "1", "N_A", "SDA"), ("U5", "2", "N_B", "SCL"), ("U6", "7", "N_A", "SDA"), ("U6", "8", "N_B", "SCL")]
+    rows += _two("R1", "N_A", "3V3") + _two("C1", "3V3", "GND") + _two("C2", "3V3", "GND") + _two("C3", "3V3", "GND")
+    b = _only(i2c.find_i2c_buses(Graph(_board(rows))), "i2c_bus")
+    assert (b.roles["sda"], b.roles["scl"]) == (["N_A"], ["N_B"])
+    assert "pairing: same devices on both lines" in b.evidence
+    assert any("no pull-up found on N_B" in n for n in b.notes)
+
+
+def test_straps_level_from_fitted_parts_and_role_tags():
+    found = {b.roles["net"][0]: b for b in straps.find_straps(Graph(_ti()))}
+    assert found["/BOOT0"].confidence == "high"
+    assert "level: low through R6 (R7 not fitted)" in found["/BOOT0"].notes
+    assert any("enable" in n for n in found["/EN_BUCK"].notes)
+    assert "level: floating: no pull resistor is fitted" in found["/OPT_LINK"].notes
+    assert "I2C1_SDA" not in found
+
+
+def test_find_all_skips_nets_explained_elsewhere_and_reports_edges():
+    found = blocks.find_all(_ti())
+    kinds = sorted(b.kind for b in found)
+    assert kinds == ["crystal", "ferrite_filter", "i2c_bus", "reset", "reset", "strap", "strap", "strap",
+                     "switching_regulator"]
+    assert all(b.roles.get("net") != ["/FB_3V3"] for b in found)
+    edges = blocks.power_edges(found)
+    assert edges == ["U1 switching regulator (high): VIN -> +3V3 via L1", "FB1 ferrite filter (medium): +3V3 -> 3V3A"]
+    text = blocks.to_markdown(found)
+    assert "## switching regulator (1)" in text and "### U1 via L1 -> +3V3 (high)" in text
+
+
+@pytest.mark.parametrize("loader", [_ti, _mps, _adi])
+def test_block_dicts_are_json_ready(loader):
+    import json
+    for b in blocks.find_all(loader()):
+        json.dumps(b.to_dict())
