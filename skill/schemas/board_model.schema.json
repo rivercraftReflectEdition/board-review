@@ -15,7 +15,7 @@
         "type": "object",
         "required": ["kind", "path"],
         "properties": {
-          "kind": {"enum": ["ipc356", "kicad_xml", "protel_net", "eda_agent_json", "bom"]},
+          "kind": {"enum": ["ipc356", "kicad_xml", "kicad_pcb", "protel_net", "eda_agent_json", "bom"]},
           "path": {"type": "string"}
         },
         "additionalProperties": {"type": "string"}

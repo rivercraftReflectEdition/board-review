@@ -1,4 +1,5 @@
-from boardreview.model import compare, kicad_pcb, loaders
+from boardreview import schema
+from boardreview.model import compare, kicad_pcb, loaders, serialize
 from boardreview.model.board import BoardModel
 
 KICAD9_PCB = """(kicad_pcb
@@ -112,6 +113,11 @@ def test_board_against_its_schematic_is_clean():
     sch.finalize()
     pair = compare.compare([("schematic", sch), ("pcb", kicad_pcb.parse_kicad_pcb(KICAD9_PCB))]).pairs[0]
     assert pair.clean and not pair.truncated and not pair.mech_only_a and not pair.mech_only_b
+
+
+def test_board_model_from_a_board_file_matches_the_schema():
+    data = serialize.to_dict(kicad_pcb.parse_kicad_pcb(KICAD9_PCB))
+    assert schema.validate(data, schema.load("board_model")) == []
 
 
 def test_placement_table():
