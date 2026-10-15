@@ -27,6 +27,9 @@ live in `evals/<board>/local/` (ignored by git).
 
 ## Running
 
+The scorer imports the `boardreview` package for its schema check; install the repo once with
+`python -m pip install -e .` (README.md, Install).
+
 ```
 python evals/score.py --manifest evals/manifest.json --reviews <dir of <board>.json>
 python evals/score.py --expected evals/example/expected.json --review evals/example/review.json

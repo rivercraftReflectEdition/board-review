@@ -1,4 +1,4 @@
-"""CLI: python -m boardreview prep | report | verify-fixes (see --help of each)."""
+"""CLI: python -m boardreview prep | report | verify-fixes | validate (see --help of each)."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+from boardreview import schema
 from boardreview.lint import Finding, to_findings
 from boardreview.model import digest, loaders, serialize
 from boardreview.model.__main__ import main as model_main
@@ -148,6 +149,19 @@ def _prep(args: argparse.Namespace) -> int:
     return 1 if args.compare and not compared else 0
 
 
+def _validate(args: argparse.Namespace) -> int:
+    errors = schema.check_file(args.file, args.schema)
+    if args.schema == "finding" and not (errors and errors[0].startswith(("not valid JSON", "$:"))):
+        data = json.loads(Path(args.file).read_text(encoding="utf-8"))
+        count = len(data.get("findings", []) if isinstance(data, dict) else data)
+        print(f"{args.file}: {count} findings, {len(errors)} errors")
+    else:
+        print(f"{args.file}: {len(errors)} errors")
+    for e in errors:
+        print(e)
+    return 1 if errors else 0
+
+
 def main(argv: list[str] | None = None) -> int:
     """Entry point."""
     ap = argparse.ArgumentParser(prog="python -m boardreview")
@@ -161,11 +175,16 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--variant", default="", help="variant name for eda-agent JSON")
     p.add_argument("--out", required=True)
     report_build.add_parsers(sub)
+    v = sub.add_parser("validate", help="check findings.json, a datasheet digest or board_model.json against its schema")
+    v.add_argument("file")
+    v.add_argument("--schema", default="finding", choices=sorted(schema.NAMES))
     args = ap.parse_args(argv)
     if args.cmd == "report":
         return report_build.run_report(args)
     if args.cmd == "verify-fixes":
         return report_build.run_verify(args)
+    if args.cmd == "validate":
+        return _validate(args)
     if len(args.compare) > 2:
         ap.error("--compare takes one or two netlists")
     if args.labels and len(args.labels.split(",")) != 1 + len(args.compare):
