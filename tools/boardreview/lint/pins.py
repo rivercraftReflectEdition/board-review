@@ -40,7 +40,8 @@ def _marked_open_finding(ref: str, comp_mpn: str, marked: list[Pin]) -> Finding:
 def unconnected_ic_pins(model: BoardModel, g: Graph) -> list[Finding]:
     """IC pins with no net, grouped per part; power and ground pins with no net are errors even when marked NC."""
     if not model.pin_list_complete:
-        raise Skip("the netlist format omits pins with no net (Protel .NET); use IPC-D-356, KiCad XML or eda-agent")
+        raise Skip("the pin list is not complete (Protel .NET and partial eda-agent payloads leave out pins with no "
+                   "net; see the model warnings); use IPC-D-356, KiCad XML or an eda-agent payload with every pin")
     out = []
     for ref in sorted(model.components, key=natural_key):
         comp = model.components[ref]

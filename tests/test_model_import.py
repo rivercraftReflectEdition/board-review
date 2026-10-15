@@ -98,6 +98,22 @@ def test_eda_agent_get_nets_and_pcb_pads_shapes():
     assert p.pins[("U1", "1")].net == "+3V3" and p.pins[("U1", "1")].name == ""
 
 
+def test_eda_agent_completeness_needs_a_pin_inventory():
+    assert eda_agent.read_eda_agent(FIX / "mps_buck.eda_agent.json").pin_list_complete
+    pads = {"designator": "U1", "pads": [{"name": "1", "net": "+3V3"}, {"name": "2", "net": ""}]}
+    assert eda_agent.parse_eda_agent(pads).pin_list_complete
+    parts_only = {"components": [{"designator": "U1", "parameters": {"Manufacturer Part Number": "X"}}]}
+    no_nets = {"components": [{"designator": "U1", "pins": [{"pin": "1", "name": "VCC"}, {"pin": "2", "name": "GND"}]}]}
+    by_net = {"pins": [{"component": "U1", "pin": "1", "pin_name": "VCC", "net": "+3V3"}]}
+    for payload in (parts_only, no_nets, by_net):
+        m = eda_agent.parse_eda_agent(payload)
+        assert not m.pin_list_complete
+        assert any("pin list not complete" in w for w in m.warnings)
+        assert "unconnected_ic_pin" in lint.run_all(m).skipped
+    open_list = {"unconnected_pins": [{"designator": "U1", "pin_number": "2", "pin_name": "NC"}]}
+    assert eda_agent.parse_eda_agent([by_net, open_list]).pin_list_complete
+
+
 def test_bom_csv_title_rows_ranges_dnp_and_merge(tmp_path):
     csv_text = "\n".join([
         "Project,Demo", "",

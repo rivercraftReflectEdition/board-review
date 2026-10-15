@@ -3,11 +3,20 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from boardreview.model import fields, parts
-from boardreview.model.board import BoardModel
+from boardreview.model.board import BoardModel, natural_key
+
+
+@dataclass
+class _Seen:
+    """What the payload proves about the pin list: per-part inventories, pins with a net field, an open-pin list."""
+    inventory: set[str] = field(default_factory=set)
+    known: set[tuple[str, str]] = field(default_factory=set)
+    open_list: bool = False
 
 
 def _pin_fields(p: dict[str, Any]) -> tuple[str, str, str | None]:
@@ -28,7 +37,7 @@ def _pin_fields(p: dict[str, Any]) -> tuple[str, str, str | None]:
     return str(number), str(name or ""), (None if net is None else str(net))
 
 
-def _apply_component(model: BoardModel, c: dict[str, Any]) -> None:
+def _apply_component(model: BoardModel, c: dict[str, Any], seen: _Seen) -> None:
     ref = c.get("designator") or c.get("reference")
     if not ref:
         return
@@ -57,7 +66,25 @@ def _apply_component(model: BoardModel, c: dict[str, Any]) -> None:
     for p in pins or []:
         number, name, net = _pin_fields(p)
         model.add_pin(comp.refdes, number, net, name)
+        if "net" in p:
+            seen.known.add((comp.refdes, number))
+    if pins and all("net" in p for p in pins):
+        seen.inventory.add(comp.refdes)
     comp.classify()
+
+
+def _incomplete_reason(model: BoardModel, seen: _Seen) -> str:
+    """Empty when the payload lists every pin with its net, else why it may not."""
+    if not model.pins:
+        return "the payload has no pins"
+    unknown = sorted((f"{r}.{n}" for r, n in model.pins if (r, n) not in seen.known), key=natural_key)
+    if unknown:
+        return f"{len(unknown)} pins have no net field ({', '.join(unknown[:5])})"
+    partial = sorted({r for r, _ in model.pins if r not in seen.inventory}, key=natural_key)
+    if partial and not seen.open_list:
+        return (f"pins of {len(partial)} parts ({', '.join(partial[:5])}) come only from net listings, "
+                "which leave out open pins, and no unconnected-pin list was given")
+    return ""
 
 
 def _apply_variants(model: BoardModel, payload: dict[str, Any], variant: str) -> None:
@@ -74,10 +101,10 @@ def _apply_variants(model: BoardModel, payload: dict[str, Any], variant: str) ->
                 comp.attrs["alternate_part"] = str(var["alternate_part"])
 
 
-def _apply(model: BoardModel, payload: Any) -> None:
+def _apply(model: BoardModel, payload: Any, seen: _Seen) -> None:
     if isinstance(payload, list):
         for item in payload:
-            _apply(model, item)
+            _apply(model, item, seen)
         return
     if not isinstance(payload, dict):
         return
@@ -86,30 +113,43 @@ def _apply(model: BoardModel, payload: Any) -> None:
         return
     if isinstance(payload.get("components"), list):
         for c in payload["components"]:
-            _apply_component(model, c)
+            _apply_component(model, c, seen)
     elif "designator" in payload and ("pins" in payload or "pads" in payload or "parameters" in payload):
-        _apply_component(model, payload)
+        _apply_component(model, payload, seen)
     elif isinstance(payload.get("pins"), list):
         for p in payload["pins"]:
             number, name, net = _pin_fields(p)
-            model.add_pin(str(p.get("component", "")), number, net, name)
+            pin = model.add_pin(str(p.get("component", "")), number, net, name)
+            if "net" in p:
+                seen.known.add((pin.refdes, pin.number))
     elif isinstance(payload.get("unconnected_pins"), list):
+        seen.open_list = True
         for p in payload["unconnected_pins"]:
-            model.add_pin(str(p.get("designator", "")), str(p.get("pin_number", "")), None, str(p.get("pin_name", "")))
+            pin = model.add_pin(str(p.get("designator", "")), str(p.get("pin_number", "")), None,
+                                str(p.get("pin_name", "")))
+            seen.known.add((pin.refdes, pin.number))
     else:
         for value in payload.values():
             if isinstance(value, (dict, list)):
-                _apply(model, value)
+                _apply(model, value, seen)
 
 
 def parse_eda_agent(payload: Any, path: str = "", variant: str = "") -> BoardModel:
     """Build a model from one payload, a list of payloads, or a snapshot dict of payloads."""
     # Upstream payloads are hand-built in DelphiScript with inconsistent keys, so shapes are sniffed.
-    model = BoardModel(pin_list_complete=True)
-    _apply(model, payload)
+    model = BoardModel()
+    seen = _Seen()
+    _apply(model, payload, seen)
     if variant:
         _apply_variants_any(model, payload, variant)
-    model.sources.append({"kind": "eda_agent_json", "path": str(path), "variant": variant})
+    why = _incomplete_reason(model, seen)
+    model.pin_list_complete = not why
+    source = {"kind": "eda_agent_json", "path": str(path), "variant": variant}
+    if why:
+        source["pin_list"] = f"incomplete: {why}"
+        model.warnings.append(f"pin list not complete: {why}; open-pin checks are skipped and a pin missing "
+                              "from this source is not a difference in the compare")
+    model.sources.append(source)
     return model.finalize()
 
 
