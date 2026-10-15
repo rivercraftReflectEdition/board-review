@@ -116,7 +116,8 @@ def _allowed(el: Element, i: int, node: str, allow: set[str]) -> bool:
     return bool(keys & allow)
 
 
-def dangling_terminals(nl: Netlist, allow_open: tuple[str, ...] | list[str] | set[str] = ()) -> tuple[set[str], list[Issue]]:
+def dangling_terminals(nl: Netlist,
+                       allow_open: tuple[str, ...] | list[str] | set[str] = ()) -> tuple[set[str], list[Issue]]:
     """Every terminal must reach at least one other element. MP_ nodes are LTspice's internally tied duplicates."""
     allow = {a.replace("§", "").lower() for a in allow_open}
     issues: list[Issue] = []
@@ -212,7 +213,8 @@ def no_dc_path(nl: Netlist, skip: set[str] | None = None) -> list[Issue]:
                   "no DC path to ground (only capacitors or current sources): " + ", ".join(floating), "")]
 
 
-def model_files(nl: Netlist, lib_dirs: list[Path] | None = None) -> tuple[list[Issue], dict[str, tuple[str | None, ...]]]:
+def model_files(nl: Netlist,
+                lib_dirs: list[Path] | None = None) -> tuple[list[Issue], dict[str, tuple[str | None, ...]]]:
     """Every .lib/.include must exist, and every X line must match its subcircuit's pin count."""
     issues: list[Issue] = []
     base = nl.path.parent if nl.path else None
@@ -409,7 +411,8 @@ def check_run(run, sw_node: str | None = None, expected_fsw_hz: float | None = N
     if "transient" not in raw.plotname.lower():
         return report
     for k in range(raw.n_steps):
-        label = sw_node if raw.n_steps == 1 else f"{sw_node}, step {k + 1} {raw.step_params[k] if raw.step_params else ''}"
+        params = raw.step_params[k] if raw.step_params else ""
+        label = sw_node if raw.n_steps == 1 else f"{sw_node}, step {k + 1} {params}"
         t, v = raw.axis(step=k), raw.get(sw_node, step=k)
         try:
             report.results.append(switching_frequency_check(t, v, expected_fsw_hz, fsw_tol, t_start_s, label.strip()))

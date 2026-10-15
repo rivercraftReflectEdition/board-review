@@ -96,7 +96,8 @@ def test_tran_step_too_coarse_for_switching():
 
 
 def test_nodes_read_in_expressions_count_as_connections():
-    text = "* t\nVramp ramp 0 PULSE(0 1 0 1u 1n 0 2u)\nVin vin 0 5\nBsw sw 0 V=V(vin)*(V(ramp,0)>0.5)\nR1 sw 0 1k\n.op\n"
+    text = ("* t\nVramp ramp 0 PULSE(0 1 0 1u 1n 0 2u)\nVin vin 0 5\nBsw sw 0 V=V(vin)*(V(ramp,0)>0.5)\n"
+            "R1 sw 0 1k\n.op\n")
     assert sanity.check_netlist(text).ok
     rep = sanity.check_netlist(text.replace("V(vin)*", "5*"))
     assert [i.where for i in rep.errors] == ["Vin"]

@@ -676,7 +676,8 @@ class ImpedanceResult:
         if self.transfer is not None:
             g = np.abs(self.transfer)
             k = int(np.argmax(g))
-            lines.append(f"- transfer src to rail peaks at {20 * math.log10(g[k]):.1f} dB at {self.f_hz[k] / 1e3:.4g} kHz")
+            lines.append(f"- transfer src to rail peaks at {20 * math.log10(g[k]):.1f} dB "
+                         f"at {self.f_hz[k] / 1e3:.4g} kHz")
         return "\n".join(lines)
 
 
