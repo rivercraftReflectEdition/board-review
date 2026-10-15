@@ -80,7 +80,8 @@
       "properties": {
         "value": {"type": "number"},
         "unit": {"type": "string"},
-        "note": {"type": "string"}
+        "note": {"type": "string"},
+        "label": {"type": "string", "description": "Human name, for example 'Phase margin' or 'Top resistor'."}
       }
     },
     "calculation": {
@@ -89,6 +90,7 @@
       "required": ["calculator", "formula", "inputs", "outputs", "verdict"],
       "properties": {
         "calculator": {"type": "string", "description": "Calculator module and function relative to the boardreview package, for example 'calc.lc_tank.lc_filter'."},
+        "name": {"type": "string", "description": "Plain name of the calculation, the name the Result carries."},
         "formula": {"type": "string"},
         "inputs": {"type": "object", "additionalProperties": {"$ref": "#/$defs/quantity"}},
         "outputs": {"type": "object", "additionalProperties": {"$ref": "#/$defs/quantity"}},
@@ -96,7 +98,24 @@
         "reason": {"type": "string"},
         "assumptions": {"type": "array", "items": {"type": "string"}},
         "refs": {"type": "array", "items": {"type": "string"}},
-        "plots": {"type": "array", "items": {"$ref": "#/$defs/plot"}}
+        "plots": {"type": "array", "items": {"$ref": "#/$defs/plot"}},
+        "summary": {"type": "string", "description": "Two or three plain sentences with the real numbers; agrees with the verdict."},
+        "key": {
+          "type": "array",
+          "description": "Key numbers against their limits, from Result.key_line().",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["label", "value", "unit"],
+            "properties": {
+              "name": {"type": "string"},
+              "label": {"type": "string"},
+              "value": {"type": ["number", "null"]},
+              "unit": {"type": "string"},
+              "want": {"type": "string"}
+            }
+          }
+        }
       }
     },
     "plot": {
@@ -118,6 +137,7 @@
           }
         },
         "y_log": {"type": "boolean"},
+        "caption": {"type": "string", "description": "One line saying what to look at."},
         "series": {
           "type": "array",
           "minItems": 1,

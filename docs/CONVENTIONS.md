@@ -8,6 +8,11 @@ Everyone writing here (people and agents) follows these.
 - Every calculator returns `boardreview.calc.base.Result`: name, formula as text, inputs and outputs
   as `Quantity` with units, a `Verdict`, the reason, references and assumptions. A review prints
   `Result.to_markdown()` so the math is visible.
+- Every `Quantity` has a human `label` ("Phase margin", not `pm`). Every `Result` has a `summary`
+  of two or three plain sentences with the real numbers (what was checked, the number against what
+  we want, what it means on the bench) and a `key` of the one to three numbers that decide the
+  verdict, each with what we want. Numbers in text come from `calc.base.fmt`. The summary agrees
+  with the verdict; `calc.base.plain_problems` returns nothing for every branch.
 - SI units in floats. Argument names carry the unit: `_v _a _hz _s _f _h _ohm _w _deg _db _c`.
 - Short functions, no hidden state, no I/O inside calculators.
 - Comments: default to none. When one is needed, one short line that states a specific reason.
