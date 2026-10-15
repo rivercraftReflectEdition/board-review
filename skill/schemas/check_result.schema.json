@@ -1,0 +1,181 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "board-review/check_result.schema.json",
+  "title": "Board review check result",
+  "description": "One checklist item run on one block instance, pass or fail. checks.json is a list of these, or {\"board\": ..., \"checks\": [...]}.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "block", "instance", "item", "verdict"],
+  "properties": {
+    "id": {"type": "string", "pattern": "^[A-Za-z0-9_.-]+$", "description": "Unique in the file, for example 'U9-ch1.BR-1'."},
+    "block": {"$ref": "#/$defs/block"},
+    "instance": {"type": "string", "minLength": 2, "description": "Which instance of the block, for example 'U9 channel 1, 3V3 rail'."},
+    "item": {"type": "string", "pattern": "^[A-Z]+-[0-9]+[a-z]?$", "description": "Checklist item id, for example 'BR-1'."},
+    "title": {"type": "string", "description": "Short name of the item, for example 'Loop inside the example envelope'."},
+    "verdict": {"enum": ["pass", "marginal", "fail", "unknown", "not_applicable"]},
+    "reason": {"type": "string", "description": "Why this verdict. Required for not_applicable and unknown."},
+    "results": {"type": "array", "items": {"$ref": "#/$defs/calculation"}, "description": "Result.to_dict(calculator) for each calculator run."},
+    "assumptions": {"type": "array", "items": {"type": "string"}},
+    "sources": {"type": "array", "items": {"$ref": "#/$defs/source"}},
+    "digest_values": {"type": "array", "items": {"$ref": "#/$defs/digest_value"}, "description": "Datasheet digest values the check used, each with its page."},
+    "not_published": {"type": "array", "items": {"$ref": "#/$defs/not_published"}},
+    "simulation": {"$ref": "#/$defs/simulation"},
+    "finding": {"type": "string", "pattern": "^[A-Za-z0-9_.-]+$", "description": "Id of the finding this check produced, when it produced one."},
+    "bench_test": {"type": "string"},
+    "by": {"type": "string", "description": "Who ran the check."}
+  },
+  "allOf": [
+    {
+      "if": {"required": ["verdict"], "properties": {"verdict": {"enum": ["not_applicable", "unknown"]}}},
+      "then": {"required": ["reason"]}
+    }
+  ],
+  "$defs": {
+    "block": {
+      "enum": [
+        "buck_regulator", "ldo", "ferrite_lc_filter", "pdn_decoupling", "cascaded_rails",
+        "enable_uvlo_sequencing", "resets_supervisors_watchdogs", "clocks_crystals",
+        "io_levels_and_domains", "straps_and_boot_pins", "ethernet_phy", "camera_csi",
+        "xspi_memory", "protection_tvs", "thermal", "layout", "netlist_integrity", "other"
+      ]
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "ref"],
+      "properties": {
+        "kind": {"enum": ["netlist", "bom", "variant", "pcb", "datasheet", "errata", "app_note", "calculator", "simulation", "bench", "lint", "compare", "design_notes"]},
+        "ref": {"type": "string", "minLength": 2},
+        "detail": {"type": "string"}
+      }
+    },
+    "digest_value": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["parameter", "unit", "page"],
+      "properties": {
+        "mpn": {"type": "string"},
+        "document": {"type": "string", "description": "Document number and revision."},
+        "parameter": {"type": "string"},
+        "condition": {"type": "string"},
+        "min": {"type": "number"},
+        "typ": {"type": "number"},
+        "max": {"type": "number"},
+        "unit": {"type": "string"},
+        "page": {"type": ["integer", "string"]}
+      }
+    },
+    "quantity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "unit"],
+      "properties": {
+        "value": {"type": "number"},
+        "unit": {"type": "string"},
+        "note": {"type": "string"}
+      }
+    },
+    "calculation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["calculator", "formula", "inputs", "outputs", "verdict"],
+      "properties": {
+        "calculator": {"type": "string"},
+        "formula": {"type": "string"},
+        "inputs": {"type": "object", "additionalProperties": {"$ref": "#/$defs/quantity"}},
+        "outputs": {"type": "object", "additionalProperties": {"$ref": "#/$defs/quantity"}},
+        "verdict": {"enum": ["pass", "marginal", "fail", "info", "unknown"]},
+        "reason": {"type": "string"},
+        "assumptions": {"type": "array", "items": {"type": "string"}},
+        "refs": {"type": "array", "items": {"type": "string"}},
+        "plots": {"type": "array", "items": {"$ref": "#/$defs/plot"}}
+      }
+    },
+    "plot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "x", "series"],
+      "description": "Same shape as the plot def in finding.schema.json.",
+      "properties": {
+        "title": {"type": "string"},
+        "x": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["label", "unit", "values"],
+          "properties": {
+            "label": {"type": "string"},
+            "unit": {"type": "string"},
+            "log": {"type": "boolean"},
+            "values": {"type": "array", "items": {"type": ["number", "null"]}}
+          }
+        },
+        "y_log": {"type": "boolean"},
+        "series": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["label", "unit", "values"],
+            "properties": {
+              "label": {"type": "string"},
+              "unit": {"type": "string"},
+              "values": {"type": "array", "items": {"type": ["number", "null"]}}
+            }
+          }
+        },
+        "markers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["label"],
+            "properties": {
+              "label": {"type": "string"},
+              "x": {"type": ["number", "null"]},
+              "y": {"type": ["number", "null"]},
+              "unit": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+    "not_published": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["item", "consequence"],
+      "properties": {
+        "item": {"type": "string"},
+        "searched": {"type": "string"},
+        "consequence": {"enum": ["footprint", "bench_test", "vendor_question", "model"]},
+        "action": {"type": "string"}
+      }
+    },
+    "simulation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["setup_verdict", "measured_verdict"],
+      "description": "A simulation result counts only when setup_verdict is pass (workflow/40_checks.md).",
+      "properties": {
+        "setup": {"type": "string", "description": "sim.setups function and netlist, for example 'run_loop_gain on u9_ch1.net'."},
+        "setup_verdict": {"enum": ["pass", "marginal", "fail", "unknown"]},
+        "measured_verdict": {"enum": ["pass", "marginal", "fail", "info", "unknown"]},
+        "sanity": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["check", "verdict"],
+            "properties": {
+              "check": {"type": "string", "description": "Sanity check name, for example 'sim.sanity.injection_slew_check'."},
+              "verdict": {"enum": ["pass", "marginal", "fail", "info", "unknown"]},
+              "detail": {"type": "string"}
+            }
+          }
+        },
+        "results": {"type": "array", "items": {"$ref": "#/$defs/calculation"}},
+        "limits": {"type": "array", "items": {"type": "string"}, "description": "Model limits: ideal comparators, missing parasitics, typical silicon."}
+      }
+    }
+  }
+}

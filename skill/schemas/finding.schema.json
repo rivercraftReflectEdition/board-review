@@ -27,7 +27,11 @@
     "fix": {"type": "string", "minLength": 3},
     "bench_test": {"type": "string", "description": "Measurement that settles what paper cannot. Required when not_published is non-empty or the verdict is UNVERIFIABLE."},
     "confidence": {"enum": ["high", "medium", "low"]},
-    "verification": {"$ref": "#/$defs/verification"}
+    "verification": {"$ref": "#/$defs/verification"},
+    "symptom": {"type": "string", "minLength": 3, "description": "What you would see on the bench or in the field, one short line."},
+    "change_type": {"enum": ["bom_only", "layout", "part_change", "firmware", "none"], "description": "What the fix touches: BOM only, layout, a part change, firmware, or nothing."},
+    "area": {"type": "string", "minLength": 2, "maxLength": 40, "description": "Area of the board for the report row, for example 'Power' or 'Ethernet'."},
+    "status": {"$ref": "#/$defs/status"}
   },
   "allOf": [
     {
@@ -91,7 +95,71 @@
         "verdict": {"enum": ["pass", "marginal", "fail", "info", "unknown"]},
         "reason": {"type": "string"},
         "assumptions": {"type": "array", "items": {"type": "string"}},
-        "refs": {"type": "array", "items": {"type": "string"}}
+        "refs": {"type": "array", "items": {"type": "string"}},
+        "plots": {"type": "array", "items": {"$ref": "#/$defs/plot"}}
+      }
+    },
+    "plot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "x", "series"],
+      "description": "Result.plots[i].to_dict(): shared x, y series grouped into one panel per unit, marked points.",
+      "properties": {
+        "title": {"type": "string"},
+        "x": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["label", "unit", "values"],
+          "properties": {
+            "label": {"type": "string"},
+            "unit": {"type": "string"},
+            "log": {"type": "boolean"},
+            "values": {"type": "array", "items": {"type": ["number", "null"]}}
+          }
+        },
+        "y_log": {"type": "boolean"},
+        "series": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["label", "unit", "values"],
+            "properties": {
+              "label": {"type": "string"},
+              "unit": {"type": "string"},
+              "values": {"type": "array", "items": {"type": ["number", "null"]}}
+            }
+          }
+        },
+        "markers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["label"],
+            "description": "x and y: a point; x only: a vertical line; y only: a horizontal limit line. unit picks the panel.",
+            "properties": {
+              "label": {"type": "string"},
+              "x": {"type": ["number", "null"]},
+              "y": {"type": ["number", "null"]},
+              "unit": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+    "status": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Fix tracking. fixed is set by a person; verified_in_data only by a re-review that finds the fix in the netlist or BOM.",
+      "properties": {
+        "fixed": {"type": "boolean"},
+        "fixed_at": {"type": "string"},
+        "fixed_by": {"type": "string"},
+        "verified_in_data": {"type": "boolean", "description": "true: the re-review found the fix in the data; false: it looked and did not. Absent: not checked, or needs a reviewer."},
+        "verify_note": {"type": "string"},
+        "verified_at": {"type": "string"}
       }
     },
     "not_published": {
