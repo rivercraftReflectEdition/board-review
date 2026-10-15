@@ -150,17 +150,34 @@ class BoardModel:
         """Pins with no net."""
         return sorted((p for p in self.pins.values() if p.net is None), key=lambda p: natural_key(p.key))
 
+    def _stacked_open(self, net: Net) -> bool:
+        """True for a tool-named net on stacked pins of one part: one shared pin name, or KiCad's unconnected-( name."""
+        pins = [self.pin(k) for k in net.pins]
+        if not net.auto_named or len(pins) < 2 or len({p.refdes for p in pins}) != 1:
+            return False
+        names = {p.name for p in pins}
+        # KiCad gives the unconnected-( name only to nets with a no-connect flag or an NC-type pin.
+        return naming.leaf(net.name).startswith("unconnected-(") or (len(names) == 1 and names != {""})
+
     def finalize(self) -> "BoardModel":
-        """Classify components and fold tool-named single-pin nets into unconnected pins."""
+        """Classify parts; fold tool-named nets on one pin, or on stacked pins of one part, into open pins."""
         for comp in self.components.values():
             if not comp.kind or comp.kind == "other":
                 comp.classify()
-        folded = 0
+        single, stacked = 0, []
         for net in list(self.nets.values()):
             if net.auto_named and len(net.pins) == 1:
-                self.pin(net.pins[0]).net = None
-                folded += 1
-        if folded:
-            self.warnings.append(f"{folded} tool-named single-pin nets treated as unconnected pins")
+                single += 1
+            elif self._stacked_open(net):
+                stacked.append(net.name)
+            else:
+                continue
+            for key in net.pins:
+                self.pin(key).net = None
+        if single:
+            self.warnings.append(f"{single} tool-named single-pin nets treated as unconnected pins")
+        if stacked:
+            self.warnings.append(f"{len(stacked)} tool-named nets of stacked pins on one part treated as unconnected "
+                                 f"pins: {', '.join(stacked)}")
         self._nets = None
         return self

@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from boardreview import lint
 from boardreview.model import bom, eda_agent, ipc356, kicad, loaders, protel, serialize, xlsx
 
 FIX = Path(__file__).parent / "fixtures" / "model"
@@ -212,6 +213,32 @@ def test_board_model_json_matches_schema_and_round_trips(name, tmp_path):
     path = serialize.write_json(m, tmp_path / "board_model.json")
     back = loaders.load(path)
     assert serialize.to_dict(back) == data
+
+
+def _kicad_nets(nets):
+    """Minimal KiCad XML with one IC U1 and the given (name, [(pin, name, pintype)]) nets."""
+    body = "".join(f'<net code="{i}" name="{name}">' + "".join(
+        f'<node ref="{ref}" pin="{pin}" pinfunction="{fn}" pintype="{pt}"/>' for ref, pin, fn, pt in nodes) + "</net>"
+        for i, (name, nodes) in enumerate(nets, 1))
+    return kicad.parse_kicad_xml('<export version="E"><components><comp ref="U1"><value>X</value></comp>'
+                                 '<comp ref="R1"><value>10k</value></comp></components>'
+                                 f"<nets>{body}</nets></export>")
+
+
+def test_kicad_stacked_open_pins_are_unconnected_and_keep_their_flags():
+    m = _kicad_nets([
+        ("unconnected-(U1-VDD-Pad1)", [("U1", "1", "VDD", "power_in+no_connect"), ("U1", "2", "VDD", "power_in+no_connect")]),
+        ("Net-(U1-VDD-Pad3)", [("U1", "3", "VDD", "power_in"), ("U1", "4", "VDD", "power_in")]),
+        ("Net-(U1-OUT)", [("U1", "5", "OUT", "output"), ("U1", "6", "IN-", "input")]),
+        ("unconnected-(U1-NC-Pad7)", [("U1", "7", "NC", "no_connect"), ("R1", "1", "", "passive")]),
+        ("GND", [("U1", "8", "GND", "power_in"), ("R1", "2", "", "passive")]),
+    ])
+    assert [p.key for p in m.unconnected_pins()] == ["U1.1", "U1.2", "U1.3", "U1.4"]
+    assert m.pins[("U1", "1")].no_connect and not m.pins[("U1", "3")].no_connect
+    assert m.nets["Net-(U1-OUT)"].pins == ["U1.5", "U1.6"]
+    assert m.nets["unconnected-(U1-NC-Pad7)"].pins == ["R1.1", "U1.7"]
+    errors = [f.pins for f in lint.run_all(m, only=["unconnected_ic_pin"]).findings if f.severity == "error"]
+    assert errors == [["U1.1"], ["U1.2"], ["U1.3"], ["U1.4"]]
 
 
 def _ti_with_bom(tmp_path, text):
