@@ -14,12 +14,31 @@ def _is_power_pin(p: Pin) -> bool:
     return p.type in ("power_in", "power_out") or naming.pin_is(p.name, "ground") or naming.pin_is_supply(p.name)
 
 
-def _deliberately_open(p: Pin) -> bool:
-    return p.no_connect or p.type == "no_connect" or naming.pin_is(p.name, "nc")
+def _nc_by_name(p: Pin) -> bool:
+    return p.type == "no_connect" or naming.pin_is(p.name, "nc")
+
+
+def _marked_open(p: Pin) -> bool:
+    return p.no_connect or _nc_by_name(p)
+
+
+def _label(p: Pin) -> str:
+    return p.number + (f" ({p.name})" if p.name else "")
+
+
+def _marked_open_finding(ref: str, comp_mpn: str, marked: list[Pin]) -> Finding:
+    by_name = [p.key for p in marked if _nc_by_name(p)]
+    return Finding("unconnected_ic_pin", "warning" if by_name else "info",
+                   f"{ref} has {len(marked)} open pins marked NC, reserved or no-connect: "
+                   f"{', '.join(_label(p) for p in marked)}; confirm in the datasheet that each may float, "
+                   "since some parts require NC or reserved pins tied to ground",
+                   components=[ref], pins=[p.key for p in marked],
+                   evidence={"needs": "datasheet confirmation", "nc_by_name": by_name,
+                             "no_connect_flag": [p.key for p in marked if p.no_connect], "mpn": comp_mpn})
 
 
 def unconnected_ic_pins(model: BoardModel, g: Graph) -> list[Finding]:
-    """IC pins with no net, grouped per part; power and ground pins with no net are errors."""
+    """IC pins with no net, grouped per part; power and ground pins with no net are errors even when marked NC."""
     if not model.pin_list_complete:
         raise Skip("the netlist format omits pins with no net (Protel .NET); use IPC-D-356, KiCad XML or eda-agent")
     out = []
@@ -27,16 +46,20 @@ def unconnected_ic_pins(model: BoardModel, g: Graph) -> list[Finding]:
         comp = model.components[ref]
         if comp.kind not in IC_KINDS or not comp.fitted:
             continue
-        open_pins = [p for p in g.comp_pins.get(ref, []) if p.net is None and not _deliberately_open(p)]
+        open_pins = [p for p in g.comp_pins.get(ref, []) if p.net is None]
         for p in [p for p in open_pins if _is_power_pin(p)]:
             out.append(Finding("unconnected_ic_pin", "error",
                                f"{p.key} ({p.name or p.type}) is a power or ground pin with no net",
-                               components=[ref], pins=[p.key], evidence={"pin_name": p.name, "pin_type": p.type}))
-        rest = [p for p in open_pins if not _is_power_pin(p)]
+                               components=[ref], pins=[p.key],
+                               evidence={"pin_name": p.name, "pin_type": p.type, "marked_open": _marked_open(p)}))
+        marked = [p for p in open_pins if not _is_power_pin(p) and _marked_open(p)]
+        if marked:
+            out.append(_marked_open_finding(ref, comp.mpn, marked))
+        rest = [p for p in open_pins if not _is_power_pin(p) and not _marked_open(p)]
         if not rest:
             continue
         named = any(p.name for p in rest)
-        labels = [p.number + (f" ({p.name})" if p.name else "") for p in rest]
+        labels = [_label(p) for p in rest]
         hint = ("check each against the datasheet: NC, reserved, unused I/O, or must-connect" if not named
                 else "unused I/O is often fine; check for inputs that must not float")
         out.append(Finding("unconnected_ic_pin", "warning" if named else "info",

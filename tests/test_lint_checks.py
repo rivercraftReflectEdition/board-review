@@ -71,7 +71,8 @@ def test_unconnected_ic_pins_severity_by_pin_name():
     assert ("error", ("U2.15",)) in by_sev
     assert ("warning", ("U2.10",)) in by_sev
     assert ("warning", ("U4.3",)) in by_sev
-    assert all("U2.14" not in f.pins for f in found)
+    assert ("info", ("U2.14",)) in by_sev
+    assert next(f for f in found if f.pins == ["U2.14"]).evidence["needs"] == "datasheet confirmation"
 
 
 def test_unconnected_ic_pins_without_names_are_info_and_skip_on_protel():
@@ -80,6 +81,27 @@ def test_unconnected_ic_pins_without_names_are_info_and_skip_on_protel():
     assert [(f.severity, f.pins) for f in found] == [("info", ["U1.2"])]
     report = lint.run_all(protel.read_protel(FIX / "sch_missing_sheet.net"))
     assert "unconnected_ic_pin" in report.skipped
+
+
+def test_open_nc_and_reserved_pins_need_datasheet_confirmation():
+    # TPS55340-Q1, SLVSBV5C rev C, p. 3, Table 5-1: NC pins 10 and 14 are reserved and must be connected to ground.
+    m = _board([("U1", "2", "VIN", "VIN"), ("U1", "6", "GND", "AGND"), ("U1", "10", None, "NC"),
+                ("U1", "14", None, "NC"), ("U1", "15", None, "RESERVED")], mpn={"U1": "TPS55340QRTERQ1"})
+    found = _run(pins.unconnected_ic_pins, m)
+    assert [(f.severity, f.pins) for f in found] == [("warning", ["U1.10", "U1.14", "U1.15"])]
+    assert found[0].evidence["needs"] == "datasheet confirmation"
+    assert "tied to ground" in found[0].summary
+
+
+def test_open_power_pin_is_an_error_even_with_a_no_connect_flag():
+    m = BoardModel(pin_list_complete=True)
+    m.add_pin("U1", "1", "VIN", "VIN", "power_in")
+    m.add_pin("U1", "2", None, "VSS", "power_in", no_connect=True)
+    m.add_pin("U1", "3", None, "NC", "power_in")
+    m.add_pin("U1", "4", None, "PA3", "bidirectional", no_connect=True)
+    m.finalize()
+    found = _run(pins.unconnected_ic_pins, m)
+    assert [(f.severity, f.pins) for f in found] == [("error", ["U1.2"]), ("error", ["U1.3"]), ("info", ["U1.4"])]
 
 
 def test_bare_in_pin_is_not_treated_as_a_supply():
