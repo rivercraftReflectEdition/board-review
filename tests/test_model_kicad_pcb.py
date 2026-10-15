@@ -125,3 +125,4 @@ def test_placement_table():
     assert "| R7 | bottom | 10 | 20 | 180 | Resistor_SMD:R_0402 | 4k7 | no |" in text
     assert "| U1 | top | 100.5 | 80.25 | 90 |" in text
     assert "2 top, 1 bottom" in text
+    assert "same X and the negated Y" in text

@@ -162,7 +162,8 @@ def placement_markdown(model: BoardModel, source: str) -> str:
     lines = ["# Placement", "",
              f"From `{source}`: {len(comps)} footprints, "
              + ", ".join(f"{sides[s]} {s}" for s in ("top", "bottom", "unknown") if sides[s]) + ".",
-             "KiCad board coordinates in mm (y grows downward), rotation in degrees.", "",
+             "KiCad board coordinates in mm (y grows downward), rotation in degrees. `kicad-cli pcb export pos`"
+             " reports the same X and the negated Y.", "",
              "| Ref | Side | X mm | Y mm | Rot deg | Footprint | Value | Fitted |", "|---|---|---|---|---|---|---|---|"]
     for c in comps:
         a = c.attrs
