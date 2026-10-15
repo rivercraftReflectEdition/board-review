@@ -17,6 +17,21 @@ def _pin_name(name: str | None) -> str:
     return "" if name in (None, "~") else name.strip()
 
 
+def numbered_functions(pairs: list[tuple[str, str]]) -> bool:
+    """True when every pin function ends in _<pin number>, as KiCad 10 writes them."""
+    return bool(pairs) and all(func.endswith(f"_{num}") for func, num in pairs)
+
+
+def pin_function(func: str | None, num: str, numbered: bool) -> str:
+    """Pin name from a KiCad pinfunction, without the pin number KiCad 10 appends."""
+    name = _pin_name(func)
+    return name[: -len(num) - 1] if numbered and name.endswith(f"_{num}") else name
+
+
+def _flag(comp: ET.Element, name: str) -> bool:
+    return any(p.get("name", "").lower() == name for p in comp.iter("property"))
+
+
 def _comp_fields(comp: ET.Element) -> dict[str, str]:
     out = {f.get("name", ""): (f.text or "").strip() for f in comp.iter("field")}
     for prop in comp.iter("property"):
@@ -58,19 +73,25 @@ def parse_kicad_xml(text: str, path: str = "") -> BoardModel:
         c.mpn = picked.get("mpn", "")
         c.manufacturer = picked.get("manufacturer", "")
         c.fitted = not _is_dnp(comp, flds, c.value)
+        for flag in ("exclude_from_bom", "exclude_from_board"):
+            if _flag(comp, flag):
+                c.attrs[flag] = "yes"
         sheet = comp.find("sheetpath")
         if sheet is not None and sheet.get("names"):
             c.attrs["sheet"] = sheet.get("names", "")
         if src is not None:
             comp_lib[ref] = (src.get("lib", ""), src.get("part", ""))
         c.classify()
+    numbered = numbered_functions([(n.get("pinfunction"), n.get("pin", "")) for n in root.iter("node")
+                                   if n.get("pinfunction") is not None])
     for net in root.iter("net"):
         name = net.get("name", "")
         if net.get("class"):
             model.set_net_info(name, **{"class": net.get("class")})
         for node in net.iter("node"):
             ptype = node.get("pintype", "")
-            model.add_pin(node.get("ref", ""), node.get("pin", ""), name, _pin_name(node.get("pinfunction")),
+            num = node.get("pin", "")
+            model.add_pin(node.get("ref", ""), num, name, pin_function(node.get("pinfunction"), num, numbered),
                           ptype.split("+")[0], no_connect="+no_connect" in ptype)
     for ref, key in comp_lib.items():
         for num, pname, ptype in libpins.get(key, []):

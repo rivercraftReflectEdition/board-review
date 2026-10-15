@@ -64,6 +64,57 @@ def test_kicad_xml_fields_types_dnp_and_unconnected():
     assert m.components["R2"].value_si == pytest.approx(22.1e3)
 
 
+KICAD10_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<export version="E">
+  <design><tool>Eeschema 10.0.6</tool></design>
+  <components>
+    <comp ref="U1"><value>BUCK1</value><libsource lib="Reg" part="BUCK" description=""/></comp>
+    <comp ref="J1"><value>Conn</value><libsource lib="Conn" part="C2" description=""/>
+      <property name="exclude_from_bom"/><property name="dnp"/></comp>
+    <comp ref="LOGO1"><value>~</value><libsource lib="Graphic" part="LOGO" description=""/>
+      <property name="exclude_from_board"/></comp>
+    <comp ref="R1"><value>10k</value><libsource lib="Device" part="R" description=""/></comp>
+  </components>
+  <libparts>
+    <libpart lib="Reg" part="BUCK"><pins><pin num="1" name="VIN" type="power_in"/>
+      <pin num="2" name="SW" type="power_out"/><pin num="5" name="EN_5" type="input"/></pins></libpart>
+    <libpart lib="Conn" part="C2"><pins><pin num="1" name="Pin_1" type="passive"/></pins></libpart>
+    <libpart lib="Device" part="R"><pins><pin num="1" name="~" type="passive"/>
+      <pin num="2" name="~" type="passive"/></pins></libpart>
+  </libparts>
+  <nets>
+    <net code="1" name="VIN"><node ref="U1" pin="1" pinfunction="VIN_1" pintype="power_in"/>
+      <node ref="J1" pin="1" pinfunction="Pin_1_1" pintype="passive"/></net>
+    <net code="2" name="/EN"><node ref="U1" pin="5" pinfunction="EN_5_5" pintype="input"/>
+      <node ref="R1" pin="1" pintype="passive"/></net>
+    <net code="3" name="Net-(U1-SW)"><node ref="U1" pin="2" pinfunction="SW_2" pintype="power_out"/>
+      <node ref="R1" pin="2" pintype="passive"/></net>
+  </nets>
+</export>
+"""
+
+
+def test_kicad10_xml_pin_names_drop_the_appended_pin_number():
+    m = kicad.parse_kicad_xml(KICAD10_XML)
+    names = {p.key: p.name for p in m.pins.values()}
+    assert names["U1.1"] == "VIN" and names["U1.2"] == "SW" and names["U1.5"] == "EN_5"
+    assert names["J1.1"] == "Pin_1"
+
+
+def test_kicad_xml_pin_names_without_the_suffix_are_kept():
+    older = KICAD10_XML.replace("VIN_1", "VIN").replace("Pin_1_1", "Pin_1").replace("EN_5_5", "EN_5")
+    older = older.replace('pinfunction="SW_2"', 'pinfunction="SW"').replace("10.0.6", "9.0.4")
+    names = {p.key: p.name for p in kicad.parse_kicad_xml(older).pins.values()}
+    assert names["U1.5"] == "EN_5" and names["J1.1"] == "Pin_1"
+
+
+def test_kicad_xml_records_bom_and_board_exclusions():
+    m = kicad.parse_kicad_xml(KICAD10_XML)
+    assert m.components["J1"].attrs["exclude_from_bom"] == "yes" and not m.components["J1"].fitted
+    assert m.components["LOGO1"].attrs["exclude_from_board"] == "yes"
+    assert "exclude_from_bom" not in m.components["U1"].attrs
+
+
 def test_ti_fixture_supervisor_reset_is_push_pull_like_the_real_part():
     # TPS3839: TI SBVS193D rev D (July 2015), p. 5, Pin Functions: RESET has a push-pull output drive.
     m = kicad.read_kicad_xml(FIX / "ti_buck_board.kicad.xml")
