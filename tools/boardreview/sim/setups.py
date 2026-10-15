@@ -774,40 +774,71 @@ class ImpedanceResult:
     run: RunResult
     f_hz: np.ndarray
     z: np.ndarray
-    summary: measure.ImpedanceSummary
+    summary: measure.ImpedanceSummary | None
     transfer: np.ndarray | None
+    report: SanityReport = field(default_factory=SanityReport)
+
+    @property
+    def results(self) -> list[Result]:
+        s = self.summary
+        if s is None:
+            return [Result(name="rail impedance peak", formula="Z = V(rail) / I_inj with I_inj = 1 A AC", inputs={},
+                           outputs={}, verdict=Verdict.UNKNOWN, reason="no data: the run failed")]
+        return [impedance_result(s.z_target_ohm, s.max_z_ohm, s.f_at_max_hz)]
+
+    @property
+    def measured(self) -> Verdict:
+        return worst(r.verdict for r in self.results)
+
+    @property
+    def verdict(self) -> Verdict:
+        return trusted_verdict(self.report.verdict, self.measured)
 
     def to_markdown(self) -> str:
         s = self.summary
-        lines = [f"**rail impedance**: max {s.max_z_ohm * 1e3:.1f} mOhm at {s.f_at_max_hz / 1e3:.4g} kHz"]
-        for p in s.peaks:
-            q = f", Q {p.q:.1f}" if p.q else ""
-            lines.append(f"- peak {p.z_ohm * 1e3:.1f} mOhm at {p.f_hz / 1e3:.4g} kHz{q}")
-        if s.z_target_ohm is not None:
-            bands = ", ".join(f"{a / 1e3:.4g} to {b / 1e3:.4g} kHz" for a, b in s.bands_over_target_hz) or "none"
-            lines.append(f"- above target {s.z_target_ohm * 1e3:.1f} mOhm: {bands}")
+        lines = [r.to_markdown() for r in self.results]
+        if s is not None:
+            for p in s.peaks:
+                q = f", Q {p.q:.1f}" if p.q else ""
+                lines.append(f"- peak {p.z_ohm * 1e3:.1f} mOhm at {p.f_hz / 1e3:.4g} kHz{q}")
+            if s.z_target_ohm is not None:
+                bands = ", ".join(f"{a / 1e3:.4g} to {b / 1e3:.4g} kHz" for a, b in s.bands_over_target_hz) or "none"
+                lines.append(f"- above target {s.z_target_ohm * 1e3:.1f} mOhm: {bands}")
         if self.transfer is not None:
             g = np.abs(self.transfer)
             k = int(np.argmax(g))
             lines.append(f"- transfer src to rail peaks at {20 * math.log10(g[k]):.1f} dB "
                          f"at {self.f_hz[k] / 1e3:.4g} kHz")
+        lines += ["", self.report.to_markdown(), "", verdict_line(self.report.verdict, self.measured)]
         return "\n".join(lines)
 
 
 def impedance_result(z_target_ohm: float | None, peak_z_ohm: float, f_hz: float) -> Result:
     """Peak rail impedance against a target impedance (V ripple allowed / transient current)."""
-    verdict = Verdict.INFO if z_target_ohm is None else (Verdict.PASS if peak_z_ohm <= z_target_ohm else Verdict.FAIL)
+    if z_target_ohm is None:
+        verdict, reason = Verdict.INFO, "no target given"
+    else:
+        verdict = Verdict.PASS if peak_z_ohm <= z_target_ohm else Verdict.FAIL
+        reason = f"{peak_z_ohm * 1e3:.1f} mOhm at {f_hz / 1e3:.4g} kHz against {z_target_ohm * 1e3:.1f} mOhm"
     return Result(
         name="rail impedance peak", formula="Z = V(rail) / I_inj with I_inj = 1 A AC",
         inputs={"Z_target": Quantity(z_target_ohm if z_target_ohm is not None else float("nan"), "ohm")},
         outputs={"Z_peak": Quantity(peak_z_ohm, "ohm"), "f_peak": Quantity(f_hz, "Hz")},
         verdict=verdict,
+        reason=reason,
     )
 
 
 def run_impedance(setup: ImpedanceSetup, workdir: str | Path, z_target_ohm: float | None = None,
-                  name: str = "impedance", **run_kwargs: object) -> ImpedanceResult:
+                  name: str = "impedance", force: bool = False, **run_kwargs: object) -> ImpedanceResult:
+    """Run the AC sweep, check the netlist and the run, and read Z only from a run that succeeded."""
+    report = check_netlist(setup.netlist())
+    if report.failed and not force:
+        raise ValueError("fix the setup before running (or pass force=True):\n" + report.to_markdown())
     r = run(setup.netlist(), workdir, name, **run_kwargs)
+    report.extend(check_run(r))
+    if not r.ok:
+        return ImpedanceResult(r, np.array([]), np.array([], dtype=complex), None, None, report)
     raw = r.raw()
     z_step = t_step = None
     if setup.transfer:
@@ -819,4 +850,4 @@ def run_impedance(setup: ImpedanceSetup, workdir: str | Path, z_target_ohm: floa
     f = raw.axis(z_step)
     z = measure.impedance(raw.get("V(rail)", z_step))
     transfer = raw.get("V(rail)", t_step) / raw.get("V(vs)", t_step) if setup.transfer else None
-    return ImpedanceResult(r, f, z, measure.impedance_summary(f, z, z_target_ohm), transfer)
+    return ImpedanceResult(r, f, z, measure.impedance_summary(f, z, z_target_ohm), transfer, report)

@@ -168,6 +168,32 @@ def test_loop_gain_verdict_keeps_setup_and_margins_apart():
     assert setups.LoopGainResult([], None, SanityReport()).verdict is Verdict.UNKNOWN
 
 
+def fake_ac_run(tmp_path: Path, log_text: str) -> RunResult:
+    """A finished AC run of ImpedanceSetup with Z = 10 mOhm + s 1 nH at the rail."""
+    f = np.logspace(3, 6, 31)
+    z = 0.01 + 2j * np.pi * f * 1e-9
+    raw_path = tmp_path / "imp.raw"
+    raw_path.write_bytes(b"synthetic")
+    variables = [Variable(0, "frequency", "frequency"), Variable(1, "V(rail)", "voltage"),
+                 Variable(2, "V(vs)", "voltage")]
+    raw = RawFile(header={"plotname": "AC Analysis", "flags": "complex forward log"}, variables=variables,
+                  data=np.vstack([f + 0j, z, np.zeros_like(z)]), step_bounds=[(0, len(f))])
+    return RunResult("ltspice", (), tmp_path / "imp.net", raw_path, None, 0, 0.0, False, parse_log(log_text), raw)
+
+
+def test_impedance_run_is_checked_and_reported_as_a_result(tmp_path, monkeypatch):
+    s = setups.ImpedanceSetup(caps_rail=[setups.Cap(10e-6, 5e-3, 0.5e-9)], f_start_hz=1e3, f_stop_hz=1e6)
+    monkeypatch.setattr(setups, "run", lambda *a, **k: fake_ac_run(tmp_path, ""))
+    res = setups.run_impedance(s, tmp_path, z_target_ohm=0.1)
+    assert res.report.ok and res.results[0].verdict is Verdict.PASS and res.verdict is Verdict.PASS
+    assert "**rail impedance peak**: pass" in res.to_markdown()
+    assert setups.run_impedance(s, tmp_path, z_target_ohm=0.005).verdict is Verdict.FAIL
+    monkeypatch.setattr(setups, "run", lambda *a, **k: fake_ac_run(tmp_path, "C:\\x\\imp.net(3): Unknown parameter"))
+    bad = setups.run_impedance(s, tmp_path, z_target_ohm=0.1)
+    assert bad.report.failed and bad.summary is None and len(bad.z) == 0
+    assert bad.verdict is Verdict.UNKNOWN and "DO NOT TRUST" in bad.to_markdown()
+
+
 def test_impedance_netlist_shape():
     s = setups.ImpedanceSetup(caps_rail=[setups.Cap(10e-6, 5e-3, 0.5e-9, count=2)],
                               bead=setups.Bead(0.05, 1e-6, 100.0, 1e-12), transfer=True)
@@ -310,6 +336,7 @@ def test_pdn_impedance_matches_analytic(tmp_path):
     s = setups.ImpedanceSetup(caps_rail=caps_rail, bead=bead, caps_src=caps_src, source_r_ohm=10e-3,
                               source_l_h=5e-9, f_start_hz=1e3, f_stop_hz=1e9, transfer=True)
     res = setups.run_impedance(s, tmp_path, z_target_ohm=0.1)
+    assert res.report.ok, res.to_markdown()
     w = 2 * np.pi * res.f_hz
 
     def zcap(c: setups.Cap) -> np.ndarray:
