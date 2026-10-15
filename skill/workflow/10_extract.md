@@ -7,10 +7,11 @@ buses), stop and report that first; every later stage would review the wrong cir
 ## What the tools read
 
 `python -m boardreview prep` reads netlists as IPC-D-356 (`.ipc`, `.d356`), KiCad XML netlist,
-Protel `.NET`, eda-agent JSON or an earlier `board_model.json`, and BOMs as CSV or XLSX. It does
-not read PADS or tabular netlists, KiCad s-expression netlists, `.kicad_pcb`, ODB++, IPC-2581,
-pick-and-place files or PDFs. Placement, stackup, rules, polygons and page references come from
-the CAD tool or the PDF by hand.
+KiCad board (`.kicad_pcb`), Protel `.NET`, eda-agent JSON or an earlier `board_model.json`, and
+BOMs as CSV or XLSX. It does not read PADS or tabular netlists, KiCad s-expression netlists,
+ODB++, IPC-2581, pick-and-place files or PDFs. Placement comes from a `.kicad_pcb` given to prep
+(`placement.md`); otherwise, and for stackup, rules, polygons and page references, from the CAD
+tool or the PDF by hand.
 
 ## Altium through the eda-agent MCP tools
 
@@ -45,26 +46,57 @@ Bridge habits:
 
 ## Released files without a live tool
 
-prep reads the IPC-D-356A fab netlist, an exported netlist in KiCad XML or Protel format, and the
-BOM with variant columns (CSV or XLSX). Read the schematic PDF for pages, and the pick-and-place
-file or ODB++ for placement, by hand.
+prep reads the IPC-D-356A fab netlist, an exported netlist in KiCad XML or Protel format, a KiCad
+board file, and the BOM with variant columns (CSV or XLSX). Read the schematic PDF for pages, and
+the pick-and-place file or ODB++ for placement when there is no `.kicad_pcb`, by hand.
 
 ## KiCad through kicad-cli
+
+Verified with KiCad 10.0.6 on Windows (October 2026) on the demo projects that ship with KiCad.
+KiCad 8 and 9 have the same schematic exports; `pcb export ipcd356`, `--schematic-parity` and
+`--variant` are UNSURE before KiCad 10 (check with `kicad-cli <command> --help`).
+
+Find kicad-cli: `kicad-cli` on PATH; Windows per-user install
+`%LOCALAPPDATA%\Programs\KiCad\<version>\bin\kicad-cli.exe`; Windows all-users install
+`%ProgramFiles%\KiCad\<version>\bin\kicad-cli.exe`; macOS
+`/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli`; Linux `/usr/bin/kicad-cli`. Record
+`kicad-cli version` in intake.md.
+
+Write outputs outside the project folder, and run the schematic commands on the root sheet
+(`<project>.kicad_sch`), which pulls in the whole hierarchy:
 
 ```
 kicad-cli sch export netlist --format kicadxml -o out/sch.xml board.kicad_sch
 kicad-cli sch export bom --fields "Reference,Value,Footprint,MPN,DNP" -o out/bom.csv board.kicad_sch
+kicad-cli pcb export ipcd356 -o out/fab.d356 board.kicad_pcb
 kicad-cli sch erc --format json -o out/erc.json board.kicad_sch
+kicad-cli pcb drc --schematic-parity --severity-all --format json -o out/drc.json board.kicad_pcb
 kicad-cli sch export pdf -o out/sch.pdf board.kicad_sch
-kicad-cli pcb export pos --format csv -o out/pos.csv board.kicad_pcb
-kicad-cli pcb drc --format json -o out/drc.json board.kicad_pcb
+kicad-cli pcb export pos --format csv --units mm -o out/pos.csv board.kicad_pcb
+python -m boardreview prep out/sch.xml --bom out/bom.csv --compare board.kicad_pcb out/fab.d356 --out <review folder>/facts
 ```
 
-prep reads `sch.xml` and `bom.csv`; ERC, DRC, PDF and positions are read by hand. The KiCad
-s-expression netlist format is rejected; export `kicadxml`. PCB and fab netlist: IPC-D-356 from
-the PCB editor's fabrication outputs, or `kicad-cli pcb export ipcd356` on KiCad 9 (UNSURE for
-older versions). prep does not read `.kicad_pcb`, ODB++ or IPC-2581. Variant (DNP) state comes
-from the DNP field and any variant tool in use.
+- Netlist: always `kicadxml`; prep rejects KiCad's s-expression netlist. KiCad 10 appends the pin
+  number to every pin function (`VOUT_5`); prep removes it.
+- BOM: one row per part (no `--group-by`) with value, footprint, MPN and DNP. Put the project's
+  own MPN field name in `--fields` when it is not `MPN` (for example `Manufacturer_Part_Number`).
+  The netlist carries every symbol field, and prep also reads MPN and manufacturer from it under
+  the common names. With `--fields`, KiCad uses the field names as headers; the default export
+  (`Refs`, `Qty`, grouped references) reads too. Parts marked "exclude from BOM" are absent from
+  it by design: prep lists them apart and flags any that are fitted.
+- Variants: for KiCad 10 design variants, add `--variant <name>` to the netlist and BOM exports
+  for the assembly variant.
+- PCB: compare against the `.kicad_pcb` file itself. It has full net names, the DNP attribute of
+  each footprint (prep compares fitted state) and position, side and rotation (`placement.md`),
+  and needs no kicad-cli. The IPC-D-356 export is the third source, the fab netlist.
+- KiCad's IPC-D-356 keeps only the last 14 characters of a net name, in upper case
+  (`/CSI/CAM_I2C_SCL` becomes `SI/CAM_I2C_SCL`), 6 of a designator and 4 of a pin number, writes
+  `?` for a space, and writes no alias records. prep reports these as format limits, not as
+  renames, and reads cut `unconnected-(...)` names as no net. A difference in a cut-off part
+  cannot be seen in that file; the `.kicad_pcb` compare covers it.
+- `--schematic-parity` is KiCad's own check of the board against the schematic. Read its
+  `schematic_parity` list next to `compare.md`; it does not replace the compare.
+- ERC, DRC, PDF and positions are read by hand.
 
 ## Build
 
@@ -77,11 +109,15 @@ python -m boardreview prep SCH_NETLIST --bom BOM --compare PCB_NETLIST FAB_NETLI
 
 1. Board model (`model.loaders.load_with_bom`): `board_model.json` with parts (designator, MPN,
    value, fitted, variant, kind), pins (number, name, net), nets and warnings; `bom_check.json`
-   with parts only in the BOM or only in the netlist. Position, side and pages are not in the
-   model yet.
+   with parts only in the BOM, only in the netlist, or excluded from the BOM by the schematic.
+   Pages are not in the model; position and side are in `placement.md` when a `.kicad_pcb` is
+   given.
 2. 3-way compare (NET-1, `model.compare`): the first netlist is the naming reference; default
    labels are schematic, pcb, fab (`--labels` to change). Writes `compare.md` and
-   `compare.json`.
+   `compare.json`. Connectivity differences come first; format limits (IPC-D-356 field cuts),
+   pins with no net present in one source only, and mechanical, pinless or board-excluded parts
+   are listed apart and are not connectivity differences. Fitted state is compared where both
+   sources state it.
 3. Lint (NET-2, NET-5, NET-7, `lint.run_all`): `lint.md`, `lint.json`, and `lint_findings.json`
    with each result as a candidate finding (`lint.to_findings`, verification PENDING). Floating
    inputs (NET-5), value outliers (NET-6) and symbol pins against digests (NET-8) have no lint
@@ -90,8 +126,9 @@ python -m boardreview prep SCH_NETLIST --bom BOM --compare PCB_NETLIST FAB_NETLI
    prior fix:
    `python -m boardreview.model compare <review folder>/facts/board_model.json <previous>/facts/board_model.json --labels current,previous --out <review folder>/snapshot_diff`
 5. Staging views, small and one per purpose: `nets_by_net.md`, `nets_by_component.md` (with pin
-   names), `power_tree.md`, `pinmaps/<REF>.md`. A BOM table with variant and placements are not
-   generated; make them by hand when a check needs them. Agents read slices, not dumps.
+   names), `power_tree.md`, `pinmaps/<REF>.md`, and `placement.md` from a `.kicad_pcb`. A BOM
+   table with variant is not generated; make it by hand when a check needs it. Agents read
+   slices, not dumps.
 6. Block candidates for stage 3 (`blocks.find_all`): `blocks.md` and `blocks.json`.
 7. `facts.md`: the input files with SHA-256, every file written with its counts, every check
    skipped and why, and what prep does not run. Read it first and copy the hashes into

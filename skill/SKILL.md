@@ -19,7 +19,8 @@ repo's `skill/` folder, linked into the agent's skills folder.
    access and a writable Python; in a sandbox, ask the user to run it.
 2. Check from any folder: `python -m boardreview --help` lists `prep` and `validate`. If it fails,
    resolve this folder's link to find the repo (its parent) and run step 1.
-3. KiCad boards need `kicad-cli` from KiCad 8 or newer (workflow/10_extract.md says where it is).
+3. KiCad boards need `kicad-cli` (verified with KiCad 10.0.6; workflow/10_extract.md says where
+   it is installed and which exports to run).
 
 Paths in this skill (`workflow/`, `checklists/`, `schemas/`, `lessons/`) are relative to the folder
 that holds this SKILL.md. Python names are relative to the `boardreview` package:

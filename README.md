@@ -76,9 +76,9 @@ ln -s /path/to/board-review/skill ~/.codex/skills/board-review
 ```
 
 Claude Code reads `~/.claude/skills/<name>/SKILL.md`; Codex CLI reads
-`~/.codex/skills/<name>/SKILL.md` (or `$CODEX_HOME/skills`). Restart the agent after linking. KiCad
-boards also need `kicad-cli` (KiCad 8 or newer; skill/workflow/10_extract.md). Altium boards need
-the eda-agent MCP server configured in the agent.
+`~/.codex/skills/<name>/SKILL.md` (or `$CODEX_HOME/skills`). Restart the agent after linking.
+KiCad boards also need `kicad-cli` (verified with KiCad 10.0.6; skill/workflow/10_extract.md).
+Altium boards need the eda-agent MCP server configured in the agent.
 
 ## Data policy
 
