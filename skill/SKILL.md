@@ -111,6 +111,11 @@ verification. Severity:
   netlist compare in one folder, indexed by `facts.md` (workflow/10_extract.md).
 - `python -m boardreview validate FILE`: schema check for findings.json (`--schema digest` or
   `--schema board_model` for the others).
+- `python -m boardreview report`: report.html, the artifact page, report.md, ticket drafts and,
+  with `--detail full`, analysis.html, from findings.json and the facts folder
+  (workflow/60_report.md).
+- `python -m boardreview verify-fixes`: marks findings set fixed as verified, or not, in the facts
+  of the fixed design (workflow/60_report.md).
 - `model`: board model from IPC-D-356, KiCad XML, `.kicad_pcb`, Protel .NET, eda-agent JSON and
   a BOM; `model.compare` for the 3-way compare and the snapshot diff.
 - `lint`: single-pin nets, unconnected IC pins, ground and supply pins on the wrong net,
