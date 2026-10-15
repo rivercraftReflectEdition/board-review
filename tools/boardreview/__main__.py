@@ -27,8 +27,14 @@ NOT_IN_PREP = [
 PAIR_COUNTS = [("only_a", "parts only in {a}"), ("only_b", "parts only in {b}"), ("pins_only_a", "pins only in {a}"),
                ("pins_only_b", "pins only in {b}"), ("renamed", "nets renamed"), ("merged", "nets merged"),
                ("split", "nets split"), ("moved", "pins on another net"), ("removed", "nets only in {a}"),
-               ("added", "nets only in {b}"), ("mech_only_a", "mechanical or test parts only in {a}"),
-               ("mech_only_b", "mechanical or test parts only in {b}")]
+               ("added", "nets only in {b}"),
+               ("truncated", "net names cut by the IPC-D-356 field (format limit, not renames)"),
+               ("cut_refs", "designators cut by the IPC-D-356 field (format limit)"),
+               ("cut_pins", "pin numbers cut by the IPC-D-356 field (format limit)"),
+               ("open_only_a", "pins with no net only in {a} (not a connectivity difference)"),
+               ("open_only_b", "pins with no net only in {b} (not a connectivity difference)"),
+               ("mech_only_a", "mechanical, test, pinless or board-excluded parts only in {a}"),
+               ("mech_only_b", "mechanical, test, pinless or board-excluded parts only in {b}")]
 
 
 def _quiet(argv: list[str]) -> None:

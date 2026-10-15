@@ -32,6 +32,104 @@ def test_dropped_sheet_shows_as_one_connected_group():
     assert "dropped out of the compile" in text
 
 
+def _ipc_line(net, ref, pin):
+    return f"327{net:<14}   {ref:<6}-{pin:<4}       A01X 000100Y 000200X0100Y0100R000 S0"
+
+
+def test_kicad_ipc356_cut_names_are_a_format_limit_not_renames():
+    sch = BoardModel(pin_list_complete=True)
+    rows = [("/Connectors/I2C.SCL", "U1.1 J1.1"), ("Net-(U1-P1.00/XL1)", "U1.2 Y1.1"),
+            ("/ampli_ht_horizontal/Vpil_0_3,3V", "U1.3 R1.1"), ("/ampli_ht_vertical/Vpil_0_3,3V", "U1.4 R2.1"),
+            ("GND", "U1.5 R1.2 R2.2 J1.2 Y1.2"), ("AGND", "U1.7 C1.1"), ("unconnected-(U1-NC-Pad6)", "U1.6")]
+    for net, keys in rows:
+        for key in keys.split():
+            sch.add_pin(*key.split("."), net)
+    sch.finalize()
+    ipc = [("ECTORS/I2C.SCL", "U1 1 J1 1"), (".00{SLASH}XL1)", "U1 2 Y1 1"), ("AL/VPIL_0_3,3V", "U1 3 R1 1"),
+           ("PIL_0_3,3V#1", "U1 4 R2 1"), ("GND", "U1 5 R1 2 R2 2 J1 2 Y1 2"), ("SGND", "U1 7 C1 1"),
+           ("(U1-NC-PAD6)", "U1 6")]
+    lines = []
+    for net, refs in ipc:
+        parts = refs.split()
+        lines += [_ipc_line(net, parts[i], parts[i + 1]) for i in range(0, len(parts), 2)]
+    pcb = ipc356.parse_ipc356("\n".join(lines) + "\n999\n")
+    assert pcb.pins[("U1", "6")].net is None
+    pair = compare.compare([("schematic", sch), ("pcb", pcb)]).pairs[0]
+    assert pair.renamed == [("AGND", "SGND")]
+    assert len(pair.truncated) == 4 and not pair.moved and not pair.added and not pair.removed
+    text = compare.compare([("schematic", sch), ("pcb", pcb)]).to_markdown()
+    assert "4 net names in pcb are schematic names cut to the 14-character IPC-D-356 field" in text
+    assert "ECTORS/I2C.SCL" not in text
+
+
+def _model(rows, complete=True):
+    m = BoardModel(pin_list_complete=complete)
+    for key, net in rows:
+        m.add_pin(*key.split("."), net)
+    return m.finalize()
+
+
+def test_designator_cut_to_six_characters_is_matched_when_unique():
+    sch = _model([("Module301.1", "A"), ("Module301.2", "B"), ("R1.1", "A"), ("R2.1", "B")])
+    pcb = _model([("Module.1", "A"), ("Module.2", "B"), ("R1.1", "A"), ("R2.1", "B")])
+    report = compare.compare([("schematic", sch), ("pcb", pcb)])
+    pair = report.pairs[0]
+    assert pair.clean and pair.cut_refs == [("Module", ["Module301"])]
+    assert "6-character IPC-D-356 designator field" in report.to_markdown()
+
+
+def test_designators_that_collide_when_cut_are_left_out_of_the_compare():
+    sch = _model([("Module301.1", "A"), ("Module302.1", "B"), ("R1.1", "A"), ("R1.2", "B"), ("R2.1", "A")])
+    pcb = _model([("Module.1", "A"), ("R1.1", "A"), ("R1.2", "B"), ("R2.1", "A")])
+    pair = compare.compare([("schematic", sch), ("pcb", pcb)]).pairs[0]
+    assert pair.cut_refs == [("Module", ["Module301", "Module302"])]
+    assert pair.clean and not pair.only_a and not pair.only_b
+
+
+def test_pin_numbers_cut_to_four_characters_are_a_format_limit():
+    sch = _model([("USB1.A1B12", "GND"), ("USB1.A5", "CC"), ("R1.1", "GND"), ("R1.2", "CC")])
+    pcb = _model([("USB1.A1B1", "GND"), ("USB1.A5", "CC"), ("R1.1", "GND"), ("R1.2", "CC")])
+    report = compare.compare([("schematic", sch), ("pcb", pcb)])
+    pair = report.pairs[0]
+    assert pair.clean and pair.cut_pins == [("USB1.A1B12", "USB1.A1B1")]
+    assert "4-character IPC-D-356 pin field" in report.to_markdown()
+
+
+def test_nets_only_on_board_excluded_parts_are_not_missing_nets():
+    sch = _model([("R1.1", "A"), ("R1.2", "B"), ("SW1.1", "EN"), ("R9.2", "EN"), ("R9.1", "A")])
+    for ref in ("SW1", "R9"):
+        sch.component(ref).attrs["exclude_from_board"] = "yes"
+    pcb = _model([("R1.1", "A"), ("R1.2", "B")])
+    pair = compare.compare([("schematic", sch), ("pcb", pcb)]).pairs[0]
+    assert pair.removed == [] and pair.mech_only_a == ["R9", "SW1"] and pair.clean
+
+
+def test_pinless_and_board_excluded_parts_are_listed_apart():
+    sch = _model([("R1.1", "A"), ("R1.2", "B"), ("SW1.1", "A"), ("SW1.2", "B")])
+    sch.component("LOGO1")
+    sch.component("SW1").attrs["exclude_from_board"] = "yes"
+    pcb = _model([("R1.1", "A"), ("R1.2", "B")])
+    pair = compare.compare([("schematic", sch), ("pcb", pcb)]).pairs[0]
+    assert pair.only_a == [] and pair.mech_only_a == ["LOGO1", "SW1"] and pair.clean
+
+
+def test_open_pads_present_on_one_side_only_are_not_differences():
+    sch = _model([("U1.1", "A"), ("U1.2", "B"), ("R1.1", "A"), ("R1.2", "B"), ("J1.1", "A"), ("J1.M1", None)])
+    pcb = _model([("U1.1", "A"), ("U1.2", "B"), ("U1.9", None), ("R1.1", "A"), ("R1.2", "B"), ("J1.1", "A")])
+    report = compare.compare([("schematic", sch), ("pcb", pcb)])
+    pair = report.pairs[0]
+    assert pair.clean and not pair.pins_only_a and not pair.pins_only_b
+    assert pair.open_only_a == ["J1.M1"] and pair.open_only_b == ["U1.9"]
+    assert "pins with no net exist in only one source" in report.to_markdown()
+
+
+def test_a_connected_pin_present_on_one_side_only_is_still_a_difference():
+    sch = _model([("U1.1", "A"), ("R1.1", "A"), ("U1.2", "B"), ("R1.2", "B")])
+    pcb = _model([("U1.1", "A"), ("R1.1", "A"), ("R1.2", "B"), ("U1.3", "B")])
+    pair = compare.compare([("schematic", sch), ("pcb", pcb)]).pairs[0]
+    assert pair.pins_only_a == ["U1.2"] and pair.pins_only_b == ["U1.3"] and not pair.clean
+
+
 def test_identical_models_are_clean():
     pair = compare.compare([("a", _ti()), ("b", _ti())]).pairs[0]
     assert pair.clean
@@ -106,7 +204,7 @@ def test_mechanical_parts_are_listed_apart():
     b.finalize()
     pair = compare.compare([("sch", _ti()), ("pcb", b)]).pairs[0]
     assert pair.only_b == [] and pair.mech_only_b == ["FID1", "MH1"]
-    assert "Mechanical or test parts only in pcb" in compare.compare([("sch", _ti()), ("pcb", b)]).to_markdown()
+    assert "Mechanical or test parts, parts with no pins, and parts excluded from the board, only in pcb" in compare.compare([("sch", _ti()), ("pcb", b)]).to_markdown()
 
 
 def test_three_way_with_a_netlist_that_omits_open_pins():

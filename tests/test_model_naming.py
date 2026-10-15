@@ -44,6 +44,35 @@ def test_auto_named(name, auto):
     assert naming.is_auto_named(name) is auto
 
 
+@pytest.mark.parametrize("name, auto", [
+    ("NET-(D1-A)", True), ("ET-(C201-PAD2)", True), ("(U102-LV-PAD6)", True), ("U102-OSC-PAD7)", True),
+    ("ED-(D8-PAD5)_1", True), ("N-PADMP)_1#1", True), ("LASH}XL1-PAD2)", True),
+    ("TOUCH_PAD1", False), ("VOUT(3V3)", False), ("PAD_EN", False),
+])
+def test_auto_named_in_kicad_ipc356_form(name, auto):
+    assert naming.is_auto_named(name) is auto
+
+
+@pytest.mark.parametrize("full, short", [
+    ("/12Vext", "/12VEXT"), ("/ampli_ht_horizontal/PIEZO_IN", "ONTAL/PIEZO_IN"),
+    ("/ampli_ht_vertical/Vpil_0_3,3V", "PIL_0_3,3V#1"), ("Net-(U1-P1.00/XL1)", ".00{SLASH}XL1)"),
+    ("Net-(U2-MODE/S-CONF)", "SH}S-CONF)#1"), ("Net-(U6-MODE/S-CONF)", "{SLASH}S-CONF)"),
+    ("/Supply/\\~{PWR_SET}", "LY/\\~{PWR_SET}"), ("/CSI/CAM_I2C_SCL", "SI/CAM_I2C_SCL"),
+    ("vcc", "VCC#1"), ("/ID Serial/SN_WP", "D?SERIAL/SN_WP"),
+])
+def test_ipc356_short_form_of_a_name(full, short):
+    assert naming.is_ipc356_form(full, short)
+
+
+@pytest.mark.parametrize("full, short", [
+    ("AGND", "GND"), ("GND", "AGND"), ("/CSI/CAM_I2C_SCL", "SI/CAM_I2C_SDA"), ("SDA_LONG_NAME_X", "DA_LONG_NAME_Y"),
+    ("SDA_LONG_NAME_X", "A_LONG_NAME_X"),
+    ("/ampli_ht_vertical/Vpil_0_3,3V", "3,3V#1"), ("3V3", "3V3"),
+])
+def test_ipc356_short_form_rejects_real_renames(full, short):
+    assert not naming.is_ipc356_form(full, short)
+
+
 def test_unconnected_names():
     for name in (None, "", "N/C", "?", "n/c"):
         assert naming.is_unconnected_name(name)
