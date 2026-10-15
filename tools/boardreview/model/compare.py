@@ -309,6 +309,7 @@ def compare(models: list[tuple[str, BoardModel]]) -> CompareReport:
         for s, mp in zip(rows, maps):
             net = s.net_or_absent(key)
             vals.append("(no net)" if net is None else net if net == ABSENT else mp.get(net, net))
+        vals = [next((w for w in vals if naming.is_ipc356_form(w, v)), v) for v in vals]
         if len(set(vals)) > 1:
             counts = Counter(vals)
             odd = ""

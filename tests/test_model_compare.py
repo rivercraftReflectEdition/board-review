@@ -69,6 +69,17 @@ def _model(rows, complete=True):
     return m.finalize()
 
 
+def test_three_way_table_reads_a_cut_name_as_the_full_name():
+    sch = _model([("U1.1", "VCC"), ("U1.43", None), ("C1.1", "VCC")])
+    pcb = _model([("U1.1", "VCC"), ("U1.43", "Net-(U1-TEST1#)"), ("C1.1", "VCC"), ("R5.1", "VCC"),
+                  ("R5.2", "Net-(U1-TEST1#)")])
+    fab = _model([("U1.1", "VCC"), ("U1.43", "ET-(U1-TEST1#)"), ("C1.1", "VCC"), ("R5.1", "VCC"),
+                  ("R5.2", "ET-(U1-TEST1#)")])
+    rows = {k: (v, odd) for k, v, odd in compare.compare([("schematic", sch), ("pcb", pcb), ("fab", fab)]).disagreements}
+    assert rows["R5.2"] == (["<absent>", "Net-(U1-TEST1#)", "Net-(U1-TEST1#)"], "schematic")
+    assert rows["U1.43"][1] == "schematic"
+
+
 def test_designator_cut_to_six_characters_is_matched_when_unique():
     sch = _model([("Module301.1", "A"), ("Module301.2", "B"), ("R1.1", "A"), ("R2.1", "B")])
     pcb = _model([("Module.1", "A"), ("Module.2", "B"), ("R1.1", "A"), ("R2.1", "B")])
