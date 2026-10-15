@@ -75,6 +75,15 @@ MODE_SYNONYMS = {
     "no_footprint": "missing_rework_option",
 }
 
+EQUIVALENT_BLOCKS = {
+    "missing_pullup": ({"io_levels_and_domains", "resets_supervisors_watchdogs", "enable_uvlo_sequencing",
+                        "camera_csi", "ethernet_phy"}, ("IO-7", "RST-4", "EN-8", "CSI-4", "ETH-3")),
+    "strap_conflict": ({"straps_and_boot_pins", "ethernet_phy"}, ("STR-1", "STR-2", "ETH-1")),
+    "reverse_current": ({"cascaded_rails", "buck_regulator"}, ("CR-1", "BR-5")),
+    "back_power": ({"io_levels_and_domains", "camera_csi"}, ("IO-3", "CSI-4")),
+    "net_short": ({"netlist_integrity", "xspi_memory"}, ("NET-2", "MEM-1")),
+}
+
 REFDES_RANGE = re.compile(r"^([A-Z]+)(\d+)\s*-\s*(?:\1)?(\d+)$")
 
 PASS_PHRASE = re.compile(
@@ -248,11 +257,16 @@ def keywords_needed(keywords: list[str]) -> int:
     return max(1, math.ceil(len(keywords) / 2))
 
 
+def accepted_blocks(exp: dict, blocks: set[str], modes: set[str]) -> set[str]:
+    """E's block and alt_blocks, plus the equivalence row for E's failure mode when one of them is in it."""
+    own = {canon_block(b, blocks) for b in [exp.get("block", ""), *exp.get("alt_blocks", [])]}
+    row = EQUIVALENT_BLOCKS.get(canon_mode(exp.get("failure_mode", ""), modes), (set(), ()))[0]
+    return own | row if own & row else own
+
+
 def evaluate(exp: dict, rev: dict, blocks: set[str], modes: set[str]) -> tuple[bool, float]:
     """Match rule: block, location and stated mechanism must agree, and the finding must not assert a pass."""
-    rb = canon_block(rev.get("block", ""), blocks)
-    ok_block = rb == canon_block(exp.get("block", ""), blocks) or rb in {
-        canon_block(b, blocks) for b in exp.get("alt_blocks", [])}
+    ok_block = canon_block(rev.get("block", ""), blocks) in accepted_blocks(exp, blocks, modes)
     e_parts, e_nets = norm_parts(exp.get("parts")), finding_nets(exp)
     overlap = len(e_parts & finding_parts(rev)) + len(e_nets & finding_nets(rev))
     ok_loc = overlap > 0 or not (e_parts or e_nets)

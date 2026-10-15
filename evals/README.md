@@ -44,7 +44,8 @@ positives, known-good hits and duplicates.
 A review finding R matches an expected finding E when all four hold:
 
 1. **Block.** R's block equals E's block or one of E's `alt_blocks`, after aliases (`buck`,
-   `phy`, `tvs` and so on map to checklist names).
+   `phy`, `tvs` and so on map to checklist names). R's block also passes when it shares a row
+   of the equivalence table below with E's block, in the row for E's `failure_mode`.
 2. **Location.** R's parts (plus the parts in its pins) or nets share at least one entry with
    E's. Designator ranges such as `R14-R22` expand. Net names compare without case, with `_` and
    spaces read as `-`, and with any hierarchy path dropped. An E with no parts and no nets
@@ -62,6 +63,22 @@ A review finding R matches an expected finding E when all four hold:
    fine, OK, correct, adequate, sufficient, safe or within limits, says it passes, or says there
    is no issue, unless the same text qualifies that with but, however, except, although, though,
    yet, until, unless or only. "U2 is stable" never matches a loop finding.
+
+Equivalent blocks. Some failure modes are owned by more than one checklist, so a correct finding
+can be filed under any of them. Each row lists the checklist items that check that failure
+mode (`EQUIVALENT_BLOCKS` in `score.py`):
+
+| Failure mode | Blocks | Checklist items |
+|---|---|---|
+| `missing_pullup` | io_levels_and_domains, resets_supervisors_watchdogs, enable_uvlo_sequencing, camera_csi, ethernet_phy | IO-7, RST-4, EN-8, CSI-4, ETH-3 |
+| `strap_conflict` | straps_and_boot_pins, ethernet_phy | STR-1, STR-2, ETH-1 |
+| `reverse_current` | cascaded_rails, buck_regulator | CR-1, BR-5 |
+| `back_power` | io_levels_and_domains, camera_csi | IO-3, CSI-4 |
+| `net_short` | netlist_integrity, xspi_memory | NET-2, MEM-1 |
+
+A missing I2C pull-up on a camera module's control bus filed under camera_csi therefore matches
+an expected item filed under io_levels_and_domains. Anything outside the table still needs
+`alt_blocks` in the expected file.
 
 Pairing is one to one. Candidate pairs are ranked by location overlap plus keyword hits plus 2
 for a failure-mode tag match, best first. The tag still ranks pairs; it no longer decides them.

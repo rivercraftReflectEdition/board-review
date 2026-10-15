@@ -119,6 +119,25 @@ def test_failing_calculation_reason_counts_as_mechanism():
     assert not score.evaluate(e1, f, BLOCKS, MODES)[0]
 
 
+def test_equivalent_block_from_the_table_matches():
+    e6 = _example_expected("E6")
+    r8 = next(f for f in score.load_json(EVALS / "example" / "review.json")["findings"] if f["id"] == "R8")
+    assert r8["block"] == "camera_csi"
+    assert score.evaluate(e6, r8, BLOCKS, MODES)[0]
+    assert score.evaluate(e6, dict(r8, block="resets_supervisors_watchdogs"), BLOCKS, MODES)[0]
+    assert not score.evaluate(e6, dict(r8, block="thermal"), BLOCKS, MODES)[0]
+    assert not score.evaluate(_example_expected("E1"), dict(r8, block="camera_csi", parts=["U2"],
+                                                           claim=OSC), BLOCKS, MODES)[0]
+
+
+def test_equivalence_table_uses_schema_vocab_and_cites_checklist_items():
+    for mode, (blocks, items) in score.EQUIVALENT_BLOCKS.items():
+        assert mode in MODES and blocks <= BLOCKS, mode
+        for item in items:
+            assert any(f"## {item} " in p.read_text(encoding="utf-8")
+                       for p in (ROOT / "skill" / "checklists").glob("*.md")), (mode, item)
+
+
 def test_expected_without_location_matches_on_block_and_mechanism():
     exp = {"block": "thermal", "failure_mode": "thermal_overstress", "keywords": ["junction|overheat"]}
     f = _finding(block="thermal", failure_mode="thermal_overstress", claim="Junction reaches 140 C at 85 C ambient.")
@@ -160,17 +179,18 @@ def test_refuted_findings_excluded_unless_asked():
 def test_example_board_scores():
     r = score.score_board(score.load_json(EVALS / "example" / "expected.json"),
                           score.review_list(score.load_json(EVALS / "example" / "review.json")), SCHEMA)
-    assert (r["tp"], r["fp"], r["duplicates"], r["refuted_excluded"]) == (3, 4, 0, 1)
-    assert {m["id"] for m in r["misses"]} == {"E2", "E5", "E6"}
+    assert (r["tp"], r["fp"], r["duplicates"], r["refuted_excluded"]) == (4, 3, 0, 1)
+    assert {m["id"] for m in r["misses"]} == {"E2", "E5"}
+    assert {"expected": "E6", "review": "R8"} in r["matches"]
     assert r["known_good_hits"] == [{"review": "R7", "known_good": "K1"}]
-    assert r["recall_by_severity"] == {"blocker": [3, 3], "major": [0, 3]}
+    assert r["recall_by_severity"] == {"blocker": [3, 3], "major": [1, 3]}
     assert r["schema_errors"] == []
 
 
 def test_manifest_totals_split_and_bug_classes(tmp_path):
     result = score.score_manifest(EVALS / "manifest.json", schema=SCHEMA)
     dev, held = result["overall"]["dev"], result["overall"]["held-out"]
-    assert (dev["tp"], dev["expected"], dev["fp"]) == (8, 13, 7)
+    assert (dev["tp"], dev["expected"], dev["fp"]) == (9, 13, 6)
     assert (held["tp"], held["expected"], held["fp"]) == (1, 2, 1)
     classes = result["detected_by_bug_class"]["dev"]
     assert classes["bead_cap_resonance_near_fsw"] == [0, 1]
@@ -214,7 +234,7 @@ def test_cli_single_board(capsys):
     rc = score.main(["--expected", str(EVALS / "example" / "expected.json"),
                      "--review", str(EVALS / "example" / "review.json"), "--json"])
     assert rc == 0
-    assert json.loads(capsys.readouterr().out)["tp"] == 3
+    assert json.loads(capsys.readouterr().out)["tp"] == 4
 
 
 def test_expected_items_need_keywords():
