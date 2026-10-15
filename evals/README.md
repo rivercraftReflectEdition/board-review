@@ -22,8 +22,8 @@ live in `evals/<board>/local/` (ignored by git).
 - **held-out**: boards chosen, and their expected lists written and sealed, before checklist
   work starts. Nobody editing checklists or lessons reads their sources, notes or expected lists.
   The scorer prints only counts for held-out boards, in the text report and in `--json`,
-  unless `--reveal-heldout` is given. Reveal
-  only to measure a frozen checklist version; after that the board moves to dev.
+  unless `--reveal-heldout` is given. Reveal only to measure a frozen checklist version; after
+  that the board moves to dev.
 
 ## Running
 
@@ -33,8 +33,9 @@ python evals/score.py --expected evals/example/expected.json --review evals/exam
 ```
 
 A review file is a list of findings, or `{"findings": [...]}`, each validating against
-`skill/schemas/finding.schema.json`. Schema errors are reported with the score. `--json` prints
-the full result; `--include-refuted` also scores findings the refutation pass marked WRONG.
+`skill/schemas/finding.schema.json`. Schema errors in the review and in the expected file are
+reported with the score. `--json` prints the full result, with held-out boards cut to counts;
+`--include-refuted` also scores findings the refutation pass marked WRONG.
 
 The report gives recall and precision per board, totals per split and overall (sums over
 boards), recall by severity, detection per seeded bug class, and lists of misses, false

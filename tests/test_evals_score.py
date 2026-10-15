@@ -154,6 +154,11 @@ def test_equivalence_table_uses_schema_vocab_and_cites_checklist_items():
                        for p in (ROOT / "skill" / "checklists").glob("*.md")), (mode, item)
 
 
+def test_malformed_calculations_are_ignored_not_fatal():
+    f = _finding(parts=["U2"], claim=OSC, calculations=["calc.loop says fail"])
+    assert score.evaluate(dict(LOOP, parts=["U2"]), f, BLOCKS, MODES)[0]
+
+
 def test_expected_without_location_matches_on_block_and_mechanism():
     exp = {"block": "thermal", "failure_mode": "thermal_overstress", "keywords": ["junction|overheat"]}
     f = _finding(block="thermal", failure_mode="thermal_overstress", claim="Junction reaches 140 C at 85 C ambient.")
@@ -181,7 +186,8 @@ def test_one_to_one_pairing_repeats_and_known_good():
     assert (r["tp"], r["fp"], r["recall"], r["precision"]) == (1, 3, 1.0, pytest.approx(1 / 4))
 
 
-DROPOUT = {"id": "E1", "title": "x", "block": "ldo", "parts": ["U3"], "failure_mode": "dropout", "keywords": ["dropout"]}
+DROPOUT = {"id": "E1", "title": "x", "block": "ldo", "parts": ["U3"], "failure_mode": "dropout",
+           "keywords": ["dropout"]}
 HEADROOM = "U3 is in dropout at the 3.0 V input minimum."
 
 

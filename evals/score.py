@@ -242,16 +242,19 @@ def norm_text(s: str) -> str:
     return " ".join(re.sub(r"[^a-z0-9]+", " ", s.lower()).split())
 
 
+def calculations(f: dict) -> list[dict]:
+    return [c for c in f.get("calculations", []) if isinstance(c, dict)]
+
+
 def finding_text(f: dict) -> str:
     """Text a mechanism can be read from: the finding's prose plus the reason of each failing calculation."""
-    reasons = [str(c.get("reason", "")) for c in f.get("calculations", [])
-               if c.get("verdict") in FAILING_VERDICTS]
+    reasons = [str(c.get("reason", "")) for c in calculations(f) if c.get("verdict") in FAILING_VERDICTS]
     return norm_text(" ".join([str(f.get(k, "")) for k in TEXT_FIELDS] + reasons))
 
 
 def asserts_pass(f: dict) -> bool:
     """True when the finding says the circuit is fine: an unqualified pass phrase, or only passing calculations."""
-    verdicts = [c.get("verdict") for c in f.get("calculations", []) if c.get("verdict") != "info"]
+    verdicts = [c.get("verdict") for c in calculations(f) if c.get("verdict") != "info"]
     if verdicts and all(v == "pass" for v in verdicts):
         return True
     text = norm_text(f"{f.get('title', '')} {f.get('claim', '')}")
@@ -287,7 +290,7 @@ def accepted_blocks(exp: dict, blocks: set[str], modes: set[str]) -> set[str]:
 
 
 def evaluate(exp: dict, rev: dict, blocks: set[str], modes: set[str]) -> tuple[bool, float]:
-    """Match rule: block, location and stated mechanism agree and no pass is asserted; returns (match, specificity)."""
+    """Block, location and stated mechanism agree and no pass is asserted; returns (match, specificity)."""
     ok_block = canon_block(rev.get("block", ""), blocks) in accepted_blocks(exp, blocks, modes)
     e_parts, e_nets = norm_parts(exp.get("parts")), finding_nets(exp)
     r_parts, r_nets = finding_parts(rev), finding_nets(rev)
