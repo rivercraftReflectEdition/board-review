@@ -113,6 +113,7 @@ def test_cli_round_trip_into_the_report(old_new, tmp_path):
     assert "verified_in_data" not in by["F-002"].get("status", {})
     items = json.loads(status_out.read_text(encoding="utf-8"))["items"]
     assert items["F-001"]["verified"] is True and items["F-001"]["verifyNote"].startswith("R11 is 10k")
+    assert items["b1"]["done"] is True and items["F-004"]["done"] is True
     rep = tmp_path / "rep"
     assert main(["report", "--findings", str(BOARD / "findings.json"), "--facts", str(new_dir),
                  "--status", str(status_out), "--out", str(rep)]) == 0

@@ -129,7 +129,8 @@ def run_report(args: argparse.Namespace) -> int:
 def run_verify(args: argparse.Namespace) -> int:
     raw = rv.read_json(args.findings)
     header, findings = rv.split_file(raw)
-    findings = rv.merge_status(copy.deepcopy(findings), rv.read_status(args.status))
+    status = rv.read_status(args.status)
+    findings = rv.merge_status(copy.deepcopy(findings), status)
     old = rv.load_facts(args.old_facts, with_placement=False)
     new = rv.load_facts(args.new_facts, with_placement=False)
     stamp = now()
@@ -143,7 +144,7 @@ def run_verify(args: argparse.Namespace) -> int:
     target = Path(args.out or args.findings)
     write(target, json.dumps(_with_findings(raw, findings), indent=1, ensure_ascii=False) + "\n")
     if args.status_out:
-        items = {f["id"]: rv.status_item(f) for f in findings if f.get("status")}
+        items = dict(status.items) | {f["id"]: rv.status_item(f) for f in findings if f.get("status")}
         write(Path(args.status_out), json.dumps({"board": header.get("board", ""), "revision": header.get("revision", ""),
                                                  "findings_hash": rv.findings_hash(findings), "exported_at": stamp,
                                                  "items": items}, indent=1) + "\n")
