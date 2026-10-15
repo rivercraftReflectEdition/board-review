@@ -160,6 +160,25 @@ def test_bom_netlist_mismatch(tmp_path):
     assert ("warning", ["R7"]) in summaries and ("info", ["MH1"]) in summaries and ("warning", ["C1"]) in summaries
 
 
+def test_parts_excluded_from_the_bom_by_the_schematic_are_not_missing(tmp_path):
+    path = tmp_path / "bom.csv"
+    path.write_text("Reference,Value\nR1,10k\n", encoding="utf-8")
+    m = BoardModel(pin_list_complete=True)
+    for ref in ("R1", "R2", "U7", "JP1"):
+        m.add_pin(ref, "1", "A")
+        m.add_pin(ref, "2", "B")
+    for ref in ("R2", "U7", "JP1"):
+        m.component(ref).attrs["exclude_from_bom"] = "yes"
+    m.component("R2").fitted = False
+    m.finalize()
+    check = bom.apply_bom(m, bom.read_bom(path), str(path))
+    assert check["netlist_only"] == [] and check["excluded_from_bom"] == ["JP1", "R2", "U7"]
+    found = {(f.severity, tuple(f.components)) for f in _run(parts.bom_netlist_mismatch, m)}
+    assert ("warning", ("U7",)) in found
+    assert ("info", ("JP1", "R2", "U7")) in found
+    assert not any(sev == "warning" and "R2" in comps for sev, comps in found)
+
+
 def test_bom_netlist_mismatch_reports_fitted_state_conflicts(tmp_path):
     path = tmp_path / "bom.csv"
     path.write_text("Designator,MPN,DNP\nR7,RC0402FR-0710KL,\nR6,RC0402FR-0710KL,x\n", encoding="utf-8")

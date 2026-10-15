@@ -145,9 +145,12 @@ def apply_bom(model: BoardModel, lines: list[BomLine], path: str = "") -> dict[s
             if value:
                 c.value, c.attrs["value_from"] = value, how
     with_pins = {p.refdes for p in model.pins.values()}
-    netlist_only = sorted((r for r in with_pins if r not in seen), key=natural_key)
-    for ref in netlist_only:
-        model.components[ref].attrs["in_bom"] = "no"
+    absent = sorted((r for r in with_pins if r not in seen), key=natural_key)
+    excluded = [r for r in absent if model.components[r].attrs.get("exclude_from_bom")]
+    netlist_only = [r for r in absent if r not in excluded]
+    for ref in absent:
+        model.components[ref].attrs["in_bom"] = "excluded" if ref in excluded else "no"
     model.sources.append({"kind": "bom", "path": str(path), "lines": str(len(lines))})
     model.invalidate()
-    return {"bom_only": sorted(bom_only, key=natural_key), "netlist_only": netlist_only}
+    return {"bom_only": sorted(bom_only, key=natural_key), "netlist_only": netlist_only,
+            "excluded_from_bom": excluded}

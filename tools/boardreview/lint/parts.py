@@ -7,6 +7,7 @@ from boardreview.model.board import BoardModel, natural_key
 from boardreview.model.graph import Graph
 
 NO_MPN_KINDS = {"mechanical", "testpoint"}
+BOARD_MADE = NO_MPN_KINDS | {"jumper"}
 
 
 def _has_part_data(model: BoardModel) -> bool:
@@ -42,6 +43,17 @@ def bom_netlist_mismatch(model: BoardModel, g: Graph) -> list[Finding]:
         if mech:
             out.append(Finding("bom_netlist_mismatch", "info",
                                f"mechanical or test parts only in the {where}: {', '.join(mech)}", components=mech))
+    excluded = sorted((r for r, c in model.components.items() if c.attrs.get("in_bom") == "excluded"), key=natural_key)
+    if excluded:
+        out.append(Finding("bom_netlist_mismatch", "info",
+                           f"{len(excluded)} parts are excluded from the BOM in the schematic and absent from it as "
+                           f"expected: {', '.join(excluded)}", components=excluded))
+    bought = [r for r in excluded if model.components[r].fitted and model.components[r].kind not in BOARD_MADE]
+    if bought:
+        out.append(Finding("bom_netlist_mismatch", "warning",
+                           f"{len(bought)} fitted parts are excluded from the BOM, so nobody buys or places them: "
+                           f"{', '.join(bought)}; confirm each is made by the board itself or mark it DNP",
+                           components=bought))
     for ref in sorted((r for r, c in model.components.items() if c.attrs.get("fitted_conflict")), key=natural_key):
         why = model.components[ref].attrs["fitted_conflict"]
         out.append(Finding("bom_netlist_mismatch", "warning",

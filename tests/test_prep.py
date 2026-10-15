@@ -74,6 +74,17 @@ def test_prep_records_a_compare_input_it_cannot_load(tmp_path):
     assert (out / "board_model.json").exists()
 
 
+def test_prep_counts_parts_the_schematic_excludes_from_the_bom(tmp_path):
+    from test_model_import import KICAD10_XML
+    sch = tmp_path / "sch.xml"
+    sch.write_text(KICAD10_XML, encoding="utf-8")
+    bom = tmp_path / "bom.csv"
+    bom.write_text("Refs,Value,Qty,DNP\nU1,BUCK1,1,\nR1,10k,1,\n", encoding="utf-8")
+    assert main(["prep", str(sch), "--bom", str(bom), "--out", str(tmp_path / "f")]) == 0
+    facts = (tmp_path / "f" / "facts.md").read_text(encoding="utf-8")
+    assert "0 only in the BOM, 0 only in the netlist, 1 excluded from the BOM by the schematic" in facts
+
+
 def test_prep_names_the_bom_when_the_bom_fails(tmp_path):
     bom = tmp_path / "bom.csv"
     bom.write_text("Item,Value\n1,10k\n", encoding="utf-8")

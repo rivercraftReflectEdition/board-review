@@ -84,8 +84,10 @@ def _written(out: Path, has_bom: bool, compared: bool) -> list[str]:
     ]
     if has_bom:
         check = _read(out / "bom_check.json")
+        excluded = check.get("excluded_from_bom", [])
         rows.insert(1, ("bom_check.json", "BOM against netlist", f"{len(check['bom_only'])} only in the BOM, "
-                        f"{len(check['netlist_only'])} only in the netlist"))
+                        f"{len(check['netlist_only'])} only in the netlist"
+                        + (f", {len(excluded)} excluded from the BOM by the schematic" if excluded else "")))
     if compared:
         cmp = _read(out / "compare.json")
         text = "; ".join(_pair_line(p) for p in cmp["pairs"])
