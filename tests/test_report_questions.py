@@ -69,6 +69,9 @@ def test_verdict_counts_confirmed_problems_and_open_questions_apart(mostly_open)
     assert data_of(text)["findings"] == ["F-001"]
     md = (mostly_open / "report.md").read_text(encoding="utf-8")
     assert "1 confirmed problem, 3 open questions" in md
+    ticket = (mostly_open / "tickets" / "F-003.md").read_text(encoding="utf-8")
+    assert "Open question, major if it holds." in ticket
+    assert (mostly_open / "tickets" / "F-001.md").read_text(encoding="utf-8").split("\n")[2].startswith("Major.")
 
 
 def test_open_questions_are_apart_from_problems_and_carry_no_severity_chip(mostly_open):

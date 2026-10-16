@@ -217,8 +217,9 @@ def report_md(ctx) -> str:
 
 def ticket(f: dict, ctx) -> str:
     """A short ticket draft: what breaks, where, the fix and how to verify it."""
-    meta = [rv.SEV_NAME.get(f.get("severity"), ""), f.get("area") or rv.AREA_OF_BLOCK.get(f.get("block", ""), ""),
-            rv.CHANGE_LABEL.get(f.get("change_type", ""), "")]
+    sev = rv.SEV_NAME.get(f.get("severity"), "")
+    meta = [f"Open question, {sev.lower()} if it holds" if rv.is_question(f) else sev,
+            f.get("area") or rv.AREA_OF_BLOCK.get(f.get("block", ""), ""), rv.CHANGE_LABEL.get(f.get("change_type", ""), "")]
     where = []
     if f.get("parts"):
         where.append(f"Parts: {', '.join(f['parts'])}.")
