@@ -40,11 +40,17 @@ def plural(n: int, word: str) -> str:
     return word if n == 1 else word + "s"
 
 
+def _open(findings: list[dict]) -> list[dict]:
+    return [f for f in findings if f.get("status", {}).get("verified_in_data") is not True]
+
+
 def verdict_line(findings: list[dict], header: dict) -> tuple[str, str]:
-    """Headline and its severity class, from the open findings (not yet confirmed in the data)."""
-    open_ = [f for f in findings if f.get("status", {}).get("verified_in_data") is not True]
-    count = {s: sum(1 for f in open_ if f.get("severity") == s) for s in rv.SEVERITIES}
-    cls = next((f"v-{s}" for s in ("blocker", "major", "minor") if count[s]), "v-pass")
+    """Headline and its severity class, from the open problems; open questions never raise or lower it."""
+    open_ = _open(findings)
+    problems = [f for f in open_ if not rv.is_question(f)]
+    count = {s: sum(1 for f in problems if f.get("severity") == s) for s in rv.SEVERITIES}
+    questions = len(open_) - len(problems)
+    cls = next((f"v-{s}" for s in ("blocker", "major", "minor") if count[s]), "v-minor" if questions else "v-pass")
     if header.get("verdict"):
         return str(header["verdict"]), cls
     if count["blocker"]:
@@ -52,9 +58,25 @@ def verdict_line(findings: list[dict], header: dict) -> tuple[str, str]:
     if count["major"]:
         return (f"Builds, with {words(count['major'])} major {plural(count['major'], 'finding')} to fix or "
                 "accept.", cls)
-    if open_:
-        return f"Ready to build. {words(len(open_), True)} minor {plural(len(open_), 'item')} open.", cls
+    if questions:
+        return "Not signed off. Open questions need a bench test or a document first.", cls
+    if problems:
+        return f"Ready to build. {words(len(problems), True)} minor {plural(len(problems), 'item')} open.", cls
     return "Ready to build. No open findings.", cls
+
+
+def counts_line(findings: list[dict]) -> str:
+    """'1 confirmed problem, 11 open questions.': problems and open questions counted apart."""
+    open_ = _open(findings)
+    problems = [f for f in open_ if not rv.is_question(f)]
+    confirmed = sum(1 for f in problems if f.get("verification", {}).get("status") == "CONFIRMED")
+    pending = len(problems) - confirmed
+    questions = len(open_) - len(problems)
+    bits = [f"{confirmed} confirmed {plural(confirmed, 'problem')}"]
+    if pending:
+        bits.append(f"{pending} not challenged yet")
+    bits.append(f"{questions} open {plural(questions, 'question')}" if questions else "no open questions")
+    return ", ".join(bits) + "."
 
 
 def step_refs(numbers: list[int]) -> str:
@@ -163,22 +185,69 @@ def _history(f: dict, ctx) -> str:
     return f'<details><summary>History</summary><p class="small">{e(" ".join(bits))}</p></details>' if bits else ""
 
 
-def finding_row(f: dict, ctx) -> str:
+def _chips(f: dict, ctx) -> str:
     fid = f["id"]
-    sev = f.get("severity", "note")
-    area = f.get("area") or rv.AREA_OF_BLOCK.get(f.get("block", ""), "Other")
-    change = rv.CHANGE_LABEL.get(f.get("change_type", ""), "")
-    tag = ctx.changes.tag(fid) if ctx.changes else ""
-    tag_html = f'<span class="chip {"blocker" if tag == "Reopened" else "outline"}">{e(tag)}</span>' if tag else ""
     chips = "".join(f'<button class="part" type="button" aria-expanded="false" data-f="{e(fid)}" data-p="{i}">'
                     f'{e(p["label"])}</button>' for i, p in enumerate(ctx.pointers[fid]))
     pins = f.get("pins", [])
     pin_html = f'<span class="fid">{plural(len(pins), "pin")} {e(", ".join(pins))}</span>' if 0 < len(pins) <= 3 else ""
+    return chips + pin_html
+
+
+def question_lines(f: dict, ctx) -> list[tuple[str, str]]:
+    """(label, text) for an open question: what is missing, what settles it, the bench step or document."""
+    nps = f.get("not_published", [])
+    missing = "; ".join(n["item"] + (f" (looked in {n['searched']})" if n.get("searched") else "") for n in nps)
+    settle = f.get("bench_test") or "; ".join(n["action"] for n in nps if n.get("action")) or "Not stated."
+    lines = [("Missing", missing or "Not listed: the finding names no missing value."), ("Settles it", settle)]
+    steps = step_refs(ctx.bench_numbers.get(f["id"], []))
+    docs = [n.get("action") or n["item"] for n in nps if n.get("consequence") in ("vendor_question", "model")]
+    if steps:
+        lines.append(("", steps))
+    for d in docs:
+        lines.append(("Document", d))
+    if not steps and not docs:
+        lines.append(("", "Not in the bench plan yet."))
+    lines.append(("If it holds", rv.SEV_NAME.get(f.get("severity", ""), f.get("severity", "")).lower()))
+    return lines
+
+
+def question_row(f: dict, ctx) -> str:
+    """An UNVERIFIABLE finding: no severity chip and no fix checkbox; what is missing and what settles it."""
+    fid = f["id"]
+    area = f.get("area") or rv.AREA_OF_BLOCK.get(f.get("block", ""), "Other")
+    lines = "".join(f'<p class="qline">' + (f"<b>{e(k)}:</b> " if k else "") + f"{e(plain.sentence(v))}</p>"
+                    for k, v in question_lines(f, ctx))
+    facts = (f'<dl class="facts"><dt>Why it may fail</dt><dd>{e(f.get("claim", ""))}</dd>'
+             f'<dt>Fix if it holds</dt><dd>{e(f.get("fix", ""))}</dd></dl>')
+    return (f'<article class="item sev-question" id="{e(fid)}">\n'
+            f'  <div class="row">\n    <div class="row-main">\n'
+            f'      <div class="row-top"><span class="chip question">Open question</span>'
+            f'<span class="fid">{e(fid)} · {e(area)}</span></div>\n'
+            f'      <span class="row-title">{e(f.get("title", ""))}</span>\n'
+            f'      <div class="parts">{_chips(f, ctx)}</div>\n      {lines}\n    </div>\n'
+            f'    <button class="more" type="button" aria-expanded="false" aria-controls="d-{e(fid)}" '
+            f'data-more="{e(fid)}">More</button>\n  </div>\n'
+            f'  <div class="pointer" id="p-{e(fid)}" hidden></div>\n'
+            f'  <div class="detail" id="d-{e(fid)}" hidden>\n    {facts}\n    {_folds(f, ctx)}\n  </div>\n'
+            f'</article>')
+
+
+def questions_section(ctx) -> str:
+    qs = [f for f in ctx.findings if rv.is_question(f)]
+    if not qs:
+        return ""
+    return (f'<section class="list questions" id="br-questions" aria-labelledby="br-qh">\n'
+            f'<h2 id="br-qh" class="qhead">Open questions</h2>\n'
+            f'<p class="small">Paper could not settle {words(len(qs))} {plural(len(qs), "finding")}. None is a '
+            "confirmed problem; each needs the bench step or the document named.</p>\n"
+            + "\n".join(question_row(f, ctx) for f in qs) + "\n</section>")
+
+
+def _folds(f: dict, ctx) -> str:
+    """Math, evidence, challenge, history, bench test and check links of a finding, each folded."""
+    fid = f["id"]
     steps = ctx.bench_numbers.get(fid, [])
-    verify = step_refs(steps) or f.get("bench_test") or "Re-review: the fix shows in the netlist or BOM."
-    facts = (f'<dl class="facts"><dt>You\'d see</dt><dd>{e(f.get("symptom") or "Not stated.")}</dd>'
-             f'<dt>Why</dt><dd>{e(f.get("claim", ""))}</dd><dt>Fix</dt><dd>{e(f.get("fix", ""))}</dd>'
-             f'<dt>Verify</dt><dd>{e(verify)}</dd></dl>')
     folds = []
     calcs = f.get("calculations", [])
     if calcs:
@@ -200,6 +269,22 @@ def finding_row(f: dict, ctx) -> str:
     if checks and ctx.analysis_href:
         links = ", ".join(f'<a href="{e(ctx.analysis_href)}#chk-{e(c)}">{e(c)}</a>' for c in checks)
         folds.append(f'<p class="small">Checks: {links}</p>')
+    return "".join(x for x in folds if x)
+
+
+def finding_row(f: dict, ctx) -> str:
+    fid = f["id"]
+    sev = f.get("severity", "note")
+    area = f.get("area") or rv.AREA_OF_BLOCK.get(f.get("block", ""), "Other")
+    change = rv.CHANGE_LABEL.get(f.get("change_type", ""), "")
+    tag = ctx.changes.tag(fid) if ctx.changes else ""
+    tag_html = f'<span class="chip {"blocker" if tag == "Reopened" else "outline"}">{e(tag)}</span>' if tag else ""
+    chips = _chips(f, ctx)
+    steps = ctx.bench_numbers.get(fid, [])
+    verify = step_refs(steps) or f.get("bench_test") or "Re-review: the fix shows in the netlist or BOM."
+    facts = (f'<dl class="facts"><dt>You\'d see</dt><dd>{e(f.get("symptom") or "Not stated.")}</dd>'
+             f'<dt>Why</dt><dd>{e(f.get("claim", ""))}</dd><dt>Fix</dt><dd>{e(f.get("fix", ""))}</dd>'
+             f'<dt>Verify</dt><dd>{e(verify)}</dd></dl>')
     done = f.get("status", {}).get("fixed")
     return (f'<article class="item sev-{e(sev)}{" is-done" if done else ""}" id="{e(fid)}">\n'
             f'  <div class="row">\n'
@@ -210,14 +295,14 @@ def finding_row(f: dict, ctx) -> str:
             f'<span class="fid">{e(fid)} · {e(area)}</span>' + (f'<span class="effort">{e(change)}</span>' if change else "")
             + '</div>\n'
             f'      <label class="row-title" for="chk-{e(fid)}">{e(f.get("title", ""))}</label>\n'
-            f'      <div class="parts">{chips}{pin_html}</div>\n'
+            f'      <div class="parts">{chips}</div>\n'
             f'      <div class="status-line" id="st-{e(fid)}"></div>\n'
             f'    </div>\n'
             f'    <button class="more" type="button" aria-expanded="false" aria-controls="d-{e(fid)}" '
             f'data-more="{e(fid)}">More</button>\n'
             f'  </div>\n'
             f'  <div class="pointer" id="p-{e(fid)}" hidden></div>\n'
-            f'  <div class="detail" id="d-{e(fid)}" hidden>\n    {facts}\n    {"".join(x for x in folds if x)}\n  </div>\n'
+            f'  <div class="detail" id="d-{e(fid)}" hidden>\n    {facts}\n    {_folds(f, ctx)}\n  </div>\n'
             f'</article>')
 
 
@@ -408,6 +493,34 @@ def coverage_fold(ctx) -> str:
     return fold("Coverage", f"{len(ctx.facts.blocks)} blocks found · checks not listed", body, "br-coverage")
 
 
+def unknown_summary(checks: list[dict]) -> str:
+    """'609 of 644 could not run: 400 no datasheet, 150 no model, 59 needs bench'."""
+    groups = rv.unknown_groups(checks)
+    n = sum(len(v) for v in groups.values())
+    return f"{n} of {len(checks)} could not run: " + ", ".join(
+        f"{len(v)} {rv.UNKNOWN_REASONS[k].lower()}" for k, v in groups.items())
+
+
+def unknown_fold(ctx, examples: int = 6) -> str:
+    """Unknown checks counted by why they could not run, with a few examples of each."""
+    groups = rv.unknown_groups(ctx.checks)
+    if not groups:
+        return ""
+    rows = []
+    for k, cs in groups.items():
+        shown = "; ".join(f'<span class="mono">{e(c["id"])}</span> {e(c.get("reason", ""))}' for c in cs[:examples])
+        more = f"; and {len(cs) - examples} more" if len(cs) > examples else ""
+        rows.append([e(rv.UNKNOWN_REASONS[k]), str(len(cs)), shown + e(more)])
+    body = table(rows, ["Why", "Checks", "Examples"])
+    body += ('<p class="small">An unknown check is not a pass. No datasheet: the document was not supplied or '
+             "does not exist. No model: a curve or model is missing. Needs bench: only a measurement settles it."
+             "</p>")
+    if ctx.analysis_href:
+        body += f'<p class="small">Each one with its reason: <a href="{e(ctx.analysis_href)}">{e(ctx.analysis_href)}' \
+                "</a>.</p>"
+    return fold("Checks that could not run", unknown_summary(ctx.checks), body, "br-unknown")
+
+
 def refuted_fold(ctx) -> str:
     if not ctx.refuted:
         return ""
@@ -430,7 +543,8 @@ def outputs_fold(ctx) -> str:
 def page_data(ctx) -> dict:
     return {
         "key": f"{ctx.board}-{ctx.revision}-{ctx.hash}", "board": ctx.board, "revision": ctx.revision,
-        "hash": ctx.hash, "findings": [f["id"] for f in ctx.findings], "bench": [b.id for b in ctx.bench],
+        "hash": ctx.hash, "findings": [f["id"] for f in ctx.findings if not rv.is_question(f)],
+        "bench": [b.id for b in ctx.bench],
         "status": ctx.status_items, "pointers": ctx.pointers,
         "place": ctx.facts.place.to_dict() if ctx.facts.place else None,
         "placeNote": " ".join(ctx.facts.notes),
@@ -445,7 +559,8 @@ def render(ctx, artifact: bool = False) -> str:
     first = ", ".join(x for x in (head.get("stage", "Review"), head.get("date", "")) if x)
     meta = " · ".join(x for x in (first, head.get("variant", ""), head.get("scope", "")) if x)
     verdict, vcls = verdict_line(ctx.findings, head)
-    nf = len(ctx.findings)
+    problems = [f for f in ctx.findings if not rv.is_question(f)]
+    nf = len(problems)
     analysis = (f'<a href="{e(ctx.analysis_href)}">Full analysis</a>' if ctx.analysis_href else "")
     save = ("Checkmarks load from this page's shared record." if artifact
             else "Checkmarks are saved in this browser only.")
@@ -456,6 +571,7 @@ def render(ctx, artifact: bool = False) -> str:
 </header>
 <section class="verdict {vcls}" aria-labelledby="br-vh">
   <h2 id="br-vh">{e(verdict)}</h2>
+  <p class="counts" id="br-counts">{e(counts_line(ctx.findings))}</p>
   <div class="progress" aria-live="polite">
     <div class="bar" aria-hidden="true"><span class="b-ver" id="br-barver" style="width:0%"></span><span class="b-fix" id="br-barfix" style="width:0%"></span></div>
     <span class="legend"><span class="dot d-fix"></span><span id="br-nfix">0</span> of {nf} fixed in design</span>
@@ -465,12 +581,13 @@ def render(ctx, artifact: bool = False) -> str:
   <div class="actions"><button class="btn" type="button" id="br-export">Export status</button>{analysis}<span class="save" id="br-save">{e(save)}</span></div>
 </section>
 <section class="list" id="br-list" aria-label="Findings">
-{chr(10).join(finding_row(f, ctx) for f in ctx.findings) or '<p class="small">No findings.</p>'}
+{chr(10).join(finding_row(f, ctx) for f in problems) or '<p class="small">No confirmed problems.</p>'}
 </section>
+{questions_section(ctx)}
 <div class="folds">
 {chr(10).join(x for x in (bench_fold(ctx), changes_fold(ctx) if ctx.changes else "", power_tree_fold(ctx),
                           not_published_fold(ctx), firmware_fold(ctx), known_good_fold(ctx), coverage_fold(ctx),
-                          refuted_fold(ctx), outputs_fold(ctx)) if x)}
+                          unknown_fold(ctx), refuted_fold(ctx), outputs_fold(ctx)) if x)}
 </div>
 <p class="small">Written by python -m boardreview report from {e(ctx.findings_name)} and {e(ctx.facts.path.name)}. Findings hash {e(ctx.hash)}.</p>
 </div>"""

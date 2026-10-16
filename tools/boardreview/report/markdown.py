@@ -7,7 +7,8 @@ from pathlib import Path
 
 from boardreview.calc.base import fmt
 from boardreview.report import review as rv
-from boardreview.report.html import CONSEQUENCE, EVIDENCE_KIND, step_refs, verdict_line
+from boardreview.report.html import (CONSEQUENCE, EVIDENCE_KIND, counts_line, question_lines, step_refs,
+                                     unknown_summary, verdict_line)
 from boardreview.report.plain import WORD
 
 
@@ -105,6 +106,14 @@ def finding_md(f: dict, ctx) -> list[str]:
     return lines
 
 
+def question_md(f: dict, ctx) -> list[str]:
+    """An open question: what is missing, what settles it, the bench step or document, then the finding."""
+    head = [f"#### {f['id']} {f.get('title', '')}", "", f"- Open question; status: {status_text(f)}"]
+    head += [f"- {k}: {v}" if k else f"- {v}" for k, v in question_lines(f, ctx)]
+    body = finding_md(f, ctx)[3:]
+    return head + [line for line in body if not line.startswith(("- Bench test:", "- Verify:"))]
+
+
 def report_md(ctx) -> str:
     """The full report as markdown, in the order workflow/60_report.md gives."""
     h = ctx.header
@@ -118,17 +127,24 @@ def report_md(ctx) -> str:
     if h.get("assumptions"):
         lines += ["Assumptions:", ""] + [f"- {a}" for a in h["assumptions"]] + [""]
     verdict, _ = verdict_line(ctx.findings, h)
-    lines += ["## Summary", "", f"**{verdict}**", "", "| Severity | Findings | Fixed in design | Confirmed in the data |",
-              "|---|---|---|---|"]
+    problems = [f for f in ctx.findings if not rv.is_question(f)]
+    questions = [f for f in ctx.findings if rv.is_question(f)]
+    lines += ["## Summary", "", f"**{verdict}**", "", counts_line(ctx.findings), "",
+              "| Severity | Findings | Fixed in design | Confirmed in the data |", "|---|---|---|---|"]
     for s in rv.SEVERITIES:
-        group = [f for f in ctx.findings if f.get("severity") == s]
+        group = [f for f in problems if f.get("severity") == s]
         if group:
             fixed = sum(1 for f in group if f.get("status", {}).get("fixed"))
             ver = sum(1 for f in group if f.get("status", {}).get("verified_in_data") is True)
             lines.append(f"| {rv.SEV_NAME[s]} | {len(group)} | {fixed} | {ver} |")
     lines.append("")
     lines += [f"- **{f['id']}** ({f['severity']}) {f['title']}. Fix: {f.get('fix', '')}"
-              for f in ctx.findings if f.get("severity") in ("blocker", "major")]
+              for f in problems if f.get("severity") in ("blocker", "major")]
+    if questions:
+        lines += ["", f"Open questions, not confirmed problems: {', '.join(f['id'] for f in questions)}."]
+    if ctx.checks:
+        lines += ["", f"Checks: {unknown_summary(ctx.checks)}." if rv.unknown_groups(ctx.checks)
+                  else f"Checks: {len(ctx.checks)}, none unknown."]
     lines.append("")
     if ctx.changes:
         c = ctx.changes
@@ -142,13 +158,19 @@ def report_md(ctx) -> str:
         lines += [f"- Still open: {n['id']} {n['title']}" for _, n in c.still_open]
         lines.append("")
     lines += ["## Findings", ""]
-    blocks = sorted({f.get("block", "other") for f in ctx.findings},
+    blocks = sorted({f.get("block", "other") for f in problems},
                     key=lambda b: rv.BLOCK_ORDER.index(b) if b in rv.BLOCK_ORDER else 99)
     for b in blocks:
         lines += [f"### {rv.BLOCK_NAME.get(b, b)}", ""]
-        for f in ctx.findings:
+        for f in problems:
             if f.get("block", "other") == b:
                 lines += finding_md(f, ctx)
+    if not problems:
+        lines += ["No confirmed problems.", ""]
+    if questions:
+        lines += ["## Open questions", "", "Paper could not settle these. None is a confirmed problem.", ""]
+        for f in questions:
+            lines += question_md(f, ctx)
     feet = [(f, n) for f in ctx.findings for n in f.get("not_published", []) if n["consequence"] == "footprint"]
     lines += ["## Required footprints", ""]
     lines += [f"- {f['id']}: {n.get('action') or n['item']}" for f, n in feet] or ["None."]
@@ -181,6 +203,13 @@ def report_md(ctx) -> str:
         lines += ["| Check | Block | Instance | Verdict | Finding |", "|---|---|---|---|---|"]
         lines += [f"| {c['id']} | {c['block']} | {cell(c['instance'])} | {c['verdict']} | {c.get('finding', '')} |"
                   for c in ctx.checks]
+        groups = rv.unknown_groups(ctx.checks)
+        if groups:
+            lines += ["", "### Checks that could not run", "", unknown_summary(ctx.checks) + ".", "",
+                      "| Why | Checks | Examples |", "|---|---|---|"]
+            lines += [f"| {rv.UNKNOWN_REASONS[k]} | {len(cs)} | "
+                      + cell("; ".join(f"{c['id']}: {c.get('reason', '')}" for c in cs[:6]))
+                      + (f" and {len(cs) - 6} more" if len(cs) > 6 else "") + " |" for k, cs in groups.items()]
     else:
         lines.append("No checks.json given.")
     return "\n".join(lines) + "\n"

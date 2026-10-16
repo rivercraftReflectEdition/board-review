@@ -126,7 +126,7 @@ def test_element_and_checkbox_ids_are_unique(full):
         ids = ids_of((full / name).read_text(encoding="utf-8"))
         assert len(ids) == len(set(ids)), [i for i in ids if ids.count(i) > 1][:5]
     checks = [i for i in ids_of((full / "report.html").read_text(encoding="utf-8")) if i.startswith("chk-")]
-    assert len(checks) == 8 + 7
+    assert len(checks) == 7 + 7 and "chk-F-003" not in checks
 
 
 def test_artifact_variant_keeps_state_in_the_db(full):
@@ -187,7 +187,7 @@ def test_what_changed_matches_old_and_new(full):
 
 def test_math_fold_reads_in_order(full):
     text = (full / "report.html").read_text(encoding="utf-8")
-    row = text.split('<article class="item sev-major" id="F-003">')[1].split("</article>")[0]
+    row = text.split('<article class="item sev-question" id="F-003">')[1].split("</article>")[0]
     math = row.split("<summary>Math</summary>")[1]
     order = [math.index(x) for x in ('class="vw v-', 'class="lead"', 'class="keyline"', "<svg", "<figcaption>",
                                      "<summary>The math</summary>")]

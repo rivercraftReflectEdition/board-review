@@ -79,6 +79,15 @@ button { font: inherit; color: inherit; }
 .item.sev-major { border-left-color: var(--major); }
 .item.sev-minor { border-left-color: var(--minor); }
 .item.sev-note { border-left-color: var(--note); }
+.item.sev-question { border-left-color: var(--fmt); }
+.item.sev-question .row { grid-template-columns: minmax(0, 1fr) auto; }
+.item.sev-question .detail { padding-left: 14px; }
+.item.sev-question .pointer { margin-left: 12px; }
+.question { background: var(--fmt-soft); color: var(--fmt); }
+.qhead { font-size: var(--s-3); }
+.qline { font-size: var(--s-0); color: var(--ink-2); max-width: 72ch; }
+.qline b { color: var(--ink); font-weight: 600; }
+.counts { font-size: var(--s-1); color: var(--ink-2); font-variant-numeric: tabular-nums; }
 .item.is-done { opacity: 0.72; }
 .item.is-done .row-title { text-decoration: line-through; text-decoration-color: var(--ink-3); }
 .item.is-verified { opacity: 0.6; }

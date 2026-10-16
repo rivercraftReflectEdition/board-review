@@ -67,6 +67,48 @@ def refuted(f: dict) -> bool:
     return f.get("verification", {}).get("status") == "WRONG"
 
 
+def is_question(f: dict) -> bool:
+    """UNVERIFIABLE: paper cannot settle it, so it is an open question, not a confirmed problem."""
+    return f.get("verification", {}).get("status") == "UNVERIFIABLE"
+
+
+UNKNOWN_REASONS = {"no_datasheet": "No datasheet", "no_model": "No model", "needs_bench": "Needs bench",
+                   "other": "Other"}
+_DOC = r"(?:datasheets?|data sheets?|digests?|documents?|pdfs?|sources?)"
+_NO_DOC = re.compile(rf"\b(?:no|without|missing|absent|unavailable|lacks?)\b[^.;]{{0,40}}\b{_DOC}\b|"
+                     rf"\b{_DOC}\b[^.;]{{0,40}}\b(?:unavailable|absent|missing|not (?:supplied|available|provided|"
+                     r"given|found))\b", re.I)
+_MODEL = r"(?:models?|curves?|plant)"
+_NO_MODEL = re.compile(rf"\b(?:no|without|missing|absent|unavailable)\b[^.;]{{0,40}}\b{_MODEL}\b|"
+                       rf"\b{_MODEL}\b[^.;]{{0,40}}\b(?:unavailable|absent|missing|not (?:published|available))\b",
+                       re.I)
+_BENCH = re.compile(r"\bbench\b|\bmeasur", re.I)
+
+
+def unknown_reason(check: dict) -> str:
+    """Why an unknown check could not run: no_datasheet, no_model, needs_bench or other."""
+    nps = check.get("not_published", [])
+    text = " ".join([check.get("reason", ""), check.get("summary", "")]
+                    + [f"{n.get('item', '')} {n.get('searched', '')}" for n in nps])
+    cons = {n.get("consequence") for n in nps}
+    if _NO_DOC.search(text) or "vendor_question" in cons:
+        return "no_datasheet"
+    if "model" in cons or _NO_MODEL.search(text):
+        return "no_model"
+    if "bench_test" in cons or check.get("bench_test") or _BENCH.search(text):
+        return "needs_bench"
+    return "other"
+
+
+def unknown_groups(checks: list[dict]) -> dict[str, list[dict]]:
+    """Unknown checks grouped by unknown_reason, in UNKNOWN_REASONS order, empty groups left out."""
+    groups: dict[str, list[dict]] = {k: [] for k in UNKNOWN_REASONS}
+    for c in checks:
+        if c.get("verdict") == "unknown":
+            groups[unknown_reason(c)].append(c)
+    return {k: v for k, v in groups.items() if v}
+
+
 def findings_hash(findings: list[dict]) -> str:
     """Hash of ids, titles and severities: stable when only status fields change."""
     rows = sorted([f.get("id", ""), f.get("title", ""), f.get("severity", "")] for f in findings)

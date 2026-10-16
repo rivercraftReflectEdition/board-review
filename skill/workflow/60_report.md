@@ -18,7 +18,7 @@ Outputs in `--out`:
 
 | File | What |
 |---|---|
-| report.html | One self-contained page. The verdict, progress and one row per finding are visible; everything else is folded. Checkbox state stays in this browser (localStorage, keyed by board, revision and the findings hash). Export status saves status.json. |
+| report.html | One self-contained page. The verdict, progress, one row per confirmed problem and the open questions are visible; everything else is folded. Checkbox state stays in this browser (localStorage, keyed by board, revision and the findings hash). Export status saves status.json. |
 | report_artifact.html | The same page for an artifact. Checkbox state lives in the artifact's shared database; without it the page falls back to localStorage. |
 | report.md | The full report for a pull request, in the order below. |
 | tickets/ID.md | One short ticket draft per finding: what breaks, where, fix, how to verify, status. |
@@ -70,6 +70,26 @@ does not need them.
 Finding and bench ids must be unique across both lists and use letters, digits and
 `_ . - ~ : @ +` only; they become checkbox ids and status document ids.
 
+## Problems and open questions
+
+A finding the verifier marked UNVERIFIABLE is an open question, not a problem. The report keeps
+the two apart:
+
+- **Problems** (CONFIRMED, or PENDING when the challenge has not run) carry their severity, a
+  fix checkbox and the progress bar.
+- **Open questions** (UNVERIFIABLE) render in their own section with no severity chip and no
+  fix checkbox. Each says what is missing (from `not_published`), what settles it
+  (`bench_test`), the bench step that settles it or the document to get (a `vendor_question` or
+  `model` action), and the severity it would have if it holds.
+- The verdict comes from the problems only. The line under it counts both: "1 confirmed
+  problem, 11 open questions." With no blocker or major problem and open questions left, the
+  verdict says the board is not signed off.
+- Unknown checks are counted by why they could not run, in the folded "Checks that could not
+  run": no datasheet (not supplied, or a `vendor_question`), no model (a curve or model is
+  missing), needs bench (only a measurement settles it), other. The reason comes from each
+  check's `reason` and `not_published`, so write the reason plainly: "SiC477 datasheet not
+  supplied", "bead impedance curve at bias not published".
+
 ## Two checkbox states
 
 1. **Fixed in design.** A person ticks the box when the change is in the design files. Nothing
@@ -120,11 +140,14 @@ finding or bench id: `{done, at, by, verified, verifyNote}`. A tick updates `don
 
 1. **Header.** Board, revision, variant, source files with hashes, date, stage, scope, what was
    not reviewed, assumptions from intake.
-2. **Summary.** Counts by severity. One line per blocker and major: part or net, what fails,
-   fix.
-3. **Findings**, grouped by block or by sheet. Each one: title; location (parts, nets, pins,
-   page); claim; evidence with document, revision and page; math (`Result.to_markdown()`); what
-   is not published; fix; bench test; verification status and who checked.
+2. **Summary.** The verdict, the count of confirmed problems and open questions, problems by
+   severity. One line per blocker and major problem: part or net, what fails, fix. The open
+   question ids, and the unknown checks counted by reason.
+3. **Findings**, the problems grouped by block or by sheet. Each one: title; location (parts,
+   nets, pins, page); claim; evidence with document, revision and page; math
+   (`Result.to_markdown()`); what is not published; fix; bench test; verification status and
+   who checked. Then **Open questions**: each with what is missing, what settles it, the bench
+   step or document, the severity if it holds, then the same detail.
 4. **Required footprints** from not-published items (Cff, compensation, dampers, series
    resistors, injection points, probe points).
 5. **Firmware handoff.** Register settings, fuses and option bits with bit positions and the
@@ -135,7 +158,7 @@ finding or bench id: `{done, at, by, verified, verifyNote}`. A tick updates `don
 8. **Known-good list.** Items that look wrong and are right, each with the page that says so,
    for the next review.
 9. **Appendix.** Refuted findings with reasons; checklist coverage per block (run, not
-   applicable, unknown).
+   applicable, unknown); checks that could not run, counted by reason with examples.
 
 ## findings.json
 
