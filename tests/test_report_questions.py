@@ -41,11 +41,11 @@ def mostly_open(tmp_path_factory):
     facts = tmp / "facts"
     assert main(["prep", str(BOARD / "board.kicad.xml"), "--out", str(facts)]) == 0
     findings = [_finding("F-001", "CONFIRMED", title="R23 fitted on the PCB joins two rails"),
-                _question("F-002", "U6 switching frequency", "vendor_question", "Get the SiC477 datasheet"),
+                _question("F-002", "U6 switching frequency", "vendor_question", "Get the SYN-BUCK datasheet"),
                 _question("F-003", "bead impedance at DC bias", "bench_test", "Measure ripple on 3V3A"),
                 _question("F-004", "LDO output capacitor ESR range", "model", "Fit a model from the vendor curve")]
     checks = [_check("a.BR-1", "unknown", "Datasheet not supplied for U6; no digest."),
-              _check("b.BR-1", "unknown", "No datasheet available for the SiC477."),
+              _check("b.BR-1", "unknown", "No datasheet available for SYN-BUCK."),
               _check("c.BR-1", "unknown", "Bead model unavailable: no impedance curve at bias."),
               _check("d.BR-1", "unknown", "Load step size not known.", bench_test="Step the load 0.1 to 1 A."),
               _check("e.BR-1", "unknown", "Mystery."),
@@ -85,7 +85,7 @@ def test_open_questions_are_apart_from_problems_and_carry_no_severity_chip(mostl
     assert "Settles it: Bench: Measure ripple on 3V3A" in q3
     assert "Bench step 1." in q3
     q2 = visible_text(questions.split('id="F-002"')[1].split("</article>")[0])
-    assert "Document: Get the SiC477 datasheet" in q2
+    assert "Document: Get the SYN-BUCK datasheet" in q2
     assert "F-002" in ids_of(text)
 
 
@@ -102,7 +102,7 @@ def test_unknown_checks_are_summarized_by_reason_and_folded(mostly_open):
 
 
 def test_unknown_reason_categories():
-    assert rv.unknown_reason({"reason": "SiC477 datasheet unavailable"}) == "no_datasheet"
+    assert rv.unknown_reason({"reason": "SYN-BUCK datasheet unavailable"}) == "no_datasheet"
     assert rv.unknown_reason({"reason": "x", "not_published": [{"item": "a", "consequence": "model"}]}) == "no_model"
     assert rv.unknown_reason({"reason": "Measure it", "bench_test": "scope"}) == "needs_bench"
     assert rv.unknown_reason({"reason": "Value not published", "not_published": [

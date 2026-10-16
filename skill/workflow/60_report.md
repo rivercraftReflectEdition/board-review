@@ -87,7 +87,7 @@ the two apart:
 - Unknown checks are counted by why they could not run, in the folded "Checks that could not
   run": no datasheet (not supplied, or a `vendor_question`), no model (a curve or model is
   missing), needs bench (only a measurement settles it), other. The reason comes from each
-  check's `reason` and `not_published`, so write the reason plainly: "SiC477 datasheet not
+  check's `reason` and `not_published`, so write the reason plainly: "U6 datasheet not
   supplied", "bead impedance curve at bias not published".
 
 ## Two checkbox states
