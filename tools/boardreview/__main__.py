@@ -13,6 +13,7 @@ from pathlib import Path
 from xml.etree.ElementTree import ParseError
 
 from boardreview import schema
+from boardreview.console import utf8_stdio
 from boardreview.lint import Finding, to_findings
 from boardreview.model import compare, digest, loaders, placement, serialize
 from boardreview.model.board import BoardModel
@@ -210,6 +211,7 @@ def _validate(args: argparse.Namespace) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     """Entry point."""
+    utf8_stdio()
     ap = argparse.ArgumentParser(prog="python -m boardreview")
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("prep", help="board model, staging views, lint, blocks and compare, indexed in facts.md")

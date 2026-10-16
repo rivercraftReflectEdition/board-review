@@ -8,11 +8,13 @@ import sys
 from pathlib import Path
 
 from boardreview.blocks import find_all, to_markdown
+from boardreview.console import utf8_stdio
 from boardreview.model import loaders
 
 
 def main(argv: list[str] | None = None) -> int:
     """Entry point."""
+    utf8_stdio()
     ap = argparse.ArgumentParser(prog="python -m boardreview.blocks")
     ap.add_argument("netlist", help="netlist file or board_model.json")
     ap.add_argument("--bom")

@@ -7,6 +7,7 @@ import json
 import sys
 from pathlib import Path
 
+from boardreview.console import utf8_stdio
 from boardreview.model import compare, digest, loaders, serialize
 
 
@@ -55,6 +56,7 @@ def write_compare(report: compare.CompareReport, out: Path) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     """Entry point."""
+    utf8_stdio()
     ap = argparse.ArgumentParser(prog="python -m boardreview.model")
     sub = ap.add_subparsers(dest="cmd", required=True)
     b = sub.add_parser("build", help="board_model.json, digests, lint and blocks from a netlist and BOM")
