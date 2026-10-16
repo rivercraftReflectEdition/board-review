@@ -26,6 +26,8 @@ _ALIASES = {
     "dnp": ["dnp", "dni", "do not populate", "do not place", "no pop", "nopop", "not fitted", "exclude"],
     "quantity": ["quantity", "qty", "count"],
     "variant": ["variant"],
+    "datasheet": ["datasheet", "datasheet url", "data sheet", "datasheet link", "datasheet 1", "documentation",
+                  "componentlink1url", "component link 1 url", "helpurl", "help url"],
 }
 _LOOKUP = {_norm(alias): key for key, names in _ALIASES.items() for alias in names}
 _RANK = {_norm(alias): i for names in _ALIASES.values() for i, alias in enumerate(names)}

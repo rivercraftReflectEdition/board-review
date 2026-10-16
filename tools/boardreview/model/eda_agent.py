@@ -58,6 +58,8 @@ def _apply_component(model: BoardModel, c: dict[str, Any], seen: _Seen) -> None:
         comp.mpn = got.get("mpn", comp.mpn)
         comp.manufacturer = got.get("manufacturer", comp.manufacturer)
         comp.description = got.get("description", comp.description)
+        if got.get("datasheet"):
+            comp.attrs["datasheet"] = got["datasheet"]
         if got.get("value"):
             comp.value = got["value"]
     if c.get("dnp") is True:

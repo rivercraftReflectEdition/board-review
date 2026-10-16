@@ -22,6 +22,7 @@ class BomLine:
     description: str = ""
     fitted: bool | None = None
     variant: str = ""
+    datasheet: str = ""
     row: int = 0
     extra: dict[str, str] = field(default_factory=dict)
 
@@ -61,7 +62,8 @@ def parse_rows(rows: list[list[str]]) -> list[BomLine]:
         out.append(BomLine(
             refdes=refs, mpn=got.get("mpn", ""), manufacturer=got.get("manufacturer", ""),
             value=got.get("value", ""), comment=got.get("comment", ""), footprint=got.get("footprint", ""),
-            description=got.get("description", ""), fitted=fitted, variant=got.get("variant", ""), row=n,
+            description=got.get("description", ""), fitted=fitted, variant=got.get("variant", ""),
+            datasheet=got.get("datasheet", ""), row=n,
             extra={k: v for k, v in row.items() if k not in known and v},
         ))
     return out
@@ -138,6 +140,8 @@ def apply_bom(model: BoardModel, lines: list[BomLine], path: str = "") -> dict[s
             c.attrs["bom_row"] = str(line.row)
             if line.comment:
                 c.attrs["comment"] = line.comment
+            if line.datasheet and line.datasheet != "~":
+                c.attrs["datasheet"] = line.datasheet
             if ref in bom_only:
                 c.attrs["bom_only"] = "yes"
             c.classify()

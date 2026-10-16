@@ -72,6 +72,9 @@ def parse_kicad_xml(text: str, path: str = "") -> BoardModel:
             src.get("description", "") if src is not None else "")
         c.mpn = picked.get("mpn", "")
         c.manufacturer = picked.get("manufacturer", "")
+        sheet_url = _text(comp.find("datasheet")) or picked.get("datasheet", "")
+        if sheet_url and sheet_url != "~":
+            c.attrs["datasheet"] = sheet_url
         c.fitted = not _is_dnp(comp, flds, c.value)
         for flag in ("exclude_from_bom", "exclude_from_board"):
             if _flag(comp, flag):
