@@ -63,7 +63,8 @@ def fetch(url: str, dest: Path, timeout_s: float = TIMEOUT_S, max_bytes: int = M
     """(status, reason, bytes, sha256): write the bytes to dest only when they are a PDF; never open or run them."""
     scheme = urllib.parse.urlsplit(url).scheme.lower()
     if scheme not in SCHEMES:
-        return "unavailable", f"{scheme or 'no'} scheme is not fetched; only http, https and file are", 0, ""
+        what = f"{scheme} URLs are" if scheme else "a path with no URL scheme is"
+        return "unavailable", f"{what} not fetched; only http, https and file URLs are", 0, ""
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/pdf,*/*;q=0.8"})
     try:
         with urllib.request.urlopen(req, timeout=timeout_s) as resp:
