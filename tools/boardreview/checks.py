@@ -11,6 +11,7 @@ CHECKLISTS = Path(__file__).resolve().parents[2] / "skill" / "checklists"
 KIND_CHECKLIST = {"switching_regulator": "buck_regulator", "ldo": "ldo", "load_switch": "enable_uvlo_sequencing",
                   "ferrite_filter": "ferrite_lc_filter", "lc_filter": "ferrite_lc_filter",
                   "crystal": "clocks_crystals", "oscillator": "clocks_crystals",
+                  "adc": "data_converters", "dac": "data_converters",
                   "reset": "resets_supervisors_watchdogs", "i2c_bus": "io_levels_and_domains",
                   "strap": "straps_and_boot_pins"}
 BOARD_WIDE = ("netlist_integrity", "cascaded_rails", "pdn_decoupling", "thermal", "layout")

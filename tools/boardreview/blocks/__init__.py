@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from boardreview.blocks.base import Block
 from boardreview.blocks.clocks import find_clocks
+from boardreview.blocks.converters import find_converters
 from boardreview.blocks.filters import find_series_filters
 from boardreview.blocks.i2c import find_i2c_buses
 from boardreview.blocks.linear import find_linear
@@ -14,8 +15,7 @@ from boardreview.model.board import BoardModel
 from boardreview.model.graph import Graph
 
 ORDER = ["switching_regulator", "ldo", "load_switch", "ferrite_filter", "lc_filter", "crystal", "oscillator",
-         "clock_buffer", "pll", "jitter_cleaner", "reset",
-         "i2c_bus", "strap"]
+         "clock_buffer", "pll", "jitter_cleaner", "reset", "adc", "dac", "i2c_bus", "strap"]
 
 
 def _rail_roles(regs: list[Block], linear: list[Block]) -> tuple[dict[str, str], dict[str, str]]:
@@ -40,6 +40,7 @@ def find_all(model: BoardModel) -> list[Block]:
     sources, loads = _rail_roles(regs, linear)
     filters = find_series_filters(g, exclude={b.roles["inductor"][0] for b in regs}, sources=sources, loads=loads)
     clocks = find_clocks(g)
+    converters = find_converters(g)
     resets = find_reset_nets(g)
     buses = find_i2c_buses(g)
     taken: set[str] = set()
@@ -51,7 +52,11 @@ def find_all(model: BoardModel) -> list[Block]:
         taken.update(b.roles["net"])
     for b in clocks:
         taken.update(b.roles.get("signal_nets", []) + b.roles.get("output", []))
-    return regs + linear + filters + clocks + resets + buses + find_straps(g, taken)
+    for b in converters:
+        for role, nets in b.roles.items():
+            if role.endswith("_nets"):
+                taken.update(nets)
+    return regs + linear + filters + clocks + converters + resets + buses + find_straps(g, taken)
 
 
 def power_edges(blocks: list[Block]) -> list[str]:
