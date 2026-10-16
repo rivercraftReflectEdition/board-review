@@ -5,7 +5,7 @@ import math
 import numpy as np
 import pytest
 
-from boardreview.calc import loop
+from boardreview.calc import loop, pll
 from boardreview.calc.base import Verdict, fmt, plain_problems
 from boardreview.sim import measure, sanity, setups
 
@@ -61,6 +61,16 @@ def _startup(**kw) -> setups.Startup:
 
 
 SAMPLES = {
+    "calc.pll.loop_filter_design": [
+        lambda: pll.loop_filter_design(.005, 30e6, 100, 100e3, 45),
+    ],
+    "calc.pll.loop_filter_check": [
+        lambda: pll.loop_filter_check(.005, 30e6, 100, 510, 1.5e-9, 8.2e-9),
+        lambda: pll.loop_filter_check(.005, 30e6, 100, 510, 1.5e-9, 8.2e-9, pm_min_deg=40, context="worst_case"),
+        lambda: pll.loop_filter_check(.005, 30e6, 100, 510, 1.5e-9, 8.2e-9, pm_min_deg=40),
+        lambda: pll.loop_filter_check(.005, 30e6, 100, 510, 1.5e-9, 8.2e-9, pm_min_deg=60),
+        lambda: pll.loop_filter_check(.005, 30e6, 100, 510, 1.5e-9, 8.2e-9, pm_min_deg=50, pm_fail_deg=35),
+    ],
     "calc.loop.margins": [
         lambda: loop.margins(GOOD),
         lambda: loop.margins(THIN),

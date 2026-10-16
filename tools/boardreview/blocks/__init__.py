@@ -13,7 +13,8 @@ from boardreview.blocks.straps import find_straps
 from boardreview.model.board import BoardModel
 from boardreview.model.graph import Graph
 
-ORDER = ["switching_regulator", "ldo", "load_switch", "ferrite_filter", "lc_filter", "crystal", "oscillator", "reset",
+ORDER = ["switching_regulator", "ldo", "load_switch", "ferrite_filter", "lc_filter", "crystal", "oscillator",
+         "clock_buffer", "pll", "jitter_cleaner", "reset",
          "i2c_bus", "strap"]
 
 
