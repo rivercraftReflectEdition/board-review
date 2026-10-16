@@ -1,4 +1,4 @@
-"""Check JSON files against the skill schemas (finding, datasheet digest, board model) without extra packages."""
+"""Check JSON files against the skill schemas (finding, checks, digest, board model) without extra packages."""
 
 from __future__ import annotations
 
@@ -9,7 +9,8 @@ from pathlib import Path
 
 SCHEMAS = Path(__file__).resolve().parents[2] / "skill" / "schemas"
 NAMES = {"finding": "finding.schema.json", "digest": "datasheet_digest.schema.json",
-         "board_model": "board_model.schema.json"}
+         "board_model": "board_model.schema.json", "checks": "check_result.schema.json"}
+LISTS = {"finding": "findings", "checks": "checks"}
 
 
 def load(name: str = "finding") -> dict:
@@ -83,17 +84,27 @@ def validate(inst, schema: dict, root: dict | None = None, path: str = "$") -> l
     return errs
 
 
+def items_of(data, name: str) -> list | None:
+    """The list a findings or checks file holds: the file itself, or its 'findings' or 'checks' key."""
+    items = data.get(LISTS[name]) if isinstance(data, dict) else data
+    return items if isinstance(items, list) else None
+
+
 def check_file(path: str | Path, name: str = "finding") -> list[str]:
-    """Errors for a JSON file; findings may be a list or {"findings": [...]}, each prefixed with its id."""
+    """Errors for a JSON file; findings and checks may be a list or {"findings"|"checks": [...]}, prefixed by id."""
     try:
         data = json.loads(Path(path).read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
         return [f"not valid JSON: {exc}"]
     schema = load(name)
-    if name != "finding":
+    if name not in LISTS:
         return validate(data, schema)
-    items = data.get("findings") if isinstance(data, dict) else data
-    if not isinstance(items, list):
-        return ["$: expected a list of findings or an object with a findings list"]
-    return [f"{f.get('id', i) if isinstance(f, dict) else i}: {e}" for i, f in enumerate(items)
+    items = items_of(data, name)
+    if items is None:
+        return [f"$: expected a list of {LISTS[name]} or an object with a {LISTS[name]} list"]
+    errs = [f"{f.get('id', i) if isinstance(f, dict) else i}: {e}" for i, f in enumerate(items)
             for e in validate(f, schema)]
+    if name == "checks":
+        ids = [c.get("id") for c in items if isinstance(c, dict)]
+        errs += [f"check id {i} is used twice" for i in sorted({i for i in ids if i and ids.count(i) > 1})]
+    return errs

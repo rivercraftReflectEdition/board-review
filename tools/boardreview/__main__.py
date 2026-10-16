@@ -225,10 +225,10 @@ def _prep(args: argparse.Namespace) -> int:
 
 def _validate(args: argparse.Namespace) -> int:
     errors = schema.check_file(args.file, args.schema)
-    if args.schema == "finding" and not (errors and errors[0].startswith(("not valid JSON", "$:"))):
+    if args.schema in schema.LISTS and not (errors and errors[0].startswith(("not valid JSON", "$:"))):
         data = json.loads(Path(args.file).read_text(encoding="utf-8"))
-        count = len(data.get("findings", []) if isinstance(data, dict) else data)
-        print(f"{args.file}: {count} findings, {len(errors)} errors")
+        count = len(schema.items_of(data, args.schema))
+        print(f"{args.file}: {count} {schema.LISTS[args.schema]}, {len(errors)} errors")
     else:
         print(f"{args.file}: {len(errors)} errors")
     for e in errors:
@@ -250,7 +250,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--variant", default="", help="variant name for eda-agent JSON")
     p.add_argument("--out", required=True)
     report_build.add_parsers(sub)
-    v = sub.add_parser("validate", help="check findings.json, a datasheet digest or board_model.json against its schema")
+    v = sub.add_parser("validate", help="check findings.json, checks.json, a datasheet digest or board_model.json against its schema")
     v.add_argument("file")
     v.add_argument("--schema", default="finding", choices=sorted(schema.NAMES))
     args = ap.parse_args(argv)
