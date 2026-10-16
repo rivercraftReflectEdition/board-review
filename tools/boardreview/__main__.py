@@ -13,10 +13,11 @@ from pathlib import Path
 from xml.etree.ElementTree import ParseError
 
 from boardreview import schema
+from boardreview.calc.base import fmt
 from boardreview.console import utf8_stdio
 from boardreview.lint import Finding, to_findings
 from boardreview.model import compare, digest, loaders, placement, serialize
-from boardreview.model.board import BoardModel
+from boardreview.model.board import BoardModel, natural_key
 from boardreview.model.__main__ import main as model_main
 from boardreview.model.__main__ import write_compare
 from boardreview.report import build as report_build
@@ -111,6 +112,31 @@ def _written(out: Path, has_bom: bool, compared: bool, placed: tuple[str, int] |
     return [f"| {f} | {what} | {n} |" for f, what, n in rows]
 
 
+VALUE_KINDS = {"capacitor": "F", "resistor": "ohm", "inductor": "H", "ferrite": "ohm"}
+
+
+def _values(out: Path, show: int = 8) -> list[str]:
+    """How many passive values parsed to SI numbers, with examples of each and of the ones that did not."""
+    comps = sorted(_read(out / "board_model.json")["components"], key=lambda c: natural_key(c["refdes"]))
+    passives = [c for c in comps if c["kind"] in VALUE_KINDS and c.get("value", "").strip()]
+    parsed = [c for c in passives if c.get("value_si") is not None]
+    lines = ["## Values", "", f"{len(parsed)} of {len(passives)} passive values parsed to SI numbers (resistors, "
+             "capacitors, inductors, ferrites). `value` keeps the text as written; `value_si` holds the number.", ""]
+    examples = [next((c for c in parsed if c["kind"] == k), None) for k in VALUE_KINDS]
+    lines.append("- parsed, for example: " + ("; ".join(
+        f"{c['value']} = {fmt(c['value_si'], VALUE_KINDS[c['kind']])} ({c['refdes']})" for c in examples if c)
+        or "none"))
+    misses: dict[str, list[str]] = {}
+    for c in passives:
+        if c.get("value_si") is None:
+            misses.setdefault(c["value"], []).append(c["refdes"])
+    shown = [f"{v} ({refs[0]}" + (f" and {len(refs) - 1} more)" if len(refs) > 1 else ")")
+             for v, refs in list(misses.items())[:show]]
+    more = f", and {len(misses) - show} more values" if len(misses) > show else ""
+    lines += [f"- not parsed: {', '.join(shown) + more if shown else 'none'}", ""]
+    return lines
+
+
 def _facts(args: argparse.Namespace, out: Path, skipped: dict[str, str], compared: bool,
            placed: tuple[str, int] | None) -> str:
     labels = args.labels.split(",") if args.labels else DEFAULT_LABELS[: 1 + len(args.compare)]
@@ -124,7 +150,7 @@ def _facts(args: argparse.Namespace, out: Path, skipped: dict[str, str], compare
              "Files in this folder that are not listed here were not written by this run.", "",
              "## Inputs", "", "| Role | File | Format | SHA-256 |", "|---|---|---|---|", *inputs, "",
              "## Written", "", "| File | What | Counts |", "|---|---|---|",
-             *_written(out, bool(args.bom), compared, placed), "",
+             *_written(out, bool(args.bom), compared, placed), "", *_values(out),
              "## Skipped", ""]
     lines += [f"- {k}: {v}" for k, v in skips.items()] or ["Nothing skipped."]
     lines += ["", "## Not run by prep", ""] + [f"- {t}" for t in NOT_IN_PREP] + [""]

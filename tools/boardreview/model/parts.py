@@ -130,9 +130,31 @@ def value_from_description(description: str, kind: str) -> str:
     return ""
 
 
+_LIB_KIND = {"C": {"capacitor"}, "CP": {"capacitor"}, "R": {"resistor"}, "L": {"inductor"},
+             "FB": {"ferrite"}, "FL": {"ferrite"}}
+_LIB_WORDS = re.compile(r"^(?:Pol|Polarized|Small|Elec|Tant|Tantalum|US|EU)$", re.I)
+_LIB_VALUE = re.compile(r"^\d+(?:\.\d+)?[pnuµμmkKMGRr]\d*(?:F|H)?$|^\d+(?:\.\d+)?(?:F|H)$")
+
+
+def library_value(text: str, kind: str) -> float | None:
+    """SI value of a KiCad library-style value: C_10u_0603, R_52k3_0402, C_Pol_330u_6.3V, FB_120Z_3A_0603."""
+    toks = [t for t in (text or "").strip().split("_") if t]
+    if len(toks) < 2 or kind not in _LIB_KIND.get(toks[0].upper(), set()):
+        return None
+    i = 1
+    while i < len(toks) - 1 and _LIB_WORDS.match(toks[i]):
+        i += 1
+    tok = toks[i]
+    if kind == "ferrite":
+        m = re.fullmatch(r"(\d+(?:\.\d+)?)(?:R|Z|ohms?|Ω)", tok, re.I)
+        return float(m.group(1)) if m else None
+    return parse_value(tok, kind) if _LIB_VALUE.match(tok) else None
+
+
 def value_si(value: str, kind: str) -> float | None:
-    """SI value of a component, handling ferrite '120R@100MHz' as ohms."""
+    """SI value of a component, handling ferrite '120R@100MHz' as ohms and KiCad library-style values."""
     if kind == "ferrite":
         m = re.match(r"\s*(\d+(?:\.\d+)?)\s*(?:R|ohms?|Ω)", value or "", re.I)
-        return float(m.group(1)) if m else None
-    return parse_value(value, kind)
+        return float(m.group(1)) if m else library_value(value, kind)
+    got = parse_value(value, kind)
+    return got if got is not None else library_value(value, kind)
