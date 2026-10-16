@@ -196,6 +196,14 @@ def filter_response(
     return zsh / (zser + zsh), zser * zsh / (zser + zsh)
 
 
+def _damping_q(bead: Bead, cap: Cap, f0_hz: float, r0_ohm: float, dampers: Sequence[Cap], z_source_ohm: float,
+               r_load_ohm: float) -> tuple[float, float, list[str]]:
+    """(Q = sqrt(L/C)/R_total, R_total at f0, what else damps it); with a damper or a load, Q is an upper bound."""
+    r_total = float(np.real(bead.z(np.array([f0_hz]))[0])) + cap.esr_ohm + z_source_ohm
+    extra = (["an RC damper"] if dampers else []) + (["the load resistor"] if r_load_ohm < 1e3 * r0_ohm else [])
+    return (r0_ohm / r_total if r_total > 0 else math.inf), r_total, extra
+
+
 def lc_filter(
     bead: Bead,
     cap: Cap,
@@ -238,12 +246,24 @@ def lc_filter(
         span = f"{min(modeled):.4g} Hz" if len(modeled) == 1 else f"{min(modeled):.4g} to {max(modeled):.4g} Hz"
         gap = f"bead not characterized at {span}; the vendor R/X curve over that range, or a measurement, settles it"
     peak_db, f_pk = float(h_db[i_pk]), float(f[i_pk])
-    q_peak, q_limit = 10.0 ** (peak_db / 20.0), 10.0 ** (peak_limit_db / 20.0)
+    gain_pk, q_limit = 10.0 ** (peak_db / 20.0), 10.0 ** (peak_limit_db / 20.0)
+    q, r_total, extra = _damping_q(bead, cap, f0, opts["r0"], dampers, z_source_ohm, r_load_ohm)
+    if extra:
+        q_note = f"upper bound: {' and '.join(extra)} add damping that sqrt(L/C)/R_total leaves out"
+        damped_by_bound = math.isfinite(q) and q <= q_limit
+        underdamped = not damped_by_bound and peak_db > peak_limit_db
+    else:
+        q_note = "sqrt(L/C)/R_total; holds for a series LC with an open load and no damper"
+        underdamped = q > q_limit
     outputs = {
         "f0": Quantity(f0, "Hz", "1/(2 pi sqrt(L C)) with low-frequency bead L", "Resonance"),
         "peak": Quantity(peak_db, "dB", label="Peak gain"),
         "f_peak": Quantity(f_pk, "Hz", label="Peak frequency"),
-        "q": Quantity(q_peak, "", "10^(peak/20), about Q for a lightly damped LC", "Q, from the peak gain"),
+        "peak_gain_linear": Quantity(gain_pk, "", "10^(peak/20); near Q only for a lightly damped LC",
+                                     "Peak gain, linear"),
+        "q_damping": Quantity(q, "", q_note, "Damping Q"),
+        "r_total": Quantity(r_total, "ohm", "bead R at resonance + capacitor ESR + source",
+                            "Series resistance at resonance"),
         "zout_peak": Quantity(abs(zout[i_z]), "ohm", label="Impedance peak seen from the load"),
         "f_zout_peak": Quantity(f[i_z], "Hz", label="Impedance peak frequency"),
         "r0": Quantity(opts["r0"], "ohm", "sqrt(L/C)", "Characteristic impedance"),
@@ -265,9 +285,10 @@ def lc_filter(
             f"{worst[0]:.1f} dB of gain at {worst[2] / 1e6:.3g} MHz, within {window_frac:.0%} of harmonic {worst[3]} "
             f"of the {worst[4] / 1e6:.4g} MHz switcher; add Cd >= {opts['cd'] * 1e9:.3g} nF with Rd about {opts['rd_opt']:.2g} ohm"
         )
-    elif h_db[i_pk] > peak_limit_db:
+    elif underdamped:
         verdict = Verdict.MARGINAL
-        reason = f"{h_db[i_pk]:.1f} dB peak at {f[i_pk] / 1e6:.3g} MHz, away from the given switching frequencies"
+        reason = (f"damping Q {q:.3g} above {q_limit:.3g}" + ("" if not extra else f" or peak above {peak_limit_db:g} dB")
+                  + f"; {h_db[i_pk]:.1f} dB peak at {f[i_pk] / 1e6:.3g} MHz, away from the given switching frequencies")
     elif modeled:
         verdict = Verdict.MARGINAL
         reason = f"peak {h_db[i_pk]:.1f} dB under the {peak_limit_db:g} dB limit only for the assumed bead model"
@@ -276,25 +297,27 @@ def lc_filter(
     if gap:
         reason += f"; {gap}"
     fs_text = ", ".join(fmt(fs, "Hz") for fs in f_switch_hz)
+    q_text = (f"the damping Q is {fmt(q)}" + (", an upper bound" if extra else "") if math.isfinite(q)
+              else "nothing in series damps it")
     if peak_db >= 1.0:
         text = [f"The bead and the {fmt(cap.c_f, 'F')} capacitor resonate near {fmt(f0, 'Hz')} and peak at "
-                f"{fmt(peak_db, 'dB')} at {fmt(f_pk, 'Hz')}, a Q of about {fmt(q_peak)}."]
+                f"{fmt(peak_db, 'dB')} at {fmt(f_pk, 'Hz')}; {q_text}."]
     else:
         text = [f"The bead and the {fmt(cap.c_f, 'F')} capacitor have no resonant peak: the most gain anywhere is "
-                f"{fmt(peak_db, 'dB')}, at {fmt(f_pk, 'Hz')}."]
-    want_q = Key("q", f"{fmt(q_limit)} or less")
+                f"{fmt(peak_db, 'dB')}, at {fmt(f_pk, 'Hz')}, and {q_text}."]
+    want_q = (Key("q_damping", f"{fmt(q_limit)} or less"),) if math.isfinite(q) else ()
     if worst is not None and worst[0] > peak_limit_db:
         text.append(f"Near harmonic {worst[3]} of the {fmt(worst[4], 'Hz')} switcher the gain is "
                     f"{fmt(worst[0], 'dB')}, so switching noise is amplified, not filtered.")
         text.append(f"We want {fmt(peak_limit_db, 'dB')} or less there; a {fmt(opts['cd'], 'F')} capacitor with "
                     f"{fmt(opts['rd_opt'], 'ohm')} in series damps it.")
-        key = (Key("peak_near_switcher", f"{fmt(peak_limit_db, 'dB')} or less"), Key("peak"), want_q)
-    elif peak_db > peak_limit_db:
+        key = (Key("peak_near_switcher", f"{fmt(peak_limit_db, 'dB')} or less"), Key("peak")) + want_q
+    elif underdamped:
         where = (f"The peak is away from the {fs_text} switching frequencies" if f_switch_hz
                  else "No switching frequencies were given")
-        text.append(f"{where}, but we want a Q of {fmt(q_limit)} or less ({fmt(peak_limit_db, 'dB')}), so the filter "
-                    f"needs damping. It will ring on load steps and amplify noise near {fmt(f_pk, 'Hz')}.")
-        key = (Key("peak", f"{fmt(peak_limit_db, 'dB')} or less"), want_q, Key("f_peak"))
+        text.append(f"{where}, but we want a damping Q of {fmt(q_limit)} or less ({fmt(peak_limit_db, 'dB')}), so the "
+                    f"filter needs damping. It will ring on load steps and amplify noise near {fmt(f_pk, 'Hz')}.")
+        key = want_q + (Key("peak", f"{fmt(peak_limit_db, 'dB')} or less"), Key("f_peak"))
     else:
         if modeled:
             span = (fmt(min(modeled), "Hz") if len(modeled) == 1
@@ -304,7 +327,7 @@ def lc_filter(
         else:
             text.append(f"That stays under the {fmt(peak_limit_db, 'dB')} limit"
                         + (f", with switching at {fs_text}." if f_switch_hz else "."))
-        key = (Key("peak", f"{fmt(peak_limit_db, 'dB')} or less"), Key("f_peak")) + ((want_q,) if peak_db >= 1.0 else ())
+        key = (Key("peak", f"{fmt(peak_limit_db, 'dB')} or less"), Key("f_peak")) + want_q
     inputs = {
         "bead_l_low": Quantity(l_low, "H", label="Bead inductance at low frequency"),
         "c": Quantity(cap.c_f, "F", "use the DC-bias derated value", "Capacitance"),
@@ -359,7 +382,7 @@ def lc_filter(
         name="bead + capacitor filter",
         formula=(
             "H = Zsh/(Zs + Zbead + Zsh), Zsh = Zc || dampers || Rload; Zout = (Zs + Zbead) || Zsh; "
-            "f0 = 1/(2 pi sqrt(L C)); R0 = sqrt(L/C); Rd_opt = R0*sqrt((2+n)(4+3n)/(2 n^2 (4+n))), "
+            "f0 = 1/(2 pi sqrt(L C)); R0 = sqrt(L/C); Q = R0/R_total, R_total = Re Zbead(f0) + ESR + Zs; Rd_opt = R0*sqrt((2+n)(4+3n)/(2 n^2 (4+n))), "
             "Zout_peak = R0*sqrt(2(2+n))/n, n = Cd/C"
         ),
         inputs=inputs,

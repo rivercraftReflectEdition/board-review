@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import Sequence
 
@@ -30,10 +30,14 @@ class Quantity:
         return f"{self.value:.6g} {self.unit}"
 
     def to_dict(self) -> dict:
-        """JSON shape of the finding schema's quantity."""
-        out = {"value": self.value, "unit": self.unit}
-        if self.note:
-            out["note"] = self.note
+        """JSON shape of the finding schema's quantity; infinity and NaN become null with a note, so the JSON is valid."""
+        value, note = self.value, self.note
+        if value is not None and not math.isfinite(float(value)):
+            what = "not a number" if math.isnan(float(value)) else ("infinite" if value > 0 else "minus infinite")
+            value, note = None, "; ".join(x for x in (note, f"{what} in the calculation, written as null") if x)
+        out = {"value": value, "unit": self.unit}
+        if note:
+            out["note"] = note
         if self.label:
             out["label"] = self.label
         return out
@@ -209,6 +213,24 @@ def plot_from_arrays(
     )
 
 
+CONTEXTS = {"nominal": "nominal values", "worst_case": "worst-case values", "example": "a datasheet example's values",
+            "ideal": "ideal values"}
+_SOFTEN = ((re.compile(r"\bpasses\b"), "would pass"), (re.compile(r"\bmeets\b"), "would meet"),
+           (re.compile(r"\b(?:is|are) enough\b"), "would be enough"), (re.compile(r"\b(?:is|are) fine\b"), "would be fine"),
+           (re.compile(r"\bno problem\b"), "no problem at these values"), (re.compile(r"\bsafe\b"), "within the limit"))
+
+
+def finite(obj):
+    """Copy of a JSON-ready structure with infinity and NaN as None, so json.dumps(allow_nan=False) works."""
+    if isinstance(obj, float):
+        return obj if math.isfinite(obj) else None
+    if isinstance(obj, dict):
+        return {k: finite(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [finite(v) for v in obj]
+    return obj
+
+
 @dataclass(frozen=True)
 class Result:
     name: str
@@ -222,6 +244,26 @@ class Result:
     plots: tuple[Plot, ...] = field(default=())
     summary: str = ""
     key: tuple[Key, ...] = field(default=())
+    context: str = ""
+
+    def in_context(self, context: str) -> "Result":
+        """This result with its inputs marked nominal, worst_case, example or ideal; only worst-case inputs can pass."""
+        if not context:
+            return self
+        if context not in CONTEXTS:
+            raise ValueError(f"context {context!r} is not one of {', '.join(CONTEXTS)}")
+        if context == "worst_case" or self.verdict is not Verdict.PASS:
+            return replace(self, context=context)
+        what = CONTEXTS[context]
+        text = self.summary
+        for pat, soft in _SOFTEN:
+            text = pat.sub(soft, text)
+        return replace(
+            self, context=context, verdict=Verdict.UNKNOWN,
+            reason=f"{self.reason}; from {what} only, not the worst case".lstrip("; "),
+            summary=(f"Worked out from {what}, not the worst case: {text} That does not show it holds at the worst "
+                     "case, so it stays unknown until the worst-case values run."),
+            assumptions=self.assumptions + (f"inputs are {what}, not worst-case corners",))
 
     def quantity(self, name: str) -> Quantity | None:
         """An output, or else an input, by name."""
@@ -238,7 +280,8 @@ class Result:
         return out
 
     def to_markdown(self) -> str:
-        lines = [f"**{self.name}**: {self.verdict.value}" + (f" ({self.reason})" if self.reason else "")]
+        lines = [f"**{self.name}**: {self.verdict.value}" + (f" ({self.reason})" if self.reason else "")
+                 + (f"; inputs are {CONTEXTS[self.context]}" if self.context else "")]
         lines.append(f"`{self.formula}`")
         lines += [f"- in  {k} = {q}" + (f" ({q.note})" if q.note else "") for k, q in self.inputs.items()]
         lines += [f"- out {k} = {q}" + (f" ({q.note})" if q.note else "") for k, q in self.outputs.items()]
@@ -257,6 +300,8 @@ class Result:
         }
         if self.summary:
             out["summary"] = self.summary
+        if self.context:
+            out["context"] = self.context
         if self.key:
             out["key"] = self.key_line()
         if self.plots:

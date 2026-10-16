@@ -180,6 +180,11 @@ def check_problems(check: dict, plain: bool = False) -> list[str]:
     v = check.get("verdict")
     sim = check.get("simulation", {})
     calcs = list(check.get("results", [])) + (list(sim.get("results", [])) if sim.get("setup_verdict") == "pass" else [])
+    soft = sorted({c["context"] for c in calcs if c.get("context") in ("nominal", "example", "ideal")})
+    if v == "pass" and soft:
+        if plain:
+            return [f"This check says Passes, but its numbers come from {' and '.join(soft)} inputs, not the worst case."]
+        return [f"{check['id']} says pass from {', '.join(soft)} inputs; only worst-case inputs can pass a check"]
     w = worst(calcs)
     if not (v in RANK and w and RANK[v] < RANK[w]) or check.get("summary", "").strip():
         return []

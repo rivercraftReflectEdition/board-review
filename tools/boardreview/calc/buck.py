@@ -197,6 +197,13 @@ def inductor_ripple(
     reason = "; ".join(problems) if problems else "within the given limits"
     head = (f"The inductor current ripples {fmt(di, 'A')} peak to peak around the {fmt(iout_a, 'A')} load, so it "
             f"peaks at {fmt(i_pk, 'A')} and falls to {fmt(i_val, 'A')}.")
+    reverse = []
+    if i_val < 0:
+        head += (f" The valley of {fmt(i_val, 'A')} means current flows back from the output each cycle in forced "
+                 "PWM; a part in PFM or with zero-current detection stops the current at zero and does not do that, "
+                 "so read the datasheet's light-load mode.")
+        reverse.append("CCM math gives a negative valley; it holds only in forced PWM, not in PFM or with zero-current "
+                       "detection")
     if i_sat_a is None and i_valley_limit_a is None and i_neg_limit_a is None and iout_max_a is None:
         verdict, reason = Verdict.INFO, ""
         said = ["No saturation or current limits were given to compare with."]
@@ -234,7 +241,7 @@ def inductor_ripple(
             f"{LTC3633A} p. 12, Inductor Selection (ripple equation)",
             f"{LTC3633A} p. 13, ripple above 60 % of IOUT(MAX) not recommended",
         ),
-        assumptions=("continuous conduction", "inductance at operating current (derate for saturation)"),
+        assumptions=("continuous conduction", "inductance at operating current (derate for saturation)", *reverse),
         summary=" ".join([head, *said]),
         key=tuple(key[:3]),
     )
@@ -247,19 +254,16 @@ def current_slew(
     dmax: float,
     load_slew_a_per_s: float | None = None,
     asymmetry_limit: float = 5.0,
+    context: str = "",
 ) -> Result:
-    """Average inductor-current slew available at Dmax (up) and at zero duty (down)."""
+    """Average inductor-current slew available at Dmax (up) and at zero duty (down); context marks the inputs."""
+    if vin_v * dmax <= vout_v:
+        return _not_regulating(vin_v, vout_v, l_h, dmax).in_context(context)
     s_up = (vin_v * dmax - vout_v) / l_h
     s_down = vout_v / l_h
-    asym = s_down / s_up if s_up > 0 else math.inf
+    asym = s_down / s_up
     rates = f"The inductor current can rise at {fmt(s_up, 'A/s')} and fall at {fmt(s_down, 'A/s')}"
-    if s_up <= 0:
-        verdict, reason = Verdict.FAIL, "VIN*Dmax is below VOUT; current cannot rise"
-        summary = (f"{rates}: at {fmt(vin_v, 'V')} and a maximum duty of {fmt(dmax)} the switch node averages less "
-                   f"than {fmt(vout_v, 'V')}, so the current cannot rise at all. A load step pulls the output down "
-                   "until the input recovers.")
-        key = (Key("s_up", "above 0"),)
-    elif load_slew_a_per_s is not None and load_slew_a_per_s > s_up:
+    if load_slew_a_per_s is not None and load_slew_a_per_s > s_up:
         verdict = Verdict.MARGINAL
         reason = f"load step slews {load_slew_a_per_s / 1e6:.3f} A/us, faster than S_up {s_up / 1e6:.3f} A/us"
         summary = (f"{rates}. The load steps at {fmt(load_slew_a_per_s, 'A/s')}, faster than the current can rise, "
@@ -304,11 +308,41 @@ def current_slew(
         assumptions=("down-slew assumes the top switch can stay off for whole cycles",),
         summary=summary,
         key=key,
+    ).in_context(context)
+
+
+def _not_regulating(vin_v: float, vout_v: float, l_h: float, dmax: float) -> Result:
+    """current_slew where VIN*Dmax is not above VOUT: the buck is in dropout and slew headroom does not apply."""
+    top = vin_v * dmax
+    s_down = vout_v / l_h
+    summary = (f"At {fmt(vin_v, 'V')} input and a maximum duty of {fmt(dmax)}, the switch node averages at most "
+               f"{fmt(top, 'V')}, not above the {fmt(vout_v, 'V')} output. The buck is not regulating here: it is in "
+               "dropout and the output follows the input, so slew headroom does not apply. Check the dropout instead.")
+    return Result(
+        name="inductor current slew headroom",
+        formula="regulating only while VIN*Dmax > VOUT; S_up = (VIN*Dmax - VOUT)/L; S_down = VOUT/L",
+        inputs={
+            "vin": Quantity(vin_v, "V", label="Input voltage"),
+            "vout": Quantity(vout_v, "V", label="Output voltage"),
+            "l": Quantity(l_h, "H", label="Inductance"),
+            "dmax": Quantity(dmax, "", label="Maximum duty"),
+        },
+        outputs={
+            "vin_x_dmax": Quantity(top, "V", "VIN*Dmax", label="Highest average switch-node voltage"),
+            "s_down": Quantity(s_down, "A/s", f"{s_down / 1e6:.3f} A/us", label="Current slew, falling"),
+        },
+        verdict=Verdict.FAIL,
+        reason="VIN*Dmax is not above VOUT: the buck is in dropout, not regulating",
+        refs=("inductor law V = L*dI/dt averaged over a switching cycle at the duty limits",),
+        assumptions=("a buck regulates only while VIN*Dmax is above VOUT",),
+        summary=summary,
+        key=(Key("vin_x_dmax", f"above {fmt(vout_v, 'V')}"),),
     )
 
 
-def slew_clamp_vpp(slew_a_per_s: float, f_hz: float, c_f: float, limit_v: float | None = None) -> Result:
-    """Largest sinusoidal output swing at f that a slew-limited inductor current can sustain on C."""
+def slew_clamp_vpp(slew_a_per_s: float, f_hz: float, c_f: float, limit_v: float | None = None,
+                   context: str = "") -> Result:
+    """Largest sinusoidal output swing at f that a slew-limited inductor current can sustain on C; context marks inputs."""
     w = 2.0 * math.pi * f_hz
     vpp = 2.0 * slew_a_per_s / (w * w * c_f)
     ipk = slew_a_per_s / w
@@ -345,7 +379,7 @@ def slew_clamp_vpp(slew_a_per_s: float, f_hz: float, c_f: float, limit_v: float 
         assumptions=("sinusoidal oscillation", "load current constant", "C is the effective output capacitance"),
         summary=summary,
         key=key,
-    )
+    ).in_context(context)
 
 
 def soft_start_inrush(
@@ -463,8 +497,9 @@ def example_envelope(
     ours: BuckPoint,
     examples: list[BuckPoint],
     tol: dict[str, float] | None = None,
+    context: str = "",
 ) -> Result:
-    """Flag a design that sits outside every datasheet example circuit; pass only when every field is known."""
+    """Flag a design outside every datasheet example; pass only when every field is known and ours is worst case."""
     t = {**DEFAULT_TOL, **(tol or {})}
     if not examples:
         return Result(
@@ -565,4 +600,4 @@ def example_envelope(
         ),
         summary=summary,
         key=(Key("covering", "1 or more"),),
-    )
+    ).in_context(context)

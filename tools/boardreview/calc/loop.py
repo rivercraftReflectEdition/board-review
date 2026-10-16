@@ -436,8 +436,9 @@ def margins(
     gm_fail_db: float = 6.0,
     name: str = "loop margins",
     refs: tuple[str, ...] = (),
+    context: str = "",
 ) -> Result:
-    """Crossover, phase margin, gain margin and peaking for a loop built from blocks."""
+    """Crossover, phase margin, gain margin and peaking for a loop built from blocks; context marks the inputs."""
     gc, pc = crossings(blocks, f_start_hz, f_stop_hz)
     inputs = {f"b{i + 1}_{k}": replace(q, label=f"Block {i + 1} {q.label or k.replace('_', ' ')}")
               for i, b in enumerate(blocks) for k, q in b.params().items()}
@@ -461,7 +462,7 @@ def margins(
         return Result(name, formula, inputs, {}, Verdict.UNKNOWN, "no 0 dB crossing in the swept range", base_refs,
                       plots=(bode_plot(blocks, f_start_hz, f_stop_hz,
                                        caption="The gain never crosses 0 dB in this sweep."),),
-                      summary=summary)
+                      summary=summary).in_context(context)
     fc_min = min(f for f, _ in gc)
     fc_worst, pm = min(gc, key=lambda c: c[1])
     relevant = [(f, g) for f, g in pc if not (pm > 0 and f < fc_min and g < 0)]
@@ -545,7 +546,7 @@ def margins(
                          caption=phase_caption(fc_worst, pm)),),
         summary=" ".join(text),
         key=tuple(key),
-    )
+    ).in_context(context)
 
 
 def cff_lead(r_top_ohm: float, r_bot_ohm: float, cff_f: float, f_hz: float) -> Result:

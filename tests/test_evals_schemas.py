@@ -7,6 +7,7 @@ import pytest
 
 from boardreview.calc.base import Quantity, Result
 from boardreview.calc.divider import enable_thresholds
+from schema_pending import pending
 
 ROOT = Path(__file__).resolve().parent.parent
 SCHEMAS = ROOT / "skill" / "schemas"
@@ -72,7 +73,7 @@ def _calculation(result: Result, calculator: str) -> dict:
 
 
 def test_result_fields_map_onto_the_calculation_schema():
-    calc_def = FINDING["$defs"]["calculation"]["properties"]
+    calc_def = pending(FINDING)["$defs"]["calculation"]["properties"]
     assert {f.name for f in fields(Result)} - {"name"} <= set(calc_def)
     assert {f.name for f in fields(Quantity)} <= set(FINDING["$defs"]["quantity"]["properties"])
 

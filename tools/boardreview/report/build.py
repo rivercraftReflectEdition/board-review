@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
+from boardreview.calc.base import finite
 from boardreview.report import analysis, html, markdown, plain
 from boardreview.report import review as rv
 from boardreview.report.verify import verify_fixes
@@ -52,6 +53,11 @@ def write(path: Path, text: str) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8", newline="\n")
     return path
+
+
+def _json(data) -> str:
+    """Findings as strict JSON: infinity and NaN become null, which every JSON reader accepts."""
+    return json.dumps(finite(data), indent=1, ensure_ascii=False, allow_nan=False)
 
 
 def _rel(path: Path, base: Path) -> str:
@@ -135,7 +141,7 @@ def run_report(args: argparse.Namespace) -> int:
     files = {"report.html": html.render(ctx, artifact=False),
              "report_artifact.html": html.render(ctx, artifact=True),
              "report.md": markdown.report_md(ctx),
-             "findings.json": json.dumps(_with_findings(raw, findings), indent=1, ensure_ascii=False) + "\n",
+             "findings.json": _json(_with_findings(raw, findings)) + "\n",
              "status.json": json.dumps(status, indent=1) + "\n"}
     if args.detail == "full":
         files["analysis.html"] = analysis.render(ctx)
@@ -170,7 +176,7 @@ def run_verify(args: argparse.Namespace) -> int:
     tally = {w: sum(1 for _, ok, _ in results if word[ok] == w) for w in word.values()}
     print(", ".join(f"{n} {w}" for w, n in tally.items()))
     target = Path(args.out or args.findings)
-    write(target, json.dumps(_with_findings(raw, findings), indent=1, ensure_ascii=False) + "\n")
+    write(target, _json(_with_findings(raw, findings)) + "\n")
     if args.status_out:
         items = dict(status.items) | {f["id"]: rv.status_item(f) for f in findings if f.get("status")}
         write(Path(args.status_out), json.dumps({"board": header.get("board", ""), "revision": header.get("revision", ""),
