@@ -1,4 +1,4 @@
-"""CLI: python -m boardreview prep | report | verify-fixes | validate (see --help of each)."""
+"""CLI: python -m boardreview prep | report | verify-fixes | validate | checks (see --help of each)."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from collections import Counter
 from pathlib import Path
 from xml.etree.ElementTree import ParseError
 
-from boardreview import schema
+from boardreview import checks, schema
 from boardreview.calc.base import fmt
 from boardreview.console import utf8_stdio
 from boardreview.lint import Finding, to_findings
@@ -250,6 +250,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--variant", default="", help="variant name for eda-agent JSON")
     p.add_argument("--out", required=True)
     report_build.add_parsers(sub)
+    checks.add_parser(sub)
     v = sub.add_parser("validate", help="check findings.json, checks.json, a datasheet digest or board_model.json against its schema")
     v.add_argument("file")
     v.add_argument("--schema", default="finding", choices=sorted(schema.NAMES))
@@ -260,6 +261,8 @@ def main(argv: list[str] | None = None) -> int:
         return report_build.run_verify(args)
     if args.cmd == "validate":
         return _validate(args)
+    if args.cmd == "checks":
+        return checks.run(args)
     if len(args.compare) > 2:
         ap.error("--compare takes one or two netlists")
     if args.labels and len(args.labels.split(",")) != 1 + len(args.compare):
