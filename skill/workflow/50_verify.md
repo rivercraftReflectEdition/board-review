@@ -8,20 +8,21 @@ A second agent with fresh context, not the one that wrote the finding. Give it t
 the digests, the staging views and the datasheet paths. Do not give it the first agent's notes;
 it must reach the facts on its own.
 
-How to start it:
-- Claude Code: a subagent (the Agent tool) whose prompt holds this page, the finding JSON and the
-  source paths, and nothing from the main conversation. One subagent per finding or per small
-  group of findings on the same block.
-- Codex CLI: a separate run from the review folder, for example
+How to start it, in any of these ways:
+- A subagent, in any agent that has them (the Agent tool in Claude Code; Codex and others where
+  they expose subagents). Its prompt holds this page, the finding JSON and the source paths, and
+  nothing from the main conversation. One subagent per finding or per small group of findings on
+  the same block.
+- A separate run from the review folder, for example in Codex
   `codex exec -s read-only -C <review folder> -o verify/F-003.md "<prompt>"`, where the prompt
   holds this page's steps, the finding JSON and the source paths. A fresh interactive session
   given only those files works the same way.
 - Any other agent: a new session or pass that is given only the finding JSON and the cited
   sources, never the notes or chat that produced the finding.
 
-Record who checked in `verification.by` (for example `claude-code subagent`, `codex exec`) and
-the files it read in `verification.sources_checked`. If no second context can be started, the
-finding stays PENDING and the report says the refutation pass has not run.
+Record who checked in `verification.by` (for example `claude-code subagent`, `codex subagent`,
+`codex exec`) and the files it read in `verification.sources_checked`. If no second context can
+be started, the finding stays PENDING and the report says the refutation pass has not run.
 
 ## Per finding
 
@@ -46,6 +47,11 @@ finding stays PENDING and the report says the refutation pass has not run.
    - UNVERIFIABLE: depends on a value the documents do not give. The finding must carry a bench
      test and, where it applies, a footprint.
    Record corrections to numbers or severity even when the verdict is CONFIRMED.
+5. **Missing evidence is not a failure.** A claim that rests on missing evidence (a value not
+   published, a source unavailable, a requirement unknown, a sweep over an assumed range) can at
+   most be UNVERIFIABLE. CONFIRMED needs the failure to follow from the sources. What can be
+   CONFIRMED is a fact about the data itself, for example that the BOM and the PCB disagree; the
+   finding then says so and keeps the electrical consequence conditional.
 
 ## Passes are claims too
 
