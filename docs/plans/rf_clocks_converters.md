@@ -83,6 +83,19 @@ Sizes: S is under a day, M is one to three days, L is a week or more.
 
 ## 4. Decisions for River
 
+Decided 2026-10-15:
+- **Pass limits:** no baked-in defaults. A limit comes from the board's requirement or the part's
+  datasheet. Where neither gives one, the reviewer chooses by engineering judgment, states the
+  number and the reason, and marks it JUDGMENT. Numbers this plan calls "default" are cited
+  starting points only. Calculators take the limit as an argument and report INFO or UNKNOWN
+  without one.
+- **Manufacturer models:** no model library. The skill says which files to fetch per part kind at
+  review time and how to judge whether they apply; the code only reads them (skill/workflow/models.md).
+- **Build:** parallel workers, one per calculator module or checklist, reviewed and merged by the
+  coordinator.
+
+Still open:
+
 1. **HackRF seal.** Approve step 0? HackRF's history is public, so a reviewer may know it. Score
    on the derivation (nets, levels, math), not on naming the bug.
 2. **Pluto.** Its files are Allegro and PDF. Build a PDF or Allegro netlist path (L), or use Pluto
