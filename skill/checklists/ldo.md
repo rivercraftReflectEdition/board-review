@@ -13,7 +13,8 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 
 ## LDO-2 Output capacitor inside the stable region
 - Check: effective COUT at bias and its ESR against the datasheet's stability region; some parts
-  need a minimum ESR or allow only a maximum capacitance.
+  need a minimum ESR or allow only a maximum capacitance. Read first whether the limit is nominal
+  or effective and at which bias (workflow/20_datasheets.md, Capacitor limits).
 - Why: outside the region the LDO rings or oscillates.
 - Compute: `calc.mlcc_bias.mlcc_effective`.
 - Pass: inside the region at all temperatures and tolerances.

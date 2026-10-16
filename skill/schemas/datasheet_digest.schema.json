@@ -2,19 +2,39 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "board-review/datasheet_digest.schema.json",
   "title": "Datasheet digest",
-  "description": "Facts from one datasheet, read from page images. Every entry cites a page. Values the documents do not give are listed under not_published. Values in SI units.",
+  "description": "Facts from one datasheet, read from page images. Every entry cites a page. Values the documents do not give are listed under not_published. Values in SI units. A record with status source_unavailable says no document could be read for the MPN; it needs only mpn, status and unavailable, and carries no facts.",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "mpn", "manufacturer", "document", "read_from", "pins", "abs_max",
-    "recommended_operating", "electrical", "equations", "layout_rules", "errata",
-    "example_envelope", "not_published"
+  "allOf": [
+    {
+      "if": {"required": ["status"], "properties": {"status": {"const": "source_unavailable"}}},
+      "then": {"required": ["mpn", "status", "unavailable"]},
+      "else": {
+        "required": [
+          "mpn", "manufacturer", "document", "read_from", "pins", "abs_max",
+          "recommended_operating", "electrical", "equations", "layout_rules", "errata",
+          "example_envelope", "not_published"
+        ]
+      }
+    }
   ],
   "properties": {
     "mpn": {"type": "string", "minLength": 2},
     "manufacturer": {"type": "string"},
     "function": {"type": "string", "description": "One line, for example 'dual 3 A synchronous buck, valley current mode'."},
-    "status": {"enum": ["draft", "reviewed"]},
+    "status": {"enum": ["draft", "reviewed", "source_unavailable"], "description": "source_unavailable: no datasheet was read for this MPN. That is not the same as not published, which says the documents were read and lack a value."},
+    "unavailable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reason", "consequence"],
+      "description": "Why no document was read. Only for status source_unavailable.",
+      "properties": {
+        "reason": {"enum": ["no_url", "not_pdf", "download_failed", "offline", "user_said_unavailable", "other"]},
+        "detail": {"type": "string", "description": "What was tried: the URL and the response, or what the user said and when."},
+        "checks_blocked": {"type": "array", "items": {"type": "string"}, "description": "Checklist items that need this part's data, for example 'ldo#LDO-2'."},
+        "consequence": {"type": "string", "description": "What the review does instead, for example 'LDO-1 and LDO-2 stay unknown; ask for the datasheet'."}
+      }
+    },
     "reviewed_by": {"type": "string"},
     "document": {
       "type": "object",
@@ -81,7 +101,12 @@
       "items": {"$ref": "#/$defs/example"}
     },
     "curves": {"type": "array", "items": {"$ref": "#/$defs/curve"}},
-    "not_published": {"type": "array", "items": {"$ref": "#/$defs/not_published"}}
+    "not_published": {"type": "array", "items": {"$ref": "#/$defs/not_published"}},
+    "conflicts": {
+      "type": "array",
+      "description": "Places where the document disagrees with itself. Keep every row; the digest uses the one the precedence rule picks (workflow/20_datasheets.md).",
+      "items": {"$ref": "#/$defs/conflict"}
+    }
   },
   "$defs": {
     "page": {"type": ["integer", "string"], "description": "Page number, or 'Table 26 p.33'."},
@@ -156,11 +181,26 @@
         "min": {"type": "number"},
         "typ": {"type": "number"},
         "max": {"type": "number"},
+        "relative_limits": {
+          "type": "array",
+          "description": "Bounds stated against another pin, for example OUT abs max min(VIN + 0.3, 3.6). Leave min or max out when that bound is relative; the expression holds its fixed part too.",
+          "items": {"$ref": "#/$defs/relative_limit"}
+        },
         "unit": {"type": "string"},
         "conditions": {"type": "string"},
-        "guaranteed": {"type": "boolean", "description": "True when the datasheet guarantees the min or max, whether production tested, guaranteed by design or by characterization; false when the value is typical only."},
-        "basis": {"enum": ["production_tested", "design", "characterization", "typical"], "description": "How the vendor backs the value, from the table notes. A design or characterization limit is guaranteed but not tested on every part; a finding that rests on one says so."},
+        "guaranteed": {"type": "boolean", "description": "True when the datasheet guarantees the min or max, whether production tested, guaranteed by design, by characterization or by statistical analysis; false when the value is typical only."},
+        "basis": {"enum": ["production_tested", "design", "characterization", "statistical", "mixed", "unspecified", "typical"], "description": "How the vendor backs the value, from the table notes. mixed: the notes name several methods (for example design, test or statistical analysis) without saying which row uses which. unspecified: guaranteed, but the notes do not say how. A limit not tested on every part is still guaranteed; a finding that rests on one says so."},
         "page": {"$ref": "#/$defs/page"}
+      }
+    },
+    "relative_limit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bound", "expression", "references"],
+      "properties": {
+        "bound": {"enum": ["min", "max"]},
+        "expression": {"type": "string", "description": "The limit in the row's unit, written with pin or supply names from this digest, for example 'min(VIN + 0.3, 3.6)' or 'VIN'."},
+        "references": {"type": "array", "minItems": 1, "items": {"type": "string"}, "description": "Pins or supplies the expression uses, for example ['VIN']."}
       }
     },
     "equation": {
@@ -200,11 +240,19 @@
     "example": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["source", "vin_v", "vout_v", "fsw_hz", "compensation", "page"],
+      "required": ["source", "vin_v", "vout_v", "compensation", "page"],
+      "allOf": [
+        {
+          "if": {"required": ["topology"], "properties": {"topology": {"const": "linear"}}},
+          "else": {"required": ["fsw_hz"]}
+        }
+      ],
       "properties": {
         "source": {"type": "string", "description": "Figure or typical-application title."},
+        "topology": {"enum": ["switching", "linear"], "description": "linear for an LDO or other linear regulator, which needs no fsw_hz. Left out means switching."},
+        "output_setting": {"enum": ["adjustable", "fixed"], "description": "adjustable: an external divider sets VOUT. fixed: the divider is inside the part and the FB or sense pin ties straight to the output, so there is no top resistor to put a Cff across."},
         "vin_v": {"$ref": "#/$defs/range"},
-        "vout_v": {"type": "number"},
+        "vout_v": {"type": "number", "description": "As printed. For a generic fixed-output figure that prints none, the ordered variant's VOUT, said so in notes."},
         "iout_a": {"type": "number"},
         "fsw_hz": {"type": "number"},
         "l_h": {"type": "number"},
@@ -215,12 +263,14 @@
           "additionalProperties": false,
           "required": ["mode"],
           "properties": {
-            "mode": {"enum": ["internal", "external", "fixed", "unknown"]},
-            "values": {"type": "string", "description": "For example 'RITH 6.04k, CITH 1 nF, Cff none'."}
+            "mode": {"enum": ["internal", "external", "unknown"], "description": "The controller's own compensation. internal: inside the part, no COMP pin (LDOs too). external: an R-C network on a COMP or ITH pin. A fixed output is output_setting, not a mode."},
+            "values": {"type": "string", "description": "External network, for example 'RITH 6.04k, CITH 1 nF'."},
+            "feedback_shaping": {"type": "string", "description": "Parts on an external divider that shape the loop, for example 'Cff 22 pF across R1 (VOUT to FB)'. This is not external compensation; mode stays internal when the part has no COMP pin."}
           }
         },
         "operating_mode": {"type": "string", "description": "For example 'forced continuous', 'pulse skipping', 'burst'."},
-        "slew_a_per_s": {"type": "number", "description": "(VIN*Dmax - VOUT)/L at this example, computed."},
+        "slew_a_per_s": {"type": "number", "description": "(VIN*Dmax - VOUT)/L at this example, computed. Leave it out when Dmax is not given for this variant or the example is linear."},
+        "notes": {"type": "string", "description": "What the figure leaves out or what was filled in, with the page."},
         "page": {"$ref": "#/$defs/page"}
       }
     },
@@ -248,6 +298,29 @@
         "searched": {"type": "string"},
         "consequence": {"enum": ["footprint", "bench_test", "vendor_question", "model"]},
         "action": {"type": "string"}
+      }
+    },
+    "conflict": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["item", "rows", "used"],
+      "properties": {
+        "item": {"type": "string", "description": "What disagrees, for example 'abs max table names pin 4 SYNC; the pin table names it MODE'."},
+        "rows": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["text", "page"],
+            "properties": {
+              "text": {"type": "string"},
+              "page": {"$ref": "#/$defs/page"}
+            }
+          }
+        },
+        "used": {"type": "string", "description": "Which row the digest uses and the precedence rule that picked it."},
+        "action": {"type": "string", "description": "The vendor question or check that settles it."}
       }
     }
   }
