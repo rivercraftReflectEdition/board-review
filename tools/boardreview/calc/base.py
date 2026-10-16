@@ -131,6 +131,18 @@ class Marker:
 
 
 @dataclass(frozen=True)
+class Band:
+    """A shaded interval on the shared frequency axis."""
+
+    label: str
+    x_min: float
+    x_max: float
+
+    def to_dict(self) -> dict:
+        return {"label": self.label, "x_min": _num(self.x_min), "x_max": _num(self.x_max)}
+
+
+@dataclass(frozen=True)
 class Plot:
     """A curve the verdict depends on: shared x, one or more y series, and the points that matter marked."""
 
@@ -143,6 +155,7 @@ class Plot:
     y_log: bool = False
     markers: tuple[Marker, ...] = ()
     caption: str = ""
+    bands: tuple[Band, ...] = ()
 
     def to_dict(self) -> dict:
         """JSON shape of the finding schema's plot."""
@@ -155,6 +168,8 @@ class Plot:
         }
         if self.caption:
             out["caption"] = self.caption
+        if self.bands:
+            out["bands"] = [b.to_dict() for b in self.bands]
         return out
 
 
@@ -201,6 +216,7 @@ def plot_from_arrays(
     markers: Sequence[Marker] = (),
     max_points: int = 600,
     caption: str = "",
+    bands: Sequence[Band] = (),
 ) -> Plot:
     """Plot from arrays: series are (label, unit, y); long series are thinned keeping each bucket's min and max."""
     xs = np.asarray(x, dtype=float)
@@ -209,7 +225,7 @@ def plot_from_arrays(
     return Plot(
         title=title, x_label=x_label, x_unit=x_unit, x=tuple(float(v) for v in xs[idx]),
         series=tuple(Series(lab, unit, tuple(float(v) for v in y[idx])) for (lab, unit, _), y in zip(series, ys)),
-        x_log=x_log, y_log=y_log, markers=tuple(markers), caption=caption,
+        x_log=x_log, y_log=y_log, markers=tuple(markers), caption=caption, bands=tuple(bands),
     )
 
 

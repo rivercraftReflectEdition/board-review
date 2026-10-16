@@ -268,6 +268,13 @@ def _legend(p: dict, panel: Panel) -> list[str]:
 def _panel(p: dict, lay: Layout, panel: Panel, last: bool) -> list[str]:
     out = []
     y = panel.y
+    for band in p.get("bands", []):
+        lo, hi = max(lay.x.lo, band["x_min"]), min(lay.x.hi, band["x_max"])
+        if lo < hi:
+            out.append(f'<rect class="pl-band" data-label="{_e(band["label"])}" '
+                       f'x="{_f(lay.x(lo))}" y="{_f(panel.top)}" '
+                       f'width="{_f(lay.x(hi) - lay.x(lo))}" height="{_f(panel.bottom - panel.top)}" '
+                       f'style="fill:{SERIES[0]};opacity:0.12"><title>{_e(band["label"])}</title></rect>')
     if y.log:
         major, minor = log_ticks(y.lo, y.hi)
     else:
