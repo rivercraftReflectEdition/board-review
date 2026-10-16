@@ -9,7 +9,7 @@ import pytest
 from boardreview.calc.base import Key, Quantity, Result, Verdict, fmt, plain_problems
 
 CALC = Path(__file__).resolve().parent.parent / "tools" / "boardreview" / "calc"
-SAMPLE_MODULES = ("test_plain_power_io", "test_plain_passives", "test_plain_loop_sim", "test_jitter", "test_clock_term")
+SAMPLE_MODULES = ("test_plain_power_io", "test_plain_passives", "test_plain_loop_sim", "test_jitter", "test_clock_term", "test_rf")
 
 
 def calculators() -> list[str]:
