@@ -12,18 +12,22 @@ failures into candidate findings.
 4. Interfaces: ethernet_phy, camera_csi, xspi_memory, clocks_crystals.
 5. protection_tvs, thermal, then layout when placement exists.
 
-Agents may split by block (subagents in Claude Code, separate `codex exec` runs in Codex, or one
-block after another). Each agent gets the checklist, the block record, the digests and the
-staging views, not the whole board.
+Agents may split by block (subagents in any agent that has them, separate `codex exec` runs in
+Codex, or one block after another). Each agent gets the checklist, the block record, the digests
+and the staging views, not the whole board.
 
 ## Run each item
 
 For every item record one of: pass, marginal, fail, not applicable (with the reason), or unknown
-(with the not-published entry). For every numeric item keep the calculator `Result`.
+(with the not-published entry, the source_unavailable record, or the missing requirement). For
+every numeric item keep the calculator `Result`.
 
 - Inputs come from digests and the BOM, never from memory of a part.
 - Corners: resistor and reference tolerance, both temperature extremes, DC bias, aging, supply
   limits. Where two corners push in opposite directions (leakage hot, VF cold) run both.
+- A corner that intake.md records as unknown (input range, temperature, load) is not invented.
+  Run the check at a nominal value only as a diagnostic, label it nominal in the summary, and
+  record the item unknown when its verdict depends on the missing corner.
 - Guaranteed values decide pass and fail. Typical values may explain, never pass.
 - Print `Result.to_markdown()` in the working notes so the math is visible.
 
