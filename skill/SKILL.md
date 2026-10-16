@@ -19,8 +19,8 @@ repo's `skill/` folder, linked into the agent's skills folder.
    access and a writable Python; in a sandbox, ask the user to run it.
 2. Check from any folder: `python -m boardreview --help` lists `prep` and `validate`. If it fails,
    resolve this folder's link to find the repo (its parent) and run step 1.
-3. KiCad boards need `kicad-cli` (verified with KiCad 10.0.6; workflow/10_extract.md says where
-   it is installed and which exports to run).
+3. KiCad boards need `kicad-cli` (verified with KiCad 10.0.6; workflow/10_extract.md). For a
+   sandbox, the Codex sandbox on Windows, or UTF-8 output on Windows, see workflow/setup.md.
 
 Paths in this skill (`workflow/`, `checklists/`, `schemas/`, `lessons/`) are relative to the folder
 that holds this SKILL.md. Python names are relative to the `boardreview` package:
@@ -38,11 +38,11 @@ Not for: library creation, routing, or firmware review.
 
 Run the stages in order. Each stage has a page in `workflow/`. Do not judge before stage 2 ends.
 
-| Stage | Page | Output (in the review's local folder, never in this repo) |
+| Stage | Page | Output (in the review folder, which may sit in the board project when the user asks; never in this repo) |
 |---|---|---|
-| 0 Intake | workflow/00_intake.md | intake.md: scope, revision, variant, requirements, prior findings |
-| 1 Extract | workflow/10_extract.md | facts/ from `python -m boardreview prep`: board model, compare, lint, block candidates, facts.md |
-| 2 Datasheets | workflow/20_datasheets.md | one digest per MPN (schemas/datasheet_digest.schema.json), curve CSVs |
+| 0 Intake | workflow/00_intake.md | intake.md: scope, revision, variant, requirements and their unknowns, prior findings |
+| 1 Extract | workflow/10_extract.md | facts/ from `python -m boardreview prep`: board model, compare, lint, block candidates, facts.md; open gate items |
+| 2 Datasheets | workflow/20_datasheets.md | PDFs, one digest or source_unavailable record per MPN (schemas/datasheet_digest.schema.json), curve CSVs |
 | 3 Blocks | workflow/30_blocks.md | blocks.json and the power tree, each block mapped to a checklist |
 | 4 Checks | workflow/40_checks.md | per-item results with calculator output; candidate findings |
 | 5 Verify | workflow/50_verify.md | each finding CONFIRMED, WRONG or UNVERIFIABLE by a second agent |
@@ -64,13 +64,13 @@ the calculator, the pass criterion, and what to do when the data is not publishe
    worst-case corners: tolerance, temperature, bias, aging. Typical values are labeled typical.
 4. **"Not published" is an answer.** When the documents do not give a value the check needs
    (internal compensation, bead inductance, sink current), say so in the digest. The finding
-   becomes a required footprint, a bench test, or a vendor question. Never guess a value and
-   never drop the check.
+   becomes a required footprint, a bench test, or a vendor question. Never guess a value or a
+   missing requirement (workflow/00_intake.md), and never drop the check. A datasheet nobody
+   could get is source_unavailable, not "not published" (workflow/20_datasheets.md).
 5. **Every finding survives refutation.** A second agent with fresh context tries to break each
-   finding against the sources (workflow/50_verify.md says how in Claude Code, Codex and other
-   agents). WRONG findings are dropped. UNVERIFIABLE
-   findings carry a bench test. High-risk passes get the same treatment: a wrong pass is how
-   real misses happen.
+   finding against the sources (workflow/50_verify.md). WRONG findings are dropped. UNVERIFIABLE
+   findings, which include every claim that rests on missing evidence, carry a bench test.
+   High-risk passes get the same treatment: a wrong pass is how real misses happen.
 6. **Compare with the example envelope.** For every regulator, compare the operating point with
    the datasheet's example circuits for the same compensation mode. Correct pins do not mean a
    stable loop.
@@ -109,6 +109,8 @@ verification. Severity:
 
 - `python -m boardreview prep`: board model, staging views, lint, block candidates and the
   netlist compare in one folder, indexed by `facts.md` (workflow/10_extract.md).
+- `python -m boardreview datasheets`: MPN and datasheet URL fields from the netlist or BOM;
+  `--download` fetches the PDFs into the review folder (workflow/20_datasheets.md).
 - `python -m boardreview validate FILE`: schema check for findings.json (`--schema digest` or
   `--schema board_model` for the others).
 - `python -m boardreview report`: report.html, the artifact page, report.md, ticket drafts and,
@@ -133,13 +135,12 @@ verification. Severity:
 ## Running in different agents
 
 The skill needs a shell, file reads and writes, and a second context for stage 5.
-- A second agent with fresh context: a subagent in Claude Code; a separate `codex exec` run or a
-  fresh session in Codex; elsewhere, a new pass that sees only the finding JSON and the cited
-  sources (workflow/50_verify.md).
-- Work split across agents (one per MPN, one per block) can run in the same ways, or one piece
-  after another in one session. The output files are the same.
-- Datasheet pages are read as images (workflow/20_datasheets.md). Without network access, ask
-  the user for the PDFs; never fill a digest from memory.
+- Fresh context for stage 5, and split work (one agent per MPN or per block): subagents in any
+  agent that has them (Claude Code, Codex); otherwise separate `codex exec` runs or fresh
+  sessions that see only their inputs (workflow/50_verify.md). Split work can also run one piece
+  after another in one session; the output files are the same.
+- Datasheet pages are read as images (workflow/20_datasheets.md). Offline, ask the user once for
+  the PDFs, never again for one they said is unavailable; never fill a digest from memory.
 
 ## Lessons and evals
 

@@ -23,13 +23,14 @@ in Claude Code, OpenAI Codex CLI and any agent that reads `SKILL.md` skills and 
 skill/                    installable skill (see Install)
   SKILL.md                entry point: setup, when to use, workflow, rules, finding format
   agents/openai.yaml      Codex UI metadata
-  workflow/               one page per stage: intake, extract, datasheets, blocks, checks, verify, report
+  workflow/               one page per stage: intake, extract, datasheets, blocks, checks, verify, report;
+                          setup.md for sandboxes and Windows
   checklists/             one page per circuit block (buck, ldo, ferrite/LC, pdn, clocks, resets,
                           io levels, straps, ethernet, csi, xspi memory, protection, sequencing, thermal)
   schemas/                board_model, datasheet_digest, finding, check_result (JSON Schema)
   lessons/                one page per real miss: what, why, which check now catches it
-tools/boardreview/        Python package the skill calls (python -m boardreview prep, report,
-                          verify-fixes, validate)
+tools/boardreview/        Python package the skill calls (python -m boardreview prep, datasheets,
+                          report, verify-fixes, validate)
   model/                  netlist, BOM and pin map from Altium, KiCad and IPC-D-356; 3-way compare;
                           part position, side and sheet from .kicad_pcb, IPC-D-356, KiCad position
                           files and XML
@@ -81,10 +82,18 @@ Claude Code reads `~/.claude/skills/<name>/SKILL.md`; Codex CLI reads
 KiCad boards also need `kicad-cli` (verified with KiCad 10.0.6; skill/workflow/10_extract.md).
 Altium boards need the eda-agent MCP server configured in the agent.
 
+Codex on Windows runs commands as a sandbox user that cannot read per-user installs under
+AppData, so a per-user Python or KiCad does not start there. Install a Python outside AppData
+(`uv python install --install-dir <dir> 3.13`) with boardreview in it, give KiCad reviews
+pre-made exports when kicad-cli lives under AppData, and run Python with `-X utf8` on Windows.
+Steps in skill/workflow/setup.md.
+
 ## Data policy
 
 See docs/CONVENTIONS.md for code and writing rules.
 
-Board files, BOMs, schematics and vendor PDFs are never committed. Evals point to local paths
+A review writes its outputs to a review folder outside this repo. That folder may sit inside the
+board project when the user asks for it there. Board files, BOMs, schematics and vendor PDFs are
+never committed. Evals point to local paths
 listed in `evals/<board>/sources.local.json` (ignored by git). Datasheet digests (our own notes with
 page citations) and curve CSVs from vendor tools may be committed once reviewed.
