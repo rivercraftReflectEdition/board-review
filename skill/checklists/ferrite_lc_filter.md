@@ -13,8 +13,8 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Compute: `calc.lc_tank.lc_filter` gain `|H(f)|` at each fsw, swept across L and C tolerance;
   the corners alone miss a resonance that crosses fsw between them.
 - Pass: `|H(fsw)| < 1` across the sweep and peak gain under 6 dB (default: a gain of 2 on
-  whatever excites the tank, the same as Q of about 2 in FLT-2), or no switcher harmonic, clock
-  or load-step edge reaches the peak frequency (list them).
+  whatever excites the tank, about a true Q of 2 in FLT-2 when the tank is lightly damped), or no
+  switcher harmonic, clock or load-step edge reaches the peak frequency (list them).
 - Not published: bead datasheets often give only impedance at 100 MHz. Use the vendor's SPICE or
   S-parameter model. If none, sweep L over a plausible range, including any L that puts f0 on
   an fsw harmonic. A plausible range is an assumption, not a published bound, so the result stays
@@ -23,13 +23,20 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Example: [bead tank at the switching frequency](../lessons/bead-tank-at-switching-frequency.md)
 
 ## FLT-2 Damping
-- Check: `Q = Z0 / R_series` with `Z0 = sqrt(L / C)`, R_series = bead DCR plus capacitor ESR.
+- Check: the true damping Q, `Q = Z0 / R_series` with `Z0 = sqrt(L / C)`, R_series = bead DCR
+  plus capacitor ESR plus any series damping resistor.
 - Why: low-loss beads and ceramics give Q of 10 or more; even off-resonance, any excitation
   near f0 rings.
-- Compute: `calc.lc_tank.lc_filter` with a damper in `dampers`: series R-C across the output,
-  `Rd ~ Z0`, `Cd >= 3 C`; `calc.lc_tank.damping_options` gives Rd for a chosen Cd.
-- Pass: Q <= 2 with the damper or a lossy element fitted (default: peak gain about 6 dB and a
-  ring that dies in a few cycles; tighten it when the load's ripple budget needs it).
+- Compute: `calc.lc_tank.lc_filter` gives Z0 (`r0`) and the peak gain; compute Q from Z0 and
+  R_series as above. A Q read from the peak gain, `10^(peak/20)`, is only a proxy: for a series
+  RLC the peak is `Q / sqrt(1 - 1 / (4 Q^2))`, within 15 percent of Q for Q of 1 and above, and
+  0 dB for any Q below 0.7, so an overdamped tank with a true Q of 0.1 still shows a proxy of 1.
+  Report the true Q and quote the proxy only as peak gain. Damper: `calc.lc_tank.lc_filter` with
+  a series R-C across the output in `dampers`, `Rd ~ Z0`, `Cd >= 3 C`;
+  `calc.lc_tank.damping_options` gives Rd for a chosen Cd.
+- Pass: true Q <= 2. With an R-C damper, where Q has no simple form, peak gain under 6 dB
+  instead (default: a ring that dies in a few cycles; tighten it when the load's ripple budget
+  needs it).
 - Example: [bead tank at the switching frequency](../lessons/bead-tank-at-switching-frequency.md)
 
 ## FLT-3 Bead DC bias and rating
@@ -45,7 +52,8 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Pass: the load's minimum supply met at the worst corner.
 
 ## FLT-5 Ring from load steps
-- Check: a load step excites the tank; ring amplitude about `dI * Z0`, decay `2 Q / (2 pi f0)`.
+- Check: a load step excites the tank; ring amplitude about `dI * Z0`, decay `2 Q / (2 pi f0)`
+  with the true Q from FLT-2, not the peak-gain proxy.
 - Why: digital loads on a filtered rail (PLLs, internal regulators) step with microsecond edges.
 - Compute: `calc.lc_tank.lc_filter` for Z0 (`r0`); `sim.setups.run_load_step` when the load
   profile matters.

@@ -7,7 +7,8 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 
 ## BR-1 Operating point inside the example envelope
 - Check: compare VIN range, VOUT, duty, fsw, L, effective COUT at bias, compensation mode and
-  light-load mode with the datasheet's example circuits for the same compensation mode.
+  light-load mode with the datasheet's example circuits for the same compensation mode and
+  output setting (an adjustable example with a Cff is not the loop of a fixed-output variant).
 - Why: an internally compensated loop is only validated near the vendor's examples. Correct pins
   and a "datasheet-prescribed" compensation tie say nothing about margin at your operating point.
 - Compute: `calc.buck.duty_cycle` at both VIN extremes; `calc.mlcc_bias.mlcc_effective` for COUT;
@@ -40,13 +41,23 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Example: [simulation setup errors](../lessons/simulation-setup-errors.md)
 
 ## BR-3 Rework options for a loop paper cannot settle
-- Check: a DNP Cff footprint across the top feedback resistor; a 0 ohm plus DNP R-C on the
-  compensation pin when the part can take external compensation; an injection point (0 ohm or
-  10 to 50 ohm pad in series with the top feedback resistor).
-- Why: without footprints a margin problem found on the bench becomes tack-soldered rework.
+- Check: adjustable output (external divider): a DNP Cff footprint across the top feedback
+  resistor; a 0 ohm plus DNP R-C on the compensation pin when the part can take external
+  compensation; an injection point (0 ohm or 10 to 50 ohm pad in series with the top feedback
+  resistor). Fixed output (the divider is inside the part, FB or sense ties straight to the
+  output): no Cff, since there is no top resistor to put it across; do not copy an adjustable
+  example's Cff. The COMP footprint still applies if the part has a COMP pin. Instead of the
+  feedback injection point, check for one the vendor approves (a series pad in the sense line
+  only where the datasheet or the vendor allows it) or, failing that, probe access for a
+  load-step test: output and ground test points next to the output capacitor.
+- Why: without footprints a margin problem found on the bench becomes tack-soldered rework. On a
+  fixed-output part, a resistor added in the sense line moves VOUT through the internal divider
+  current and can change the loop, so only a vendor-approved point counts.
 - Compute: `calc.loop.cff_lead` for the Cff zero `1/(2 pi R_top Cff)` and pole
-  `1/(2 pi (R_top||R_bot) Cff)`.
-- Pass: all three present whenever BR-2 is not a measured pass.
+  `1/(2 pi (R_top||R_bot) Cff)` (adjustable output only).
+- Pass: when BR-2 is not a measured pass, all three present on an adjustable output. On a fixed
+  output, a vendor-approved injection point, or load-step probe access with the loop left
+  unknown and a bench load step in the test plan.
 - Example: [loop out of envelope](../lessons/loop-out-of-example-envelope.md)
 
 ## BR-4 Large-signal slew headroom
