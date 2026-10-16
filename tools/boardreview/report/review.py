@@ -74,7 +74,7 @@ def is_question(f: dict) -> bool:
 
 UNKNOWN_REASONS = {"no_datasheet": "No datasheet", "no_model": "No model", "needs_bench": "Needs bench",
                    "other": "Other"}
-_DOC = r"(?:datasheets?|data sheets?|digests?|documents?|pdfs?|sources?)"
+_DOC = r"(?:datasheets?|data sheets?|digests?|documents?|pdfs?|vendor sources?|module guides?|app notes?)"
 _NO_DOC = re.compile(rf"\b(?:no|without|missing|absent|unavailable|lacks?)\b[^.;]{{0,40}}\b{_DOC}\b|"
                      rf"\b{_DOC}\b[^.;]{{0,40}}\b(?:unavailable|absent|missing|not (?:supplied|available|provided|"
                      r"given|found))\b", re.I)
@@ -88,8 +88,7 @@ _BENCH = re.compile(r"\bbench\b|\bmeasur", re.I)
 def unknown_reason(check: dict) -> str:
     """Why an unknown check could not run: no_datasheet, no_model, needs_bench or other."""
     nps = check.get("not_published", [])
-    text = " ".join([check.get("reason", ""), check.get("summary", "")]
-                    + [f"{n.get('item', '')} {n.get('searched', '')}" for n in nps])
+    text = " ".join([check.get("reason", ""), check.get("summary", "")] + [n.get("item", "") for n in nps])
     cons = {n.get("consequence") for n in nps}
     if _NO_DOC.search(text) or "vendor_question" in cons:
         return "no_datasheet"

@@ -385,8 +385,8 @@ def power_tree_fold(ctx) -> str:
         flags[i] = [f for f in ctx.findings if refs_of[f["id"]] & set(parts) or out in f.get("nets", [])]
 
     def flag_html(found: list[dict]) -> str:
-        return "".join(f'<a class="flag {e(f.get("severity", "note"))}" href="#{e(f["id"])}">{e(f["id"])}</a>'
-                       for f in found)
+        cls = {f["id"]: "question" if rv.is_question(f) else e(f.get("severity", "note")) for f in found}
+        return "".join(f'<a class="flag {cls[f["id"]]}" href="#{e(f["id"])}">{e(f["id"])}</a>' for f in found)
     children: dict[str, list[int]] = {}
     for i, (src, _, _, _) in enumerate(edges):
         children.setdefault(src, []).append(i)

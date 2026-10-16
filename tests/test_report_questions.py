@@ -108,3 +108,8 @@ def test_unknown_reason_categories():
     assert rv.unknown_reason({"reason": "Value not published", "not_published": [
         {"item": "a", "consequence": "bench_test"}]}) == "needs_bench"
     assert rv.unknown_reason({"reason": "Mystery."}) == "other"
+    erc = {"reason": "Compiler messages and ERC are unavailable.", "bench_test": "Run ERC.", "not_published": [
+        {"item": "ERC report", "searched": "supplied files; unavailable sources listed per MPN in digests",
+         "consequence": "bench_test"}]}
+    assert rv.unknown_reason(erc) == "needs_bench"
+    assert rv.unknown_reason({"reason": "Load and source impedance are unavailable.", "bench_test": "x"}) == "needs_bench"
