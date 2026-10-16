@@ -5,6 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 SEVERITY_ORDER = {"error": 0, "warning": 1, "info": 2}
+NEEDS = "needs datasheet confirmation"
+
+
+def needs_datasheet(reason: str, **evidence: object) -> dict[str, object]:
+    """Evidence for a pin only the datasheet can settle (NC, reserved, unused output, DNP option), with the reason."""
+    return {"needs": "datasheet confirmation", "reason": reason, **evidence}
 
 
 class Skip(Exception):
@@ -45,6 +51,7 @@ class LintReport:
         if self.skipped:
             lines += ["Skipped:"] + [f"- {k}: {v}" for k, v in self.skipped.items()] + [""]
         for f in self.findings:
-            lines.append(f"- **{f.severity}** `{f.check}`: {f.summary}")
+            why = f" (why: {f.evidence['reason']})" if f.evidence.get("reason") else ""
+            lines.append(f"- **{f.severity}** `{f.check}`: {f.summary}{why}")
         lines.append("")
         return "\n".join(lines)

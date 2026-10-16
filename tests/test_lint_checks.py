@@ -104,7 +104,7 @@ def test_open_nc_and_reserved_pins_need_datasheet_confirmation():
     assert "tied to ground" in found[0].summary
 
 
-def test_open_power_pin_is_an_error_even_with_a_no_connect_flag():
+def test_open_power_pin_is_an_error_even_with_a_no_connect_flag_and_an_nc_name_is_not():
     m = BoardModel(pin_list_complete=True)
     m.add_pin("U1", "1", "VIN", "VIN", "power_in")
     m.add_pin("U1", "2", None, "VSS", "power_in", no_connect=True)
@@ -112,7 +112,8 @@ def test_open_power_pin_is_an_error_even_with_a_no_connect_flag():
     m.add_pin("U1", "4", None, "PA3", "bidirectional", no_connect=True)
     m.finalize()
     found = _run(pins.unconnected_ic_pins, m)
-    assert [(f.severity, f.pins) for f in found] == [("error", ["U1.2"]), ("error", ["U1.3"]), ("info", ["U1.4"])]
+    assert [(f.severity, f.pins) for f in found] == [("error", ["U1.2"]), ("warning", ["U1.3", "U1.4"])]
+    assert "typed power" in found[1].evidence["reason"]
 
 
 def test_bare_in_pin_is_not_treated_as_a_supply():
