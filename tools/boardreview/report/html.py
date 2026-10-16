@@ -23,6 +23,11 @@ EVIDENCE_KIND = {"netlist": "Netlist", "bom": "BOM", "variant": "Variant", "pcb"
                  "bench": "Bench", "lint": "Lint", "compare": "Compare", "design_notes": "Notes"}
 
 
+def fonts(ctx) -> str:
+    """The Google Fonts links when asked for (--google-fonts); otherwise nothing, and the CSS falls back to system fonts."""
+    return FONTS + "\n" if getattr(ctx, "fonts", False) else ""
+
+
 def e(text) -> str:
     return html.escape("" if text is None else str(text), quote=True)
 
@@ -367,21 +372,12 @@ def changes_fold(ctx) -> str:
 
 
 def power_tree_fold(ctx) -> str:
-    edges = []
-    for b in ctx.facts.blocks:
-        roles = b.get("roles", {})
-        if b.get("kind") == "switching_regulator":
-            src = (roles.get("input") or ["input not found"])[0]
-            parts = roles.get("controller", []) + roles.get("inductor", [])
-            label = f"{roles['controller'][0]} buck, {roles.get('inductor', ['?'])[0]}"
-            edges.append((src, roles.get("output", ["?"])[0], label, parts))
-        elif b.get("kind") in ("ferrite_filter", "lc_filter"):
-            kind = "bead" if b["kind"] == "ferrite_filter" else "LC filter"
-            edges.append((roles.get("upstream", ["?"])[0], roles.get("downstream", ["?"])[0],
-                          f"{roles['element'][0]} {kind}", roles.get("element", [])))
+    edges = rv.power_edges(ctx.tree)
+    where = ctx.tree_source or "prep's blocks.json"
     if not edges:
-        return fold("Power tree", "No converters or filters in blocks.json",
-                    '<p class="small">blocks.json lists no switching regulators or series filters.</p>', "br-power")
+        return fold("Power tree", f"No converters, switches or filters in {where}",
+                    f'<p class="small">{e(where)} lists no regulators, load switches or series filters.</p>',
+                    "br-power")
     refs_of = {f["id"]: set(rv.expand(f.get("parts"))) | {p.partition(".")[0] for p in f.get("pins", [])}
                for f in ctx.findings}
     flags: dict[int, list[dict]] = {}
@@ -411,12 +407,18 @@ def power_tree_fold(ctx) -> str:
     root_flags = {r: [f for f in ctx.findings if r in f.get("nets", [])] for r in roots}
     body = '<ul class="tree">' + "".join(f'<li><span class="node"><span class="rail">{e(r)}</span>'
                                           f'{flag_html(root_flags[r])}</span>{node(r, {r})}</li>' for r in roots) + "</ul>"
-    body += '<p class="small">Converters and filters from blocks.json. Flags are findings on the part or the rail.</p>'
+    if ctx.tree_source:
+        body += (f'<p class="small">Regulators, switches and filters from the {e(ctx.tree_source)}. Flags are findings '
+                 "on the part or the rail.</p>")
+    else:
+        body += ('<p class="small">Regulators, switches and filters from prep\'s blocks.json. Their directions are a '
+                 "heuristic from names and pins; give the reviewed tree with --power-tree. Flags are findings on the "
+                 "part or the rail.</p>")
     busiest = max(flags, key=lambda i: len(flags[i]))
     n = len(flags[busiest])
     flagged = {f["id"] for v in list(flags.values()) + list(root_flags.values()) for f in v}
     summary = (f"{edges[busiest][2].split(' ')[0]} carries {words(n)} findings" if n >= 2 else
-               f"{len(edges)} converters and filters, {len(flagged)} {plural(len(flagged), 'finding')} on them")
+               f"{len(edges)} regulators, switches and filters, {len(flagged)} {plural(len(flagged), 'finding')} on them")
     return fold("Power tree", summary, body, "br-power")
 
 
@@ -486,8 +488,9 @@ def coverage_fold(ctx) -> str:
         return fold("Coverage", f"{total} {plural(total, 'check')} · {unknown} could not run", body, "br-coverage")
     kinds: dict[str, list[str]] = {}
     for b in ctx.facts.blocks:
-        kinds.setdefault(b.get("kind", "?").replace("_", " "), []).append(b.get("name", ""))
-    rows = [[e(k.capitalize()), e("; ".join(v))] for k, v in kinds.items()]
+        kind = str(b.get("kind") or b.get("checklist") or "?")
+        kinds.setdefault(rv.BLOCK_NAME.get(kind) or kind.replace("_", " ").capitalize(), []).append(str(b.get("name", "")))
+    rows = [[e(k), e("; ".join(v))] for k, v in kinds.items()]
     body = (table(rows, ["Block", "Found"]) if rows else "") + \
         '<p class="small">No checks.json was given, so the checks run per block are not listed.</p>'
     return fold("Coverage", f"{len(ctx.facts.blocks)} blocks found · checks not listed", body, "br-coverage")
@@ -528,6 +531,22 @@ def refuted_fold(ctx) -> str:
             for f in ctx.refuted]
     return fold("Refuted", f"{len(rows)} {plural(len(rows), 'finding')} dropped by the challenge", table(rows),
                 "br-refuted")
+
+
+def supporting_fold(ctx, artifact: bool = False) -> str:
+    """Links to the verification, source availability, feedback and review files found beside findings.json."""
+    if not ctx.supporting:
+        return ""
+    groups: dict[str, list[str]] = {}
+    for group, name, href in ctx.supporting:
+        link = f'<span class="mono">{e(name)}</span>' if artifact else f'<a href="{e(href)}">{e(name)}</a>'
+        groups.setdefault(group, []).append(link)
+    rows = [[e(g), ", ".join(links)] for g, links in groups.items()]
+    note = ("These files stay in the review folder; the published page names them without links." if artifact
+            else "Links are relative to this page, so keep the review folder together.")
+    n = len(ctx.supporting)
+    return fold("Supporting files", f"{n} {plural(n, 'file')}: " + ", ".join(g.lower() for g in groups),
+                table(rows, ["What", "Files"]) + f'<p class="small">{note}</p>', "br-supporting")
 
 
 def outputs_fold(ctx) -> str:
@@ -587,7 +606,8 @@ def render(ctx, artifact: bool = False) -> str:
 <div class="folds">
 {chr(10).join(x for x in (bench_fold(ctx), changes_fold(ctx) if ctx.changes else "", power_tree_fold(ctx),
                           not_published_fold(ctx), firmware_fold(ctx), known_good_fold(ctx), coverage_fold(ctx),
-                          unknown_fold(ctx), refuted_fold(ctx), outputs_fold(ctx)) if x)}
+                          unknown_fold(ctx), refuted_fold(ctx), supporting_fold(ctx, artifact),
+                          outputs_fold(ctx)) if x)}
 </div>
 <p class="small">Written by python -m boardreview report from {e(ctx.findings_name)} and {e(ctx.facts.path.name)}. Findings hash {e(ctx.hash)}.</p>
 </div>"""
@@ -596,7 +616,7 @@ def render(ctx, artifact: bool = False) -> str:
     css = asset("report.css")
     tail = f'<script type="application/json" id="br-data">{data}</script>\n<script>\n{script}</script>\n'
     if artifact:
-        return f"<title>{e(title_text)}</title>\n{FONTS}\n<style>\n{css}</style>\n{body}\n{tail}"
+        return f"<title>{e(title_text)}</title>\n{fonts(ctx)}<style>\n{css}</style>\n{body}\n{tail}"
     return (f'<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n'
             f'<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n'
-            f"<title>{e(title_text)}</title>\n{FONTS}\n<style>\n{css}</style>\n</head>\n<body>\n{body}\n{tail}</body>\n</html>\n")
+            f"<title>{e(title_text)}</title>\n{fonts(ctx)}<style>\n{css}</style>\n</head>\n<body>\n{body}\n{tail}</body>\n</html>\n")

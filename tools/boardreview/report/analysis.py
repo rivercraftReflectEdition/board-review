@@ -7,7 +7,7 @@ import re
 from boardreview.model.board import natural_key
 from boardreview.report import plain
 from boardreview.report import review as rv
-from boardreview.report.html import FONTS, asset, plural
+from boardreview.report.html import asset, fonts, plural
 from boardreview.report.plain import e, word
 
 ORDER = ("fail", "marginal", "unknown", "pass", "not_applicable")
@@ -128,5 +128,5 @@ def render(ctx, report_href: str = "report.html") -> str:
 </div>"""
     return (f'<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n'
             f'<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n'
-            f"<title>{e(ctx.board)} Analysis</title>\n{FONTS}\n<style>\n{asset('report.css')}</style>\n</head>\n<body>\n"
+            f"<title>{e(ctx.board)} Analysis</title>\n{fonts(ctx)}<style>\n{asset('report.css')}</style>\n</head>\n<body>\n"
             f"{body}\n</body>\n</html>\n")

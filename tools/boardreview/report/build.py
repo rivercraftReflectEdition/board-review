@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import os
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -37,6 +38,10 @@ class Ctx:
     pointers: dict[str, list[dict]] = field(default_factory=dict)
     tickets: list[tuple[str, str]] = field(default_factory=list)
     analysis_href: str = ""
+    tree: list[dict] = field(default_factory=list)
+    tree_source: str = ""
+    supporting: list[tuple[str, str, str]] = field(default_factory=list)
+    fonts: bool = False
 
 
 def now() -> str:
@@ -47,6 +52,14 @@ def write(path: Path, text: str) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8", newline="\n")
     return path
+
+
+def _rel(path: Path, base: Path) -> str:
+    """Path relative to base with forward slashes, or a file URI when no relative path exists (another drive)."""
+    try:
+        return os.path.relpath(path, base).replace(os.sep, "/")
+    except ValueError:
+        return path.as_uri()
 
 
 def _with_findings(raw, findings: list[dict]):
@@ -98,6 +111,18 @@ def load(args: argparse.Namespace) -> tuple[Ctx, object, list[dict]]:
             ctx.checks_of.setdefault(c["finding"], []).append(c["id"])
     ctx.pointers = {f["id"]: html.pointers(f, facts) for f in active}
     ctx.analysis_href = "analysis.html" if args.detail == "full" else ""
+    ctx.fonts = bool(getattr(args, "google_fonts", False))
+    if getattr(args, "blocks", None):
+        facts.blocks = rv.load_list(args.blocks)[1]
+    if getattr(args, "power_tree", None):
+        ctx.tree, ctx.tree_source = rv.load_list(args.power_tree)[1], f"reviewed {Path(args.power_tree).name}"
+    elif getattr(args, "blocks", None):
+        ctx.tree, ctx.tree_source = facts.blocks, f"reviewed {Path(args.blocks).name}"
+    else:
+        ctx.tree = facts.blocks
+    review, out = Path(args.findings).resolve().parent, Path(args.out).resolve()
+    ctx.supporting = [(group, _rel(p, review), _rel(p, out))
+                      for group, p in rv.supporting_files(review, out, getattr(args, "supporting", None) or [])]
     ctx.tickets = [(f"{f['id']}.md", markdown.ticket(f, ctx)) for f in active]
     return ctx, raw, findings
 
@@ -170,6 +195,13 @@ def add_parsers(sub) -> None:
     r.add_argument("--pos-units", choices=["mm", "in"], default="", help="units of a position CSV that does not say")
     r.add_argument("--detail", choices=["short", "full"], default="short",
                    help="full also writes analysis.html with every check")
+    r.add_argument("--power-tree", help="reviewed power_tree.json (a list of edges, or {edges: [...]}, each with part,"
+                                        " kind, input, output); replaces the tree prep guessed from blocks.json")
+    r.add_argument("--blocks", help="reviewed blocks.json (a list, or {blocks: [...]}); replaces prep's blocks.json")
+    r.add_argument("--supporting", nargs="+", default=[], metavar="FILE",
+                   help="more files to link in the Supporting files fold, beside the ones found next to --findings")
+    r.add_argument("--google-fonts", action="store_true",
+                   help="load the display fonts from Google Fonts; by default the pages use system fonts and work offline")
     r.add_argument("--out", required=True)
     v = sub.add_parser("verify-fixes", help="mark verified_in_data on findings marked fixed, from two facts folders")
     v.add_argument("--findings", required=True)

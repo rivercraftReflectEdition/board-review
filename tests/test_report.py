@@ -117,7 +117,7 @@ def test_html_has_every_section_and_every_finding(full):
         else:
             assert f["id"] not in ids
     assert "Not ready to build. Two blockers." in text
-    assert "fonts.googleapis.com" in text and '"IBM Plex Sans", "Segoe UI"' in text
+    assert "fonts.googleapis.com" not in text and '"IBM Plex Sans", "Segoe UI"' in text
     assert "prefers-color-scheme: dark" in text and "max-width: 560px" in text
 
 

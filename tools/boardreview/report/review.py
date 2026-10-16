@@ -47,7 +47,7 @@ def split_file(data) -> tuple[dict, list]:
     """Header and list from a file that is a list, or a dict with the list under 'findings', 'checks' or 'steps'."""
     if isinstance(data, list):
         return {}, data
-    for key in ("findings", "checks", "steps", "items"):
+    for key in ("findings", "checks", "steps", "items", "blocks", "edges"):
         if isinstance(data.get(key), list):
             return {k: v for k, v in data.items() if k != key}, data[key]
     return dict(data), []
@@ -178,6 +178,87 @@ def _source_files(facts: Facts) -> list[Path]:
                 out.append(cand)
                 break
     return out
+
+
+EDGE_KIND = {"switching_regulator": "buck", "buck_regulator": "buck", "buck": "buck", "ldo": "LDO",
+             "linear_regulator": "LDO", "load_switch": "load switch", "switch": "load switch", "ferrite_filter": "bead",
+             "ferrite_lc_filter": "bead", "ferrite": "bead", "bead": "bead", "lc_filter": "LC filter",
+             "diode": "diode", "fuse": "fuse"}
+
+
+def _first(v) -> str:
+    if isinstance(v, list):
+        return str(v[0]) if v else ""
+    return str(v or "")
+
+
+def _edge_from_roles(kind: str, roles: dict) -> tuple[str, str, str, list[str]] | None:
+    if kind == "switching_regulator" and roles.get("controller"):
+        ind = _first(roles.get("inductor")) or "?"
+        return (_first(roles.get("input")) or "input not found", _first(roles.get("output")) or "?",
+                f"{roles['controller'][0]} buck, {ind}", roles["controller"] + roles.get("inductor", []))
+    if kind in ("ferrite_filter", "lc_filter") and roles.get("element"):
+        return (_first(roles.get("upstream")) or "?", _first(roles.get("downstream")) or "?",
+                f"{roles['element'][0]} {EDGE_KIND[kind]}", list(roles["element"]))
+    if kind in ("ldo", "load_switch") and roles.get("device"):
+        return (_first(roles.get("input")) or "input not found", _first(roles.get("output")) or "?",
+                f"{roles['device'][0]} {EDGE_KIND[kind]}", list(roles["device"]))
+    return None
+
+
+def power_edges(items: list) -> list[tuple[str, str, str, list[str]]]:
+    """(input, output, label, parts) per edge, from prep blocks (roles) or reviewed edges and blocks (input, output)."""
+    out = []
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        if isinstance(it.get("roles"), dict):
+            edge = _edge_from_roles(str(it.get("kind", "")), it["roles"])
+            if edge:
+                out.append(edge)
+            continue
+        e = it.get("operating_point") if isinstance(it.get("operating_point"), dict) else it
+        src = _first(e.get("input") or e.get("from") or e.get("source"))
+        dst = _first(e.get("output") or e.get("to") or e.get("load"))
+        if not src or not dst:
+            continue
+        part = _first(e.get("part") or it.get("part") or it.get("name") or it.get("instance"))
+        kind = str(e.get("kind") or it.get("kind") or it.get("checklist") or "")
+        label = f"{part} {EDGE_KIND.get(kind, kind.replace('_', ' '))}".strip()
+        out.append((src, dst, label, [str(p) for p in (it.get("parts") or e.get("parts") or [part])]))
+    return out
+
+
+SUPPORTING = (
+    ("Verification", ("verify/*", "verification*", "*refutation*", "validation*")),
+    ("Source availability", ("datasheets.md", "datasheets.json", "digests/source_index.json",
+                             "digests/unavailable_sources.json", "*source_availability*", "sources.local.json")),
+    ("Feedback", ("*feedback*", "digests/*feedback*")),
+    ("Review files", ("intake.md", "power_tree.json", "blocks.json", "domains.json", "straps.json", "bench.json",
+                      "known_good.json", "checks.json", "calculations/README.md")),
+)
+SUPPORTING_SUFFIXES = {".json", ".md", ".csv", ".txt", ".html"}
+
+
+def supporting_files(review: Path, out: Path, extra: list[str] = ()) -> list[tuple[str, Path]]:
+    """(group, file) for verification, source availability, feedback and review files in the review folder."""
+    review, out = review.resolve(), out.resolve()
+    found: list[tuple[str, Path]] = []
+    seen: set[Path] = set()
+    for group, patterns in SUPPORTING:
+        for pat in patterns:
+            for p in sorted(review.glob(pat)):
+                p = p.resolve()
+                if p in seen or not p.is_file() or p.suffix.lower() not in SUPPORTING_SUFFIXES or out in p.parents:
+                    continue
+                seen.add(p)
+                found.append((group, p))
+    for x in extra:
+        p = Path(x).resolve()
+        if p.is_file() and p not in seen:
+            seen.add(p)
+            found.append(("Other", p))
+    return found
 
 
 @dataclass
