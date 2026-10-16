@@ -100,11 +100,38 @@ def _feedback(g: Graph, out: str, ic: str) -> dict[str, list[str]]:
             fit_top, dnp_top = fitted_split(g, tops)
             fit_bottom, dnp_bottom = fitted_split(g, bottom)
             fit_cff, dnp_cff = fitted_split(g, cff)
-            return {"feedback_top": fit_top, "feedback_bottom": fit_bottom, "feedback_node": [mid], "fb_pins": fb_pins,
-                    "feedforward_cap": fit_cff, "feedback_top_dnp": dnp_top, "feedback_bottom_dnp": dnp_bottom,
-                    "feedforward_cap_dnp": dnp_cff}
+            zero = bool(fit_top) and not fit_bottom and all(g.model.components[r].value_si == 0 for r in fit_top)
+            return {("feedback_direct" if zero else "feedback_top"): fit_top, "feedback_bottom": fit_bottom,
+                    "feedback_node": [mid], "fb_pins": fb_pins, "feedforward_cap": fit_cff,
+                    "feedback_top_dnp": dnp_top, "feedback_bottom_dnp": dnp_bottom, "feedforward_cap_dnp": dnp_cff}
     direct = [p.key for p in g.pins_on(out, ic) if naming.pin_is(p.name, "fb")]
     return {"fb_pins": direct} if direct else {}
+
+
+_FIXED_MPN = re.compile(r"[-_](\d{1,2}\.\d{1,2})(?![\d.])|[-_](\d{1,2})V(\d{0,2})(?!\d)", re.I)
+
+
+def fixed_from_mpn(mpn: str) -> float | None:
+    """Output voltage a fixed-output MPN spells out (LM3671MF-3.3/NOPB, AP2112K-1.8TRG1, LDO-3V3), else None."""
+    m = _FIXED_MPN.search(mpn or "")
+    if not m:
+        return None
+    v = float(m.group(1)) if m.group(1) else float(f"{m.group(2)}.{m.group(3) or '0'}")
+    return v if 0.5 <= v <= 60 else None
+
+
+def _direct_note(g: Graph, ic: str, fb: dict[str, list[str]], roles: dict[str, list[str]]) -> str:
+    """Note for FB on the output with no divider: expected when the MPN says fixed, otherwise UNSURE."""
+    via = fb.get("feedback_direct", [])
+    path = f" through {', '.join(describe(g, r) for r in via)}" if via else ""
+    pins = ", ".join(fb.get("fb_pins", []))
+    mpn = g.model.components[ic].mpn
+    volts = fixed_from_mpn(mpn)
+    if volts is not None:
+        roles["fixed_output"] = [f"{volts:g} V from MPN {mpn}"]
+        return f"MPN {mpn} reads as a fixed {volts:g} V part, so FB {pins} on the output{path} is expected"
+    return (f"FB {pins} senses the output directly{path}: a fixed-output part needs no divider, an adjustable one "
+            "does; UNSURE until the MPN or the datasheet digest says the output is fixed")
 
 
 def _inputs(g: Graph, ic: str, exclude: set[str]) -> list[str]:
@@ -196,7 +223,10 @@ def find_switching_regulators(g: Graph) -> list[Block]:
                 notes.append(f"{ref} is DNP: this converter is not in the build")
         if boot_dnp and not boot:
             notes.append(f"bootstrap {', '.join(boot_dnp)} is DNP: no fitted bootstrap path from {sw} to {ic}")
-        if fb.get("feedback_node") and not divider:
+        direct = bool(fb.get("feedback_direct")) or bool(fb.get("fb_pins") and not fb.get("feedback_node"))
+        if direct:
+            notes.append(_direct_note(g, ic, fb, roles))
+        elif fb.get("feedback_node") and not divider:
             notes.append(f"feedback divider on {fb['feedback_node'][0]} has no fitted top or bottom leg: "
                          + ", ".join(fb.get("feedback_top_dnp", []) + fb.get("feedback_bottom_dnp", [])) + " DNP")
         if candidates:

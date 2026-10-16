@@ -75,7 +75,7 @@ def _written(out: Path, has_bom: bool, compared: bool, placed: tuple[str, int] |
     blocks = _read(out / "blocks.json")
     kinds = Counter(b["kind"] for b in blocks)
     low = sum(1 for b in blocks if b["confidence"] == "low")
-    edges = sum(kinds[k] for k in ("switching_regulator", "ferrite_filter", "lc_filter"))
+    edges = sum(kinds[k] for k in ("switching_regulator", "ldo", "load_switch", "ferrite_filter", "lc_filter"))
     pinmaps = digest.pin_map_refs(serialize.read_json(out / "board_model.json"))
     rows = [
         ("board_model.json", "parts, pins and nets (skill/schemas/board_model.schema.json)",
@@ -83,7 +83,8 @@ def _written(out: Path, has_bom: bool, compared: bool, placed: tuple[str, int] |
          f"{st['unconnected_pins']} pins with no net; model warnings: {len(model['warnings'])}"),
         ("nets_by_net.md", "every net with its pins", f"{st['nets']} nets"),
         ("nets_by_component.md", "every part with the net on each pin", f"{st['components']} components"),
-        ("power_tree.md", "rails with evidence, converters and filters, grounds", f"{edges} converters and filters"),
+        ("power_tree.md", "rails with evidence, regulators, switches and filters, grounds",
+         f"{edges} regulators, switches and filters"),
         ("pinmaps/", "one pin table per IC, connector and other multi-pin part",
          f"{len(pinmaps)} files"),
         ("lint.md, lint.json", "deterministic netlist and BOM checks",

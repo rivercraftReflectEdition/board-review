@@ -198,9 +198,15 @@ def i2c_role(name: str) -> str:
     return ""
 
 
+_MARKUP = re.compile(r"[~_^]\{([^{}]*)\}")
+
+
 def pin_core(name: str) -> str:
-    """Pin name with active-low marks and KiCad overbar syntax removed, upper case."""
-    s = (name or "").upper().replace("~{", "").replace("}", "")
+    """Pin name with active-low marks and KiCad markup (~{overbar}, _{sub}, ^{super}) removed, upper case."""
+    s = name or ""
+    while _MARKUP.search(s):
+        s = _MARKUP.sub(r"\1", s)
+    s = s.upper().replace("~{", "").replace("}", "")
     return s.strip().lstrip("~/!#*").rstrip("#*")
 
 
