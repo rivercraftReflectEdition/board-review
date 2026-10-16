@@ -13,6 +13,9 @@ from boardreview.calc.lc_tank import Cap
 
 CHAIN = [rf.Stage(20, 1, 0), rf.Stage(-2, 2, 100), rf.Stage(-7, 7, 15), rf.Stage(15, 3, 10)]
 CAPS = [Cap(22e-9, 0.02, 0.4e-9), Cap(100e-12, 0.1, 0.4e-9)]
+MATCH = [rf.Element("L", l_h=50/(2*math.pi*100e6), tolerance_frac=0.1),
+         rf.Element("C", c_f=1/(2*math.pi*100e6*100), tolerance_frac=0.1)]
+MATCH_HZ = np.linspace(80e6, 120e6, 101)
 
 
 def device(reverse=0.05):
@@ -25,6 +28,18 @@ def value(result, key):
 
 
 SAMPLES = {
+    "calc.rf.element_impedance": [
+        lambda: rf.element_impedance("C", [1e6, 1e9], c_f=22e-9, esr_ohm=0.02, esl_h=0.4e-9),
+        lambda: rf.element_impedance("R", [1e6, 1e9], r_ohm=50, z_min_ohm=49, context="worst_case"),
+        lambda: rf.element_impedance("R", [1e6, 1e9], r_ohm=50, z_max_ohm=40),
+        lambda: rf.element_impedance("R", [1e6, 1e9], r_ohm=50, z_max_ohm=60),
+    ],
+    "calc.rf.match_sweep": [
+        lambda: rf.match_sweep("L", MATCH, MATCH_HZ, 50, 100),
+        lambda: rf.match_sweep("L", MATCH, MATCH_HZ, 50, 100, rl_min_db=10, context="worst_case"),
+        lambda: rf.match_sweep("L", MATCH, MATCH_HZ, 50, 100, rl_min_db=40),
+        lambda: rf.match_sweep("L", MATCH, MATCH_HZ, 50, 100, rl_min_db=10),
+    ],
     "calc.rf.cascade": [
         lambda: rf.cascade(CHAIN),
         lambda: rf.cascade(CHAIN, nf_max_db=2, context="worst_case"),
@@ -383,5 +398,143 @@ def test_nominal_values_cannot_pass(make):
     lambda: rf.network_impedance([Cap(0)], 1e6, 1e9), lambda: rf.network_impedance(CAPS, 1e6, 1e9, points_per_decade=1),
     lambda: rf.network_impedance(CAPS, 1e6, 1e9, forbidden_bands_hz=[(2e6, 1e6)])])
 def test_invalid_inputs(make):
+    with pytest.raises(ValueError):
+        make()
+
+
+@pytest.mark.parametrize("c_f,esr_ohm,expected_hz", [(22e-9, 0.02, 53.651e6), (100e-12, 0.1, 795.775e6)])
+def test_element_w32_self_resonances(c_f, esr_ohm, expected_hz):
+    # Plan W32, synthetic ESL 0.4 nH; independently solve wL = 1/(wC).
+    r = rf.element_impedance("C", [1e6, 2e9], c_f=c_f, esr_ohm=esr_ohm, esl_h=0.4e-9)
+    expected = 1 / (2 * math.pi * math.sqrt(0.4e-9 * c_f))
+    assert value(r, "srf_hz") == pytest.approx(expected_hz, rel=2e-5)
+    assert value(r, "srf_hz") == pytest.approx(expected, rel=1e-12)
+    assert value(r, "z_min_ohm") == pytest.approx(esr_ohm, abs=1e-12)
+    assert expected == pytest.approx(r.plots[0].markers[0].x, rel=1e-12)
+
+
+@pytest.mark.parametrize("kind,params", [("R", dict(r_ohm=47)), ("L", dict(l_h=10e-9)),
+                                       ("C", dict(c_f=100e-12))])
+def test_element_complex_curve_against_series_parallel_equations(kind, params):
+    f = np.array([10e6, 100e6, 1e9])
+    r = rf.element_impedance(kind, f, **params, esr_ohm=0.2, esl_h=0.5e-9, c_parallel_f=0.3e-12)
+    for i, frequency in enumerate(r.plots[0].x):
+        w = 2 * math.pi * frequency
+        z = params.get("r_ohm", 0) + 0.2 + 1j*w*(params.get("l_h", 0) + 0.5e-9)
+        if "c_f" in params:
+            z += 1/(1j*w*params["c_f"])
+        z = 1 / (1/z + 1j*w*0.3e-12)
+        assert r.plots[0].series[0].y[i] == pytest.approx(abs(z), rel=1e-12)
+        assert r.plots[0].series[1].y[i] == pytest.approx(z.real, abs=1e-11)
+        assert r.plots[0].series[2].y[i] == pytest.approx(z.imag, abs=1e-11)
+
+
+def test_element_inductor_parallel_resonance_and_damping():
+    r = rf.element_impedance("L", [1e6, 1e9], l_h=10e-9, esr_ohm=2, c_parallel_f=1e-12)
+    expected = math.sqrt(1/(10e-9*1e-12) - (2/10e-9)**2) / (2*math.pi)
+    assert value(r, "srf_hz") == pytest.approx(expected, rel=1e-12)
+    damped = rf.element_impedance("L", [1e6, 1e9], l_h=10e-9, esr_ohm=200, c_parallel_f=1e-12)
+    assert math.isinf(value(damped, "srf_hz"))
+    assert value(damped, "resonance_count") == 0
+
+
+@pytest.mark.parametrize("limits,context,verdict", [({}, "worst_case", Verdict.INFO),
+    ({"z_min_ohm": 49, "z_max_ohm": 51}, "worst_case", Verdict.PASS),
+    ({"z_min_ohm": 51}, "worst_case", Verdict.FAIL),
+    ({"z_max_ohm": 49}, "worst_case", Verdict.FAIL),
+    ({"z_min_ohm": 49}, "nominal", Verdict.UNKNOWN)])
+def test_element_limits_and_context(limits, context, verdict):
+    r = rf.element_impedance("R", [1e6, 1e9], r_ohm=50, context=context, **limits)
+    assert r.verdict is verdict
+    assert plain_problems(r) == []
+
+
+def test_match_l_closed_form_conjugate_match_and_reverse():
+    # Q=sqrt(100/50-1)=1; Xseries=Q*50; Xshunt=100/Q, at 100 MHz.
+    parts = [rf.Element("L", l_h=50/(2*math.pi*100e6)), rf.Element("C", c_f=1/(2*math.pi*100e6*100))]
+    forward = rf.match_sweep("L", parts, [100e6], 50, 100, rl_min_db=60, context="worst_case")
+    reverse = rf.match_sweep("L", parts[::-1], [100e6], 100, 50, shunt_first=True, rl_min_db=60, context="worst_case")
+    for r in (forward, reverse):
+        assert value(r, "rl_min_db") > 300
+        assert r.verdict is Verdict.PASS
+
+
+def test_match_l_corners_against_independent_two_element_solution():
+    r = rf.match_sweep("L", MATCH, MATCH_HZ, 50, 100)
+    cases = []
+    for lf in (0.9, 1, 1.1):
+        for cf in (0.9, 1, 1.1):
+            if (lf == 1) != (cf == 1):
+                continue
+            s = 2j*math.pi*MATCH_HZ
+            zl = s*MATCH[0].l_h*lf
+            yc = s*MATCH[1].c_f*cf
+            zin = zl + 1/(1/100 + yc)
+            zout = 1/(yc + 1/(50 + zl))
+            with np.errstate(divide="ignore"):
+                cases.append([-20*np.log10(abs((zin-50)/(zin+50))),
+                              -20*np.log10(abs((zout-100)/(zout+100)))])
+    curves = np.array(cases)
+    assert value(r, "rl_min_db") == pytest.approx(float(curves.min()), abs=1e-10)
+    corners = curves[[0, 1, 3, 4]]
+    expected_spread = np.max(corners.max(axis=0) - corners.min(axis=0))
+    assert value(r, "spread_max_db") == pytest.approx(expected_spread, abs=1e-9)
+    assert value(r, "corner_count") == 4
+    assert value(r, "worst_hz") in (80e6, 120e6)
+
+
+@pytest.mark.parametrize("topology", ["pi", "T"])
+def test_match_w29_six_db_resistor_pads(topology):
+    # W29 values, independently synthesized from the attenuation voltage ratio K.
+    k = 10**(6/20)
+    vals = [50*(k+1)/(k-1), 50*(k*k-1)/(2*k), 50*(k+1)/(k-1)] if topology == "pi" else \
+           [50*(k-1)/(k+1), 100*k/(k*k-1), 50*(k-1)/(k+1)]
+    r = rf.match_sweep(topology, [rf.Element("R", r_ohm=x) for x in vals], [1e6, 1e9], 50, 50,
+                       rl_min_db=60, context="worst_case")
+    assert value(r, "rl_min_db") > 300
+    assert value(r, "spread_max_db") == 0
+    assert r.verdict is Verdict.PASS
+    json.dumps(r.to_dict(), allow_nan=False)
+
+
+def test_match_complex_source_and_load():
+    parts = [rf.Element("L", l_h=10e-9), rf.Element("C", c_f=10e-12)]
+    r = rf.match_sweep("L", parts, [100e6], 50+10j, 100-20j)
+    w = 2*math.pi*100e6
+    zin = 1j*w*10e-9 + 1/(1/(100-20j) + 1j*w*10e-12)
+    zout = 1/(1j*w*10e-12 + 1/(50+10j+1j*w*10e-9))
+    expected = min(-20*math.log10(abs((zin-(50-10j))/(zin+50+10j))),
+                   -20*math.log10(abs((zout-(100+20j))/(zout+100-20j))))
+    assert value(r, "rl_min_db") == pytest.approx(expected, abs=1e-12)
+
+
+@pytest.mark.parametrize("limit,context,verdict", [(None, "worst_case", Verdict.INFO),
+    (10, "worst_case", Verdict.PASS), (40, "worst_case", Verdict.FAIL), (10, "nominal", Verdict.UNKNOWN)])
+def test_match_limits_and_context(limit, context, verdict):
+    r = rf.match_sweep("L", MATCH, MATCH_HZ, 50, 100, rl_min_db=limit, context=context)
+    assert r.verdict is verdict
+    assert plain_problems(r) == []
+    if limit is None:
+        assert "board requirement or part datasheet" in r.summary
+
+
+@pytest.mark.parametrize("make", [
+    lambda: rf.element_impedance("X", [1e6], r_ohm=1),
+    lambda: rf.element_impedance("C", [1e6], c_f=0),
+    lambda: rf.element_impedance("R", [1e6], r_ohm=1, l_h=1),
+    lambda: rf.element_impedance("L", [1e6], l_h=1, esr_ohm=-1),
+    lambda: rf.element_impedance("R", [], r_ohm=1),
+    lambda: rf.element_impedance("R", [1e6, 1e5], r_ohm=1),
+    lambda: rf.element_impedance("R", [math.nan], r_ohm=1),
+    lambda: rf.element_impedance("R", [0], r_ohm=1),
+    lambda: rf.element_impedance("R", [1e6], r_ohm=1, z_min_ohm=2, z_max_ohm=1),
+    lambda: rf.element_impedance("R", [1e6], r_ohm=1, z_max_ohm=-1),
+    lambda: rf.match_sweep("X", MATCH, MATCH_HZ, 50, 100),
+    lambda: rf.match_sweep("pi", MATCH, MATCH_HZ, 50, 100),
+    lambda: rf.match_sweep("L", MATCH, MATCH_HZ, -50, 100),
+    lambda: rf.match_sweep("L", MATCH, MATCH_HZ, 50, math.inf),
+    lambda: rf.match_sweep("L", MATCH, MATCH_HZ, 50, 100, rl_min_db=math.nan),
+    lambda: rf.match_sweep("L", [rf.Element("L", l_h=1, tolerance_frac=1), MATCH[1]], MATCH_HZ, 50, 100)])
+def test_new_rf_invalid_inputs(make):
     with pytest.raises(ValueError):
         make()

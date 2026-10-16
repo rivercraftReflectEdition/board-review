@@ -78,7 +78,7 @@ needs evidence [MT-003, ADI Rev A, 2008-10, p.2].
   number describes direct supply coupling under its stated test conditions; it does not
   replace VCO pushing [AD45, ADI Analog Dialogue 45-09, 2011-09, p.1 to 3;
   MS-2210, ADI Designing Power Supplies for High Speed ADC, 2012-02, p.3].
-- Compute: `jitter.ripple_sideband` for pushing outside the loop bandwidth;
+- Compute: `calc.jitter.ripple_sideband` for pushing outside the loop bandwidth;
   `calc.lc_tank.lc_filter` for supply filter peaking, with an explicit peak limit.
   Use `calc.spur.supply_spur` for converter feedthrough. Enter ripple and full scale as peak
   to peak voltage. Its PSRR argument is signed output-to-supply transfer: enter -60 dB
@@ -98,7 +98,7 @@ needs evidence [MT-003, ADI Rev A, 2008-10, p.2].
   undersampled inputs [AN-756, ADI Rev 0, 2004-12, p.5, equations 12 to 13].
 - Why: a clock phase spur transfers to the sampled signal with a level shift of
   `20 log10(f_input / f_clock)` [AN-756, ADI Rev 0, 2004-12, p.5, equations 12 to 13].
-- Compute: `jitter.spur_transfer` for each clock spur and input band. Pass the board's spur
+- Compute: `calc.jitter.spur_transfer` for each clock spur and input band. Pass the board's spur
   limit explicitly. Identify the output offsets with `calc.spur.alias` and the LO plan.
 - Pass: every transferred spur is below the board or converter datasheet requirement. A
   reviewer-selected limit is JUDGMENT with its number and reason.

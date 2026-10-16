@@ -24,9 +24,10 @@ skill/                    installable skill (see Install)
   SKILL.md                entry point: setup, when to use, workflow, rules, finding format
   agents/openai.yaml      Codex UI metadata
   workflow/               one page per stage: intake, extract, datasheets, blocks, checks, verify, report;
-                          setup.md for sandboxes and Windows
+                          setup.md for sandboxes and Windows; models.md for manufacturer models
   checklists/             one page per circuit block (buck, ldo, ferrite/LC, pdn, clocks, resets,
-                          io levels, straps, ethernet, csi, xspi memory, protection, sequencing, thermal)
+                          io levels, straps, ethernet, csi, xspi memory, protection, sequencing, thermal,
+                          clock_distribution, spur_plan, data_converters, rf_front_end)
   schemas/                board_model, datasheet_digest, finding, check_result (JSON Schema)
   lessons/                one page per real miss: what, why, which check now catches it
 tools/boardreview/        Python package the skill calls (python -m boardreview prep, datasheets,
@@ -36,11 +37,13 @@ tools/boardreview/        Python package the skill calls (python -m boardreview 
                           files and XML
   lint/                   deterministic checks: single-pin nets, open IC pins, floating grounds, names
   blocks/                 find switching regulators, LDOs, load switches, filters, clocks, resets,
-                          I2C buses and straps in the netlist
+                          clock buffers, PLLs, jitter cleaners, RF paths, ADCs, DACs, I2C buses and straps
   calc/                   calculators: buck, loop (Bode, PM/GM, Cff), lc_tank, mlcc_bias, divider,
-                          crystal, i2c, protection (TVS), thermal, timing
+                          crystal, i2c, protection (TVS), thermal, timing, jitter, clock_term, pll, rf,
+                          spur, converter
   sim/                    LTspice batch runs (ngspice optional): loop-gain injection, load step,
-                          PDN and filter impedance, with netlist sanity checks before trusting a run
+                          PDN and filter impedance, with netlist sanity checks before trusting a run;
+                          sim.touchstone reads local S-parameters and checks loss, match and passivity
   report/                 report.html with fix and bench checkboxes, the artifact page, report.md,
                           ticket drafts, analysis.html with every check and plot; verify-fixes
 tests/                    calculator and model tests with worked numbers
@@ -49,6 +52,11 @@ docs/                     conventions for people and agents working on this repo
 ```
 
 ## Install
+
+RF and converter reviews use [clock_distribution](skill/checklists/clock_distribution.md),
+[spur_plan](skill/checklists/spur_plan.md), [data_converters](skill/checklists/data_converters.md)
+and [rf_front_end](skill/checklists/rf_front_end.md). Fetch models for each review using
+[the manufacturer-model workflow](skill/workflow/models.md); no vendor model library is committed.
 
 One-time setup, from a clone of this repo. Python 3.11 or newer.
 

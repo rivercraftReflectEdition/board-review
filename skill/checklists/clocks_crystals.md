@@ -1,6 +1,7 @@
 # Clocks, crystals and oscillators
 
 Applies to every crystal, oscillator, clock buffer and clock input.
+For buffers, PLLs and differential clocks, also run [clock distribution](clock_distribution.md).
 Missing data: follow the not-published rule in workflow/40_checks.md unless the item says more.
 
 ## CLK-1 Oscillator output level against the receiver's domain

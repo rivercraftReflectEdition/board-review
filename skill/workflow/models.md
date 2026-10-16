@@ -22,8 +22,8 @@ does not establish its applicability.
 
 ## Decide whether the model applies
 
-For each model, write an applicability record beside the original file. This is a review record,
-not a new datasheet-digest field. Include the following evidence and any gap:
+For each model, write an applicability record beside the original file. The digest may also
+reference Touchstone files under `rf.touchstone`. Include the following evidence and any gap:
 
 - Match the ordered part, package, silicon revision where relevant, operating state, supply,
   bias current or voltage, temperature and loading. Keep separate files for separate bias
@@ -95,10 +95,11 @@ For example, keep this as a separate review record under `models/` in the review
 ```
 
 The numbers above illustrate the record structure; they are not model data or limits. There is
-no model-record schema yet. Do not submit this separate record to the datasheet-digest validator.
-The coordinator must add schema support if these records are to enter the structured digest.
-Attach the record to the report and keep affected conclusions unknown. A bounded datasheet
-calculation or bench measurement can settle a check independently; state that evidence explicitly.
+schema support for this record in schemas/datasheet_digest.schema.json. Validate it with
+`python -m boardreview validate FILE --schema digest`. A readable digest may instead include
+these records in its optional `model_unavailable` list. Attach the record to the report and
+keep affected conclusions unknown. A bounded datasheet calculation or bench measurement can settle
+a check independently; state that evidence explicitly.
 
 ## Use the files
 

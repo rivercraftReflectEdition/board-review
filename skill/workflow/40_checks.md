@@ -9,8 +9,10 @@ failures into candidate findings.
    and decoupling. Rail values and tolerances computed here feed every later check.
 2. enable_uvlo_sequencing and resets_supervisors_watchdogs over the enable and reset chains.
 3. io_levels_and_domains over the domain map; straps_and_boot_pins over the strap map.
-4. Interfaces: ethernet_phy, camera_csi, xspi_memory, clocks_crystals.
-5. protection_tvs, thermal, then layout when placement exists.
+4. Interfaces: ethernet_phy, camera_csi, xspi_memory, clocks_crystals, clock_distribution,
+   data_converters and rf_front_end. Fetch applicable files per [models](models.md).
+5. Run spur_plan once across the board's regulators, clocks and sensitive paths.
+6. protection_tvs, thermal, then layout when placement exists.
 
 Agents may split by block (subagents in any agent that has them, separate `codex exec` runs in
 Codex, or one block after another). Each agent gets the checklist, the block record, the digests
@@ -48,6 +50,9 @@ It writes one unknown entry per checklist item per block instance, from each blo
 field (prep's blocks by their kind), and the board-wide checklists once. Entries already in the
 file are kept, so run it again after adding blocks. Replace each entry as you run the item; one
 left with the skeleton's "Not run yet" reason was not run.
+The spur_plan instance is always board-level. A switching regulator or clock together with an
+RF, converter or clock-distribution block makes it applicable. Other unused checklists retain
+board entries for the reviewer to assess; set not_applicable only with the reason.
 
 Write every item run, pass or fail, to `checks.json` in the review folder: a list of objects
 that validate against `schemas/check_result.schema.json`, or `{"board": ..., "checks": [...]}`.
@@ -128,6 +133,23 @@ Checklists are organized by block; this table finds every item for a failure mod
 | mechanical_interference | LAY-6, CSI-6 | none |
 | signal_integrity | LAY-4, LAY-5, CSI-5, PROT-7 | calc.timing |
 | missing_rework_option | BR-3, MEM-7, LAY-8 | calc.loop.cff_lead |
+| rf_mismatch | RF-1, RF-2, RF-10, RF-12, RF-14 | calc.rf.element_impedance, calc.rf.match_sweep, calc.rf.mismatch, calc.rf.dc_block, calc.rf.pad, sim.touchstone.return_loss |
+| rf_instability | RF-6 | calc.rf.stability |
+| spur_in_band | RF-4, ADC-5, ADC-10, CKD-13, SPUR-1 to SPUR-6 | calc.spur, calc.jitter.ripple_sideband, calc.jitter.spur_transfer, calc.jitter.vc_noise |
+| jitter_budget | CKD-5, CKD-6, CKD-8, CKD-12, ADC-1, ADC-2 | calc.jitter, calc.clock_term.ac_coupling |
+| termination_error | CKD-1 to CKD-5, CKD-8 | calc.clock_term |
+| sync_fault | ADC-8, ADC-9, CKD-10, CKD-11 | calc.converter.jesd_lane_rate, calc.converter.sysref, calc.jitter.ssc_emi |
+| loop_instability | CKD-7 | calc.pll.loop_filter_check, calc.pll.loop_filter_design |
+| lc_resonance | RF-7 | calc.rf.network_impedance |
+| insufficient_capacitance | ADC-3 | calc.mlcc_bias.mlcc_effective |
+| level_mismatch | RF-13, ADC-6 | calc.rf.cascade, calc.divider.divider_output |
+| sequencing | RF-3, RF-5 | calc.rf.element_impedance, calc.timing.budget |
+| leakage | RF-8 | calc.divider |
+| protection_gap | RF-9 | calc.rf.shunt_c, calc.rf.peak_voltage |
+| mechanical_interference | RF-11 | calc.rf.cavity_modes |
+| timing_margin | ADC-4, ADC-7 | calc.converter.sar_rc, calc.timing.rc_edge |
+| clock_fault | CKD-9 | calc.crystal |
+| pin_swap | ADC-11 | none |
 
 ## When to simulate
 

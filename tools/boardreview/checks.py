@@ -11,6 +11,11 @@ CHECKLISTS = Path(__file__).resolve().parents[2] / "skill" / "checklists"
 KIND_CHECKLIST = {"switching_regulator": "buck_regulator", "ldo": "ldo", "load_switch": "enable_uvlo_sequencing",
                   "ferrite_filter": "ferrite_lc_filter", "lc_filter": "ferrite_lc_filter",
                   "crystal": "clocks_crystals", "oscillator": "clocks_crystals",
+                  "clock_buffer": "clock_distribution", "pll": "clock_distribution",
+                  "jitter_cleaner": "clock_distribution",
+                  "balun": "rf_front_end", "rf_switch": "rf_front_end",
+                  "rf_amplifier": "rf_front_end", "attenuator_pad": "rf_front_end",
+                  "rf_connector": "rf_front_end",
                   "adc": "data_converters", "dac": "data_converters",
                   "reset": "resets_supervisors_watchdogs", "i2c_bus": "io_levels_and_domains",
                   "strap": "straps_and_boot_pins"}
@@ -52,9 +57,19 @@ def instances(blocks: list[dict]) -> list[tuple[str, str, str]]:
 
 def skeleton(blocks: list[dict], items: dict[str, list[tuple[str, str]]]) -> list[dict]:
     """Unknown entries for every item of every block's checklist, then board-wide and unused checklists once."""
-    found = [x for x in instances(blocks) if x[0] in items]
+    identified = instances(blocks)
+    checklists = {c for c, _, _ in identified}
+    kinds = {b.get("kind") for b in blocks if isinstance(b, dict)}
+    aggressor = bool(checklists & {"buck_regulator", "clocks_crystals", "clock_distribution"}
+                     or kinds & {"switching_regulator", "clock", "crystal", "oscillator",
+                                 "clock_buffer", "pll", "jitter_cleaner"})
+    sensitive = bool(checklists & {"rf_front_end", "data_converters", "clock_distribution"}
+                     or kinds & {"balun", "rf_switch", "rf_amplifier", "attenuator_pad",
+                                 "rf_connector", "adc", "dac", "clock_buffer", "pll", "jitter_cleaner"})
+    board_wide = BOARD_WIDE + (("spur_plan",) if aggressor and sensitive else ())
+    found = [x for x in identified if x[0] in items and x[0] != "spur_plan"]
     used = {c for c, _, _ in found}
-    found += [(c, "board", "board") for c in items if c in BOARD_WIDE or c not in used]
+    found += [(c, "board", "board") for c in items if c in board_wide or c not in used]
     out: list[dict] = []
     bases: dict[tuple[str, str], str] = {}
     taken: set[str] = set()
@@ -72,7 +87,7 @@ def skeleton(blocks: list[dict], items: dict[str, list[tuple[str, str]]]) -> lis
                 continue
             taken.add(cid)
             out.append({"id": cid, "block": checklist, "instance": inst, "item": item, "title": title,
-                        "verdict": "unknown", "reason": RUN_IT if inst != "board" or checklist in BOARD_WIDE
+                        "verdict": "unknown", "reason": RUN_IT if inst != "board" or checklist in board_wide
                         else NO_BLOCK})
     return out
 

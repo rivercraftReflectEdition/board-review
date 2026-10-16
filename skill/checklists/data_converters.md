@@ -14,7 +14,7 @@ check INFO or UNKNOWN. A typical application circuit does not establish a guaran
   2006-03, p.2; MT-200 Rev 0, 2012-01, p.3]
 - Why: jitter SNR depends on analog input frequency. A clock suitable at baseband can lose SNR
   at IF. [MT-007 Rev A, 2008-10, p.3 to 4; AN-501 Rev A, 2006-03, p.2 eq.5 to 6]
-- Compute: `jitter.pn_to_jitter`, `jitter.rss`, `jitter.snr_jitter`. Record both jitter-only SNR
+- Compute: `calc.jitter.pn_to_jitter`, `calc.jitter.rss`, `calc.jitter.snr_jitter`. Record both jitter-only SNR
   and combined converter SNR. Choose integration bounds for the converter and clock noise
   bandwidth; the plan's cited guidance extends to at least the sample rate. [MT-008 Rev A,
   2008-10, p.2, 4; SBAA653A, rev 2025-04, p.2 to 3; MT-200 Rev 0, 2012-01, p.3]
@@ -32,7 +32,7 @@ check INFO or UNKNOWN. A typical application circuit does not establish a guaran
   Rev A, 2009-09, p.30 to 31; AD42, 2008-02, p.2 to 6; MT-031 Rev A, 2008-10, p.11]
 - Why: logic in the sample clock path can add jitter; slow edges also worsen aperture
   uncertainty. [AD42, 2008-02, p.6; MT-200 Rev 0, 2012-01, p.3]
-- Compute: `jitter.snr_jitter` with each path element included. Digest slew, swing, duty and
+- Compute: `calc.jitter.snr_jitter` with each path element included. Digest slew, swing, duty and
   clock-frequency bounds for the selected mode. [AD9268 Rev A, 2009-09, p.30 to 31]
 - Pass: clock input limits come from the converter datasheet and the SNR budget comes from
   the requirement. Any logic stage needs measured or specified added jitter inside that budget.
@@ -89,7 +89,7 @@ check INFO or UNKNOWN. A typical application circuit does not establish a guaran
 - Why: a low-pass filter can admit unwanted bands below an undersampled input. An input
   network suited to baseband can degrade IF SFDR. [MT-002 Rev A, 2008-10, p.10;
   AD9268 Rev A, 2009-09, p.26, 28]
-- Compute: `spur.alias` for band edges and blockers. Fetch balun and filter S-parameter files
+- Compute: `calc.spur.alias` for band edges and blockers. Fetch balun and filter S-parameter files
   for the operating band and bias, and driver SPICE for settling when available. Compare
   measured or modeled rejection with the blocker budget. [MT-002 Rev A, 2008-10, p.5, 10;
   AN-742 Rev C, 2018-06, p.1, 3]
@@ -182,7 +182,7 @@ check INFO or UNKNOWN. A typical application circuit does not establish a guaran
   p.3, 6; UG-570 Rev A, p.120 to 126; SLYT720, AAJ 2Q 2017, p.1 to 3]
 - Why: ripple on analog rails can degrade EVM and create in-band products. Rejection depends
   on rail and frequency. [UG-570 Rev A, p.120 to 123; MS-2210, 2012-02, p.3]
-- Compute: `spur.supply_spur` with the documented rejection sign and amplitude convention;
+- Compute: `calc.spur.supply_spur` with the documented rejection sign and amplitude convention;
   `calc.lc_tank.lc_filter` for rail filter resonances. Pass filter limits explicitly. Compare
   switcher harmonics with the receiver and converter spur plan. [MS-2210, 2012-02, p.3, 6;
   OP1, 2021-03, p.3 to 5; SLVAEW7, 2020-09, p.3]

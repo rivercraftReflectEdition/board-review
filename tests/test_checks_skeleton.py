@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from boardreview.__main__ import main
+from boardreview.checks import KIND_CHECKLIST, NO_BLOCK, RUN_IT, checklist_items, skeleton
 from boardreview.schema import check_file
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -70,3 +71,31 @@ def test_rerun_keeps_what_was_filled_in(facts, tmp_path):
     again = _load(out)
     assert len(again) == len(data["checks"])
     assert again[0]["verdict"] == "pass" and again[0]["summary"] == "Checked by hand."
+
+
+@pytest.mark.parametrize("kind,checklist", [("clock_buffer", "clock_distribution"),
+    ("pll", "clock_distribution"), ("jitter_cleaner", "clock_distribution"),
+    ("balun", "rf_front_end"), ("rf_switch", "rf_front_end"), ("rf_amplifier", "rf_front_end"),
+    ("attenuator_pad", "rf_front_end"), ("rf_connector", "rf_front_end"),
+    ("adc", "data_converters"), ("dac", "data_converters")])
+def test_new_block_kinds_get_their_checklist(kind, checklist):
+    checks = skeleton([{"kind": kind, "name": "U9 synthetic block"}], checklist_items())
+    assert KIND_CHECKLIST[kind] == checklist
+    assert [c["item"] for c in checks if c["instance"] == "U9 synthetic block"] == _items(checklist)
+
+
+@pytest.mark.parametrize("blocks,reason", [
+    ([{"kind": "switching_regulator", "name": "U1"}, {"kind": "adc", "name": "U2"}], RUN_IT),
+    ([{"kind": "oscillator", "name": "Y1"}, {"kind": "balun", "name": "T1"}], RUN_IT),
+    ([{"kind": "clock_buffer", "name": "U3"}], RUN_IT),
+    ([{"name": "reviewed source", "checklist": "buck_regulator"},
+      {"name": "reviewed RF", "checklists": ["rf_front_end", "spur_plan"]}], RUN_IT),
+    ([{"kind": "adc", "name": "U1"}], NO_BLOCK),
+    ([{"kind": "switching_regulator", "name": "U1"}], NO_BLOCK),
+    ([], NO_BLOCK),
+])
+def test_spur_plan_is_one_board_instance_with_applicability_reason(blocks, reason):
+    checks = [c for c in skeleton(blocks, checklist_items()) if c["block"] == "spur_plan"]
+    assert [c["item"] for c in checks] == _items("spur_plan")
+    assert all(c["instance"] == "board" and c["reason"] == reason for c in checks)
+    assert len({c["id"] for c in checks}) == len(checks)

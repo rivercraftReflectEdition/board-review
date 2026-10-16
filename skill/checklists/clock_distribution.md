@@ -122,7 +122,7 @@ in the offline plan need confirmation against the fetched files.
 - Why: traditional HCSL needs its DC shunts; adding end termination to LP-HCSL reduces swing
   [AN-808 Rev A, 2013-12-04, p.1 to 2; AN-879 Rev B, 2015-04-02, p.1 to 4]. The Si534x/Agilex
   coupling conflict in CKD-1 needs resolution before selecting a source.
-- Compute: `calc.clock_term.termination`, `calc.clock_term.compat` and `jitter.rss`. Use the generation's
+- Compute: `calc.clock_term.termination`, `calc.clock_term.compat` and `calc.jitter.rss`. Use the generation's
   PCIe filters; an unfiltered RMS integration is a different measurement [9QXL2001C R31DS0090EU0113,
   Rev 1.13, 2026-09-22, p.10, 12, 17; SKY-PCIE Rev 2.0, 2021-11-16, p.2 to 5].
 - Pass: topology, 85 or 100 ohm target and timing follow the selected driver, receiver and PCIe
@@ -155,7 +155,7 @@ in the offline plan need confirmation against the fetched files.
   unpaginated]. This is a supply-path warning, not a guaranteed improvement for every oscillator.
 - Compute: `calc.lc_tank.lc_filter` using manufacturer data at operating bias. Set `peak_limit_db`
   explicitly from the allowed supply-noise transfer, then assess the full sensitive offset band,
-  not only switcher harmonics. Use `jitter.spur_to_jitter` for measured supply-induced sidebands.
+  not only switcher harmonics. Use `calc.jitter.spur_to_jitter` for measured supply-induced sidebands.
 - Pass: rail noise and resulting phase noise meet the board requirement over the sensitive band.
   Any peaking allowance without a part limit is JUDGMENT with a stated number and reason.
   AN10006's bead rating of at least five times IDD and inductor rating of at least twice IDD are
@@ -172,7 +172,7 @@ in the offline plan need confirmation against the fetched files.
 - Why: loop bandwidth changes with Kvco and N. Dielectric absorption and microphonics are reasons
   to avoid X7R in the loop filter [ICS663 Rev E, 2006-01, p.5;
   SNAA106C, 2017-05, printed p.143, 287 to 288, 299].
-- Compute: `pll.loop_filter_check` for every corner, and `pll.loop_filter_design` for candidate
+- Compute: `calc.pll.loop_filter_check` for every corner, and `calc.pll.loop_filter_design` for candidate
   values. Confirm modeled control-node loading against the actual part [SNAA106C, 2017-05,
   printed p.339 to 347].
 - Pass: bandwidth, phase margin, settling and spur rejection meet the board or PLL datasheet
@@ -239,7 +239,7 @@ in the offline plan need confirmation against the fetched files.
   [AN10005 Rev 1.2, p.2, 5, 7; SCAA103, 2009-08, p.3 to 4;
   QUARTUS-BW v23.3, PLL Bandwidth option, unpaginated;
   SPRAD21J, revised 2026-10, sec.6.1.3.1 p.30 to 31].
-- Compute: `jitter.ssc_emi` for an EMI estimate, plus explicit minimum/maximum frequency and PLL
+- Compute: `calc.jitter.ssc_emi` for an EMI estimate, plus explicit minimum/maximum frequency and PLL
   tracking checks against each consumer's datasheet. EMI reduction does not establish compatibility.
 - Pass: every receiver explicitly permits the chosen spread, tracks it and stays within its
   required frequency range. Select down spread at a frequency ceiling only if the consumer allows it.
@@ -252,7 +252,7 @@ in the offline plan need confirmation against the fetched files.
 - Why: phase-noise integration depends on the band. Buffer additive jitter and discrete spurs
   need their own entries [AN10007 Rev 1.21, p.3 to 10; AN256 Rev 0.4, 2021-09-21, p.1, 4;
   AN766 Rev 0.1, 2021-09-23, p.2 to 3; SNAA106C, 2017-05, printed p.1, 12, 228].
-- Compute: `jitter.pn_to_jitter`, `jitter.multiply`, `jitter.spur_to_jitter` and `jitter.rss`.
+- Compute: `calc.jitter.pn_to_jitter`, `calc.jitter.multiply`, `calc.jitter.spur_to_jitter` and `calc.jitter.rss`.
   Record bands and independence assumptions; do not blindly RSS correlated terms. Validate the
   single-sided spur convention: the plan flags differing AN491/AN256 formulas as UNSURE
   [AN491 Rev 0.2, 2021-09-22, p.6 eq.1; AN256 Rev 0.4, 2021-09-21, p.4].
@@ -268,7 +268,7 @@ in the offline plan need confirmation against the fetched files.
   range, as the LimeSDR Mini 2v5 tuning-DAC divider change documents
   [WENZEL-VCXO, undated, control-noise discussion, unpaginated;
   LIME-MINI2, 2v5 commits listed in the plan, 2024 to 2026, tuning-DAC change, unpaginated].
-- Compute: `jitter.vc_noise`; `calc.divider.divider_output` for the DAC endpoints, with leakage,
+- Compute: `calc.jitter.vc_noise`; `calc.divider.divider_output` for the DAC endpoints, with leakage,
   resistor and supply corners. Compare achieved control voltage with the required pull range.
 - Pass: the datasheet control range and board frequency/aging requirement are covered at all
   corners. Control-noise contribution meets the allocated phase-noise requirement. If no allocation

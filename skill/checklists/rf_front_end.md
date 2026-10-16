@@ -30,7 +30,6 @@ and simulator compatibility. If any model is unavailable, record the requested f
 missing conditions, affected checks and the bench measurement or vendor question that settles
 them. [IBIS-8.0, ratified 2025-12-05, sections 6.1 and 10.6; MT-099, Rev 0, 2009-01, p.1 to 2.]
 
-Calculator names below without a package prefix are integration targets supplied separately.
 Plot loss, impedance and stability across frequency whenever the curve determines the conclusion.
 
 ## RF-1 Matching networks and tolerance sensitivity
@@ -40,8 +39,14 @@ Plot loss, impedance and stability across frequency whenever the curve determine
   section 1.2 p.5 and section 4 p.14.]
 - Why: nominal reactance alone misses component loss and resonance. Coilcraft compares Q of
   about 31 and 78 at 900 MHz for similar 2.7 nH 0402 inductors. [CC671, 2021-01-07, Table 1 p.1 to 2.]
-- Compute: `rf.element_impedance`, `rf.match_sweep`; use applicable passive S-parameters when
+- Compute: `calc.rf.element_impedance`, `calc.rf.match_sweep`; use applicable passive S-parameters when
   lumped models do not cover the band. Show return loss (RL) at the worst frequency and corner.
+  Supply R, L or C in SI units with ESR, ESL and parallel capacitance to the element sweep.
+  For the match, pass `calc.rf.Element` entries in source-to-load order, their value tolerances,
+  the frequency grid, source and load impedances, and the explicit RL limit. Repeat for source,
+  load and parasitic corners. The match checks nominal and tolerance endpoints; refine the grid
+  near resonances and check tolerance interiors separately. Use `sim.touchstone.insertion_loss`
+  for applicable measured or vendor path data when assessing IL.
 - Pass: RL and insertion loss (IL) meet the board allocation at every corner; Q and SRF meet
   the device or component guidance. Coilcraft's SRF guidance of ten times the operating frequency
   is a cited starting point, not a universal threshold. Any selected margin or tuning-footprint
@@ -57,7 +62,7 @@ Plot loss, impedance and stability across frequency whenever the curve determine
 - Why: a wideband transceiver can have a narrowband fitted balun. ADI's AD9361/AD9364 board
   configuration uses a 2.4 to 2.5 GHz balun and calls for a change for other bands.
   [ADI-CFG, accessed 2026-10-15, Configuration Options, unpaginated.]
-- Compute: digest band, ratio, loss and balance; `rf.mismatch` for the impedance ratio error.
+- Compute: digest band, ratio, loss and balance; `calc.rf.mismatch` for the impedance ratio error.
   Use measured or vendor multiport response for loss and amplitude and phase balance.
 - Pass: rated band covers every enabled tuning setting; impedance and balance meet the chip
   datasheet and board requirements. Any extra band-edge margin is JUDGMENT with its reason.
@@ -70,7 +75,7 @@ Plot loss, impedance and stability across frequency whenever the curve determine
   [MC-AN20-001, Rev B, 2015-04-15, sheet 2; JTI-1720, 2020-02-21, p.1 to 2.]
 - Why: isolation and DC continuity differ by topology. The Johanson DC-feed connection requires
   its RF bypass network. [MC-AN20-001, Rev B, 2015-04-15, sheet 2; JTI-1720, 2020-02-21, p.1 to 2.]
-- Compute: digest pin and winding tables; `rf.element_impedance` for the feed bypass across
+- Compute: digest pin and winding tables; `calc.rf.element_impedance` for the feed bypass across
   the band. Include bias current at all operating corners.
 - Pass: DC paths, bypass and current satisfy both part datasheets. The 68 pF bypass on the
   1720BL is a part-specific example. A chosen extra current margin is JUDGMENT.
@@ -85,7 +90,7 @@ Plot loss, impedance and stability across frequency whenever the curve determine
   [AN150, 2014-08-04, p.11 to 12; M1838, 2003-03, p.2 to 3; MT-080, Rev 0, 2008-10, p.5 to 6.]
 - Why: mixers respond at both LO plus IF and LO minus IF. Second-order mixer responses need
   their own rejection check. [AN150, 2014-08-04, p.11 to 12; M1838, 2003-03, p.2 to 3.]
-- Compute: `spur.frequency_plan`; overlay every unwanted band on each filter's response.
+- Compute: `calc.spur.frequency_plan`; overlay every unwanted band on each filter's response.
   Use the filter's measured or vendor response for rejection, not frequency coincidence alone.
 - Pass: wanted-band loss, image and half-IF rejection meet the receiver requirements at every
   setting; switched bands cover the required range without a gap. Any assumed interferer level
@@ -101,7 +106,7 @@ Plot loss, impedance and stability across frequency whenever the curve determine
 - Why: choke behavior changes above resonance. Depletion-mode devices can draw uncontrolled
   drain current without the required gate bias. [CC945, 2017-10-04, p.1; MC-149, Rev OR,
   2025-09-08, p.2 to 4.]
-- Compute: `rf.element_impedance` across the band; `calc.timing.budget` for sequence margins.
+- Compute: `calc.rf.element_impedance` across the band; `calc.timing.budget` for sequence margins.
   Compare startup, shutdown and fault waveforms with the required order.
 - Pass: bias, current and sequencing meet the amplifier datasheet. Set choke impedance and
   permitted RF leakage from the bias-tee requirement; any chosen impedance ratio is JUDGMENT
@@ -115,7 +120,7 @@ Plot loss, impedance and stability across frequency whenever the curve determine
   [AN154, 2000-11, p.19 to 22; MC-063, Rev B, 2015-04-14, sheets 1 to 2.]
 - Why: the PGA-105+ needs its network for stability below 60 MHz. An in-band gain plot misses
   that risk. [MC-063, Rev B, 2015-04-14, sheets 1 to 2.]
-- Compute: `rf.stability` with applicable `touchstone` data. Use
+- Compute: `calc.rf.stability` with applicable `sim.touchstone` data. Use
   `Delta = S11*S22 - S12*S21`, then K, absolute Delta, mu and reverse mu across frequency.
   The printed Delta in KS5072 is incorrect. [KS5072, 2012-03-22, p.3;
   AN154, 2000-11, p.19 to 22.]
@@ -136,7 +141,7 @@ Plot loss, impedance and stability across frequency whenever the curve determine
 - Why: capacitors become inductive above SRF. Parallel values can create a high-impedance
   peak. Cypress shows 22 nF with 100 pF performing worse than 22 nF alone over about 15 to
   175 MHz. [JTI-SRF, 1999-01-17, p.1; CY1032, Rev *C, 2014-11-03, p.2 to 3.]
-- Compute: `rf.network_impedance`; plot the full network and each branch, including loss,
+- Compute: `calc.rf.network_impedance`; plot the full network and each branch, including loss,
   mounting inductance and source impedance. Compare candidate damping networks.
 - Pass: impedance peaks and resulting ripple stay within the supply-noise or RF leakage
   requirement at the band, IF and aggressors. If absent, select a numerical impedance or
@@ -155,7 +160,7 @@ Plot loss, impedance and stability across frequency whenever the curve determine
   at 6 GHz. [AS179, rev 10/02A, p.2 to 3; AN27, 2025-09, p.1 to 3;
   PE42423, DOC-85742-4.02, 2026-07, p.3.]
 - Compute: digest control levels and sequence; `calc.divider.divider_output` for shifted levels;
-  `rf.cascade` for path levels. Compare isolation against the maximum unwanted port power
+  `calc.rf.cascade` for path levels. Compare isolation against the maximum unwanted port power
   and permitted leakage. Verify DC discharge continuity in every state.
 - Pass: levels, supply sequence, DC exposure, discharge path and power meet the exact switch
   datasheet or applicable app note. Isolation meets the board requirement across frequency.
@@ -176,7 +181,7 @@ Plot loss, impedance and stability across frequency whenever the curve determine
   by assembly under small ESD diodes; inspect paste and continuity. [TPD1E0B04, SLVSDG9C,
   2025-06, section 7.2.2 p.13 to 14; PLUTO-ESD, commit 0536458758, 2026-09-02,
   ESD Diode Issue, unpaginated.]
-- Compute: `rf.shunt_c`, `rf.peak_voltage`; use a measured or vendor RF model for a real part.
+- Compute: `calc.rf.shunt_c`, `calc.rf.peak_voltage`; use a measured or vendor RF model for a real part.
   Include DC bias and maximum standing-wave voltage at the protection location.
 - Pass: protection loss and mismatch meet their board allocations; peak plus DC stays inside
   the datasheet working range and the IEC rating meets the product requirement. Without a
@@ -193,7 +198,7 @@ Plot loss, impedance and stability across frequency whenever the curve determine
 - Why: series capacitance limits low-frequency transmission; PRF can cause an in-band notch.
   Series resonance itself is not an automatic rejection of a coupling capacitor.
   [JTI-SRF, 1999-01-17, p.1.]
-- Compute: `rf.dc_block`; plot loss across the full range. Include ESR and ESL and use measured
+- Compute: `calc.rf.dc_block`; plot loss across the full range. Include ESR and ESL and use measured
   response for PRF; a single series RLC model cannot establish its absence (DERIVED model limit).
 - Pass: worst-case IL and voltage meet the board allocation and capacitor datasheet. No notch
   violates the required response. Any selected IL limit or voltage margin is JUDGMENT with its
@@ -208,7 +213,7 @@ Plot loss, impedance and stability across frequency whenever the curve determine
   Boxes and Cans, 2023-08-01, unpaginated.]
 - Why: a shielding cavity can resonate. An ideal 30 by 20 mm cavity with small height has a
   first mode near 9.01 GHz (DERIVED rectangular cavity, W31). [ICM, 2023-08-01, unpaginated.]
-- Compute: `rf.cavity_modes` using internal dimensions and applicable dielectric assumptions.
+- Compute: `calc.rf.cavity_modes` using internal dimensions and applicable dielectric assumptions.
   Record the highest significant RF or harmonic frequency and assess openings and loading.
 - Pass: mechanical dimensions meet the frame datasheet. Modes meet the board's exclusion
   margin or a validated damping requirement. If absent, state a numerical frequency separation
@@ -223,7 +228,7 @@ Plot loss, impedance and stability across frequency whenever the curve determine
   2009-02-04, p.2 and p.4; pad equations DERIVED from resistor network analysis.]
 - Why: resistor parasitics affect high-frequency response. Power is unequal among pad parts.
   [VSH, Doc 60107, 2009-02-04, p.2 and p.4; dissipation DERIVED from network analysis, W29.]
-- Compute: `rf.pad` with fitted values and maximum incident power. With K = 10^(A/20), an
+- Compute: `calc.rf.pad` with fitted values and maximum incident power. With K = 10^(A/20), an
   equal-impedance pi has shunts Z0*(K+1)/(K-1) and series Z0*(K*K-1)/(2*K). A T has each
   series Z0*(K-1)/(K+1) and shunt 2*K*Z0/(K*K-1). Include tolerances and reverse drive.
   [DERIVED; FRICKEY, 1994-02, p.205 to 206, Table I for ABCD conversion.]
@@ -243,7 +248,7 @@ Plot loss, impedance and stability across frequency whenever the curve determine
 - Why: loss ahead of an LNA degrades noise figure; preceding gain weights later-stage
   intermodulation. [AN57-1, 2010-08-05, equation 2-3 p.8; MC-LIN, 2022-09-30,
   Cascaded P1dB and IP3, unpaginated; MC-5G, 2022-12-08, unpaginated.]
-- Compute: `rf.cascade`; use passive loss at the operating temperature, applicable amplifier
+- Compute: `calc.rf.cascade`; use passive loss at the operating temperature, applicable amplifier
   bias and measured data where needed. Tabulate levels and headroom stage by stage. Treat
   cascaded compression as an estimate and compare with a nonlinear model or measurement.
   [MC-LIN, 2022-09-30, unpaginated; MC-5G, 2022-12-08, unpaginated.]
@@ -261,7 +266,7 @@ Plot loss, impedance and stability across frequency whenever the curve determine
 - Why: an end-of-life swap can change RF behavior despite compatible assembly. LimeSDR Mini
   2.x replaced a 1.2 pF shunt part with an 11 pF part and changed loopback attenuation.
   [LIME-MINI2, docs v2.2, commit 72795ccf52, 2024-12-02, unpaginated.]
-- Compute: `rf.shunt_c`, `rf.element_impedance`, `rf.match_sweep` or `rf.cascade` for both
+- Compute: `calc.rf.shunt_c`, `calc.rf.element_impedance`, `calc.rf.match_sweep` or `calc.rf.cascade` for both
   fitted versions, using applicable frequency data and bias. Compare full curves and corners.
 - Pass: absolute response and the change in RL, IL and loopback level stay inside the board's
   allocation; ratings and bias meet the replacement datasheet. Any chosen change budget is

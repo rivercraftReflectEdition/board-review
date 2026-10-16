@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "board-review/datasheet_digest.schema.json",
   "title": "Datasheet digest",
-  "description": "Facts from one datasheet, read from page images. Every entry cites a page. Values the documents do not give are listed under not_published. Values in SI units. A record with status source_unavailable says no document could be read for the MPN; it needs only mpn, status and unavailable, and carries no facts.",
+  "description": "Facts from one datasheet, read from page images. Every entry cites a page. Values the documents do not give are listed under not_published. Values in SI units. source_unavailable records a missing document. model_unavailable records a missing manufacturer model; it can stand alone or appear in a readable digest's optional list.",
   "type": "object",
   "additionalProperties": false,
   "allOf": [
@@ -10,29 +10,55 @@
       "if": {"required": ["status"], "properties": {"status": {"const": "source_unavailable"}}},
       "then": {"required": ["mpn", "status", "unavailable"]},
       "else": {
-        "required": [
-          "mpn", "manufacturer", "document", "read_from", "pins", "abs_max",
-          "recommended_operating", "electrical", "equations", "layout_rules", "errata",
-          "example_envelope", "not_published"
-        ]
+        "if": {"required": ["status"], "properties": {"status": {"const": "model_unavailable"}}},
+        "then": {
+          "required": ["mpn", "status", "kind", "unavailable"]
+        },
+        "else": {
+          "required": [
+            "mpn", "manufacturer", "document", "read_from", "pins", "abs_max",
+            "recommended_operating", "electrical", "equations", "layout_rules", "errata",
+            "example_envelope", "not_published"
+          ]
+        }
       }
+    },
+    {
+      "if": {"required": ["status"], "properties": {"status": {"const": "model_unavailable"}}},
+      "then": {"properties": {"unavailable": {"$ref": "#/$defs/model_unavailable_detail"}}},
+      "else": {"properties": {"unavailable": {"$ref": "#/$defs/source_unavailable_detail"}}}
     }
   ],
   "properties": {
     "mpn": {"type": "string", "minLength": 2},
     "manufacturer": {"type": "string"},
     "function": {"type": "string", "description": "One line, for example 'dual 3 A synchronous buck, valley current mode'."},
-    "status": {"enum": ["draft", "reviewed", "source_unavailable"], "description": "source_unavailable: no datasheet was read for this MPN. That is not the same as not published, which says the documents were read and lack a value."},
-    "unavailable": {
+    "status": {"enum": ["draft", "reviewed", "source_unavailable", "model_unavailable"], "description": "source_unavailable: no datasheet was read. model_unavailable: a required manufacturer model could not be obtained. Neither means a value is not published."},
+    "unavailable": {"type": "object"},
+    "kind": {"enum": ["touchstone", "ibis", "spice"], "description": "Requested model type for a standalone model_unavailable record."},
+    "required_conditions": {"$ref": "#/$defs/model_conditions"},
+    "model_unavailable": {"type": "array", "items": {"$ref": "#/$defs/model_unavailable"}, "description": "Unavailable models beside an otherwise readable datasheet digest."},
+    "clock_io": {"type": "array", "items": {"$ref": "#/$defs/clock_io"}},
+    "psrr": {"type": "array", "items": {"$ref": "#/$defs/spec"}, "description": "PSRR or PSMR with frequency, rail, bias, amplitude convention and sign in conditions; digitized curves go in curves."},
+    "rf": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["reason", "consequence"],
-      "description": "Why no document was read. Only for status source_unavailable.",
       "properties": {
-        "reason": {"enum": ["no_url", "not_pdf", "download_failed", "offline", "user_said_unavailable", "other"]},
-        "detail": {"type": "string", "description": "What was tried: the URL and the response, or what the user said and when."},
-        "checks_blocked": {"type": "array", "items": {"type": "string"}, "description": "Checklist items that need this part's data, for example 'ldo#LDO-2'."},
-        "consequence": {"type": "string", "description": "What the review does instead, for example 'LDO-1 and LDO-2 stay unknown; ask for the datasheet'."}
+        "band_hz": {"$ref": "#/$defs/range"},
+        "conditions": {"type": "string"},
+        "page": {"$ref": "#/$defs/page"},
+        "touchstone": {"type": "array", "items": {"$ref": "#/$defs/model_reference"}}
+      }
+    },
+    "converter": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "clock_input": {"$ref": "#/$defs/clock_io"},
+        "input_common_mode_v": {"$ref": "#/$defs/range"},
+        "reference_caps": {"type": "array", "items": {"$ref": "#/$defs/spec"}},
+        "jesd": {"type": "array", "items": {"$ref": "#/$defs/jesd"}},
+        "page": {"$ref": "#/$defs/page"}
       }
     },
     "reviewed_by": {"type": "string"},
@@ -109,6 +135,116 @@
     }
   },
   "$defs": {
+    "source_unavailable_detail": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reason", "consequence"],
+      "description": "Why no document was read. Only for status source_unavailable.",
+      "properties": {
+        "reason": {"enum": ["no_url", "not_pdf", "download_failed", "offline", "user_said_unavailable", "other"]},
+        "detail": {"type": "string", "description": "What was tried: the URL and the response, or what the user said and when."},
+        "checks_blocked": {"type": "array", "items": {"type": "string"}, "description": "Checklist items that need this part's data, for example 'ldo#LDO-2'."},
+        "consequence": {"type": "string", "description": "What the review does instead, for example 'LDO-1 and LDO-2 stay unknown; ask for the datasheet'."}
+      }
+    },
+    "clock_io": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {"type": "string"},
+        "pins": {"type": "array", "items": {"type": "string"}},
+        "output_type": {"type": "string", "description": "Exact vendor format, including traditional or low-power HCSL and device-specific exceptions."},
+        "input_type": {"type": "string"},
+        "voh_v": {"$ref": "#/$defs/range"},
+        "vol_v": {"$ref": "#/$defs/range"},
+        "vod_v": {"$ref": "#/$defs/range"},
+        "vcm_v": {"$ref": "#/$defs/range"},
+        "receiver_common_mode_v": {"$ref": "#/$defs/range"},
+        "frequency_hz": {"$ref": "#/$defs/range"},
+        "slew_v_per_s": {"$ref": "#/$defs/range"},
+        "coupling": {"type": "string"},
+        "conditions": {"type": "string"},
+        "page": {"$ref": "#/$defs/page"}
+      }
+    },
+    "jesd": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {"type": "string"},
+        "revision": {"type": "string"},
+        "encoding": {"type": "string"},
+        "m": {"type": "integer", "minimum": 1},
+        "np": {"type": "integer", "minimum": 1},
+        "l": {"type": "integer", "minimum": 1},
+        "f": {"type": "integer", "minimum": 1},
+        "k": {"type": "integer", "minimum": 1},
+        "e": {"type": "integer", "minimum": 1},
+        "sample_rate_hz": {"$ref": "#/$defs/range"},
+        "lane_rate_bps": {"$ref": "#/$defs/range"},
+        "sysref_mode": {"type": "string"},
+        "sysref_coupling": {"type": "string"},
+        "setup_s": {"$ref": "#/$defs/range"},
+        "hold_s": {"$ref": "#/$defs/range"},
+        "conditions": {"type": "string"},
+        "page": {"$ref": "#/$defs/page"}
+      }
+    },
+    "model_conditions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "bias_v": {"type": "number"},
+        "bias_a": {"type": "number"},
+        "temperature_c": {"type": "number"},
+        "state": {"type": "string"},
+        "reference_plane": {"type": "string"},
+        "frequency_range_hz": {"type": "array", "items": {"type": "number"}, "minItems": 2},
+        "notes": {"type": "string"}
+      }
+    },
+    "model_reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Reference to an original file kept in the review folder, never a committed vendor model.",
+      "properties": {
+        "file": {"type": "string"},
+        "url": {"type": "string"},
+        "download_date": {"type": "string"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-fA-F]{64}$"},
+        "revision": {"type": "string"},
+        "mpn": {"type": "string"},
+        "conditions": {"$ref": "#/$defs/model_conditions"},
+        "port_map": {"type": "object", "additionalProperties": {"type": "string"}},
+        "reference_ohm": {"type": "array", "items": {"type": "number"}},
+        "applicability": {"type": "string"},
+        "checks": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "model_unavailable_detail": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reason", "consequence"],
+      "properties": {
+        "reason": {"type": "string"},
+        "tried": {"type": "array", "items": {"type": "string"}},
+        "checks": {"type": "array", "items": {"type": "string"}},
+        "consequence": {"type": "string"},
+        "action": {"type": "string"}
+      }
+    },
+    "model_unavailable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mpn", "kind", "unavailable"],
+      "properties": {
+        "status": {"const": "model_unavailable"},
+        "mpn": {"type": "string"},
+        "kind": {"enum": ["touchstone", "ibis", "spice"]},
+        "required_conditions": {"$ref": "#/$defs/model_conditions"},
+        "unavailable": {"$ref": "#/$defs/model_unavailable_detail"}
+      }
+    },
     "page": {"type": ["integer", "string"], "description": "Page number, or 'Table 26 p.33'."},
     "range": {
       "type": "object",

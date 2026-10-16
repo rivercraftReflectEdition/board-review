@@ -26,6 +26,24 @@ Goal: fix the scope and the facts the review judges against, before reading any 
 7. **Bench data.** Captures and measurements with board serial and assembly state.
 8. **Datasheet sources.** Local PDF folder, vendor models, application notes, errata.
 
+## RF, converter and clock requirements
+
+Record each value with its source, operating mode and applicable corners:
+
+- Enabled RF tuning ranges and channel bandwidths, IF ranges, LO side at each setting and images.
+- ADC and DAC sample rates, decimation or interpolation modes and analog input bandwidths.
+- Path gain, noise figure, IIP3, compression and converter full-scale headroom targets.
+- Spur limits with units (dBc or dBFS), offset bands, RBW and relevant operating states.
+- Each clock consumer's jitter or SNR need, integration band, input frequency and clock rate.
+- PCIe generation, common-clock, SRNS or SRIS architecture, SSC and receiver coupling rules.
+- Switching-frequency ranges, spread, PFM and synchronization modes for the aggressor list.
+
+A stated requirement becomes the pass limit. Otherwise use a cited datasheet limit. If neither
+exists, choose a numerical JUDGMENT limit and record the engineering reason before judging the
+check. Keep the missing system requirement visible; the chosen limit does not become a customer
+requirement. Missing operating corners remain unknown and cannot support a worst-case pass.
+Calculators given no limit return INFO or UNKNOWN and name the limit they need.
+
 ## Local workspace
 
 Create a review folder with `sources.local.json` listing every input path, for example

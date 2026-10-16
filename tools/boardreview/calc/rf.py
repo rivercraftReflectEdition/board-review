@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from itertools import product
 from typing import Sequence
 
@@ -15,6 +15,207 @@ from boardreview.calc.base import Key, Marker, Quantity, Result, Verdict, fmt, p
 from boardreview.calc.lc_tank import Cap
 
 TWO_PI = 2 * math.pi
+
+
+@dataclass(frozen=True)
+class Element:
+    """Lumped R, L or C with series loss and inductance, parallel capacitance and value tolerance."""
+
+    kind: str
+    r_ohm: float = 0.0
+    l_h: float = 0.0
+    c_f: float = 0.0
+    esr_ohm: float = 0.0
+    esl_h: float = 0.0
+    c_parallel_f: float = 0.0
+    tolerance_frac: float = 0.0
+
+
+def _element_inputs(element, prefix=""):
+    kind = element.kind.upper()
+    if kind not in {"R", "L", "C"}:
+        raise ValueError("element kind must be R, L or C")
+    values = {name: getattr(element, name) for name in
+              ("r_ohm", "l_h", "c_f", "esr_ohm", "esl_h", "c_parallel_f", "tolerance_frac")}
+    _nonnegative(**values)
+    primary = {"R": "r_ohm", "L": "l_h", "C": "c_f"}[kind]
+    _positive(**{primary: values[primary]})
+    if element.tolerance_frac >= 1 or any(values[n] for n in ("r_ohm", "l_h", "c_f") if n != primary):
+        raise ValueError("supply only the selected element value and a tolerance below one")
+    labels = ("Resistance", "Inductance", "Capacitance", "Series loss resistance",
+              "Series parasitic inductance", "Parallel parasitic capacitance", "Value tolerance")
+    units = ("ohm", "H", "F", "ohm", "H", "F", "")
+    return {prefix + name: _q(value, unit, f"{prefix.replace('_', ' ')}{label}".strip())
+            for (name, value), unit, label in zip(values.items(), units, labels)}
+
+
+def _element_z(element, f_hz):
+    s = 1j * TWO_PI * np.asarray(f_hz)
+    z = element.r_ohm + element.esr_ohm + s * (element.l_h + element.esl_h)
+    if element.c_f:
+        z = z + 1 / (s * element.c_f)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        return z / (1 + s * element.c_parallel_f * z) if element.c_parallel_f else z
+
+
+def _element_resonances(element):
+    l, c, cp = element.l_h + element.esl_h, element.c_f, element.c_parallel_f
+    r = element.r_ohm + element.esr_ohm
+    if not l:
+        return []
+    if not cp:
+        return [1 / (TWO_PI * math.sqrt(l * c))] if c else []
+    if not c:
+        root = 1 / (l * cp) - (r / l) ** 2
+        return [math.sqrt(root) / TWO_PI] if root > 0 else []
+    roots = np.roots([cp * l*l, cp * r*r - l - 2*cp*l/c, 1/c + cp/(c*c)])
+    return sorted(math.sqrt(float(x.real)) / TWO_PI for x in roots if x.imag == 0 and x.real > 0)
+
+
+def _frequencies(f_hz):
+    f = np.atleast_1d(np.asarray(f_hz, dtype=float))
+    if f.ndim != 1 or not len(f) or not np.all(np.isfinite(f)) or np.any(f <= 0) or np.any(np.diff(f) <= 0):
+        raise ValueError("frequencies must be positive, finite and strictly increasing")
+    return f
+
+
+def element_impedance(
+    kind: str, f_hz: Sequence[float], *, r_ohm: float = 0.0, l_h: float = 0.0,
+    c_f: float = 0.0, esr_ohm: float = 0.0, esl_h: float = 0.0, c_parallel_f: float = 0.0,
+    z_min_ohm: float | None = None, z_max_ohm: float | None = None,
+    context: str = "nominal", refs: tuple[str, ...] = (),
+) -> Result:
+    """Sweep a lossy lumped element and find its reactance-zero self-resonances."""
+    element = Element(kind, r_ohm, l_h, c_f, esr_ohm, esl_h, c_parallel_f)
+    inputs = _element_inputs(element)
+    f = _frequencies(f_hz)
+    inputs.update(f_min_hz=_q(f[0], "Hz", "Sweep start"), f_max_hz=_q(f[-1], "Hz", "Sweep stop"),
+                  points=_q(len(f), "count", "Supplied frequency points"))
+    for limit in (z_min_ohm, z_max_ohm):
+        if limit is not None:
+            _nonnegative(impedance_limit_ohm=limit)
+    if z_min_ohm is not None and z_max_ohm is not None and z_min_ohm > z_max_ohm:
+        raise ValueError("minimum impedance limit exceeds maximum")
+    resonances = _element_resonances(element)
+    f = np.unique(np.r_[f, [x for x in resonances if f[0] <= x <= f[-1]]])
+    z = _element_z(element, f)
+    magnitude = np.abs(z)
+    lo, hi = float(np.min(magnitude)), float(np.max(magnitude))
+    srf = resonances[0] if resonances else math.inf
+    outputs = {"z_min_ohm": _q(lo, "ohm", "Smallest impedance magnitude"),
+               "z_max_ohm": _q(hi, "ohm", "Largest impedance magnitude"),
+               "srf_hz": _q(srf, "Hz", "First self-resonance", "No finite resonance" if not resonances else ""),
+               "resonance_count": _q(len(resonances), "count", "Positive resonance frequencies")}
+    for i, resonance in enumerate(resonances, 1):
+        outputs[f"resonance{i}_hz"] = _q(resonance, "Hz", f"Resonance {i}")
+    verdict, limits = _limits(inputs, outputs,
+        [("z_min_limit", z_min_ohm, "ohm", "Minimum element impedance", "z_min_ohm", True),
+         ("z_max_limit", z_max_ohm, "ohm", "Maximum element impedance", "z_max_ohm", False)])
+    text = (f"The sampled {kind.upper()} element impedance ranges from {fmt(lo, 'ohm')} to {fmt(hi, 'ohm')}; "
+            + (f"its first self-resonance is {fmt(srf, 'Hz')}. " if resonances else "it has no finite self-resonance in this model. ")
+            + limits)
+    plot = plot_from_arrays("Element impedance", "Frequency", "Hz", f,
+        [("Magnitude", "ohm", magnitude), ("Resistance", "ohm", z.real), ("Reactance", "ohm", z.imag)],
+        x_log=True, markers=[Marker("Self-resonance", x=x) for x in resonances if f[0] <= x <= f[-1]],
+        caption="Reactance changes sign at self-resonance; compare magnitude with the bias-feed or matching requirement.")
+    return _result("RF element impedance", "Zs=R+ESR+j(w(L+ESL)-1/(wC)); Z=Zs/(1+jwCp Zs)",
+        inputs, outputs, verdict, text,
+        [("z_min_ohm", _want(z_min_ohm, "ohm", True)), ("z_max_ohm", _want(z_max_ohm, "ohm"))],
+        ("DERIVED from series and parallel impedances; constant lumped R, L and C",) + refs, context,
+        ("only the selected R, L or C is present; C is omitted from the series path for R and L",
+         "constant parasitics; no distributed mounting effects or frequency-dependent loss",
+         "resonance means a reactance sign crossing or lossless pole; resistive damping can remove a crossing",
+         "impedance limits cover sampled points and inserted resonance frequencies; unseen extrema need a denser sweep"), (plot,))
+
+
+def _loaded_reflection(impedances, placements, termination_ohm, reference_ohm):
+    num = np.full_like(impedances[0], termination_ohm, dtype=complex)
+    den = np.ones_like(num)
+    for z, placement in reversed(list(zip(impedances, placements))):
+        opened = np.isinf(np.abs(z))
+        finite_z = np.where(opened, 0, z)
+        if placement == "series":
+            num, den = np.where(opened, 1, num + finite_z * den), np.where(opened, 0, den)
+        else:
+            num, den = np.where(opened, num, num * finite_z), np.where(opened, den, num + finite_z * den)
+            short = (z == 0)
+            num, den = np.where(short, 0, num), np.where(short, 1, den)
+        scale = np.maximum(np.abs(num), np.abs(den))
+        num, den = num / scale, den / scale
+    return (num - complex(reference_ohm).conjugate() * den) / (num + reference_ohm * den)
+
+
+def match_sweep(
+    topology: str, elements: Sequence[Element], f_hz: Sequence[float], source_ohm: complex,
+    load_ohm: complex, *, shunt_first: bool = False, rl_min_db: float | None = None,
+    context: str = "nominal", refs: tuple[str, ...] = (),
+) -> Result:
+    """Sweep both port matches of an L, pi or T ladder at nominal values and tolerance endpoints."""
+    placements = {"l": ("shunt", "series") if shunt_first else ("series", "shunt"),
+                  "pi": ("shunt", "series", "shunt"), "t": ("series", "shunt", "series")}
+    if topology.lower() not in placements or len(elements) != len(placements[topology.lower()]):
+        raise ValueError("supply two elements for L or three for pi or T, in source-to-load order")
+    placement = placements[topology.lower()]
+    f = _frequencies(f_hz)
+    inputs = {"f_min_hz": _q(f[0], "Hz", "Band start"), "f_max_hz": _q(f[-1], "Hz", "Band stop"),
+              "points": _q(len(f), "count", "Supplied frequency points")}
+    for name, impedance in (("source", source_ohm), ("load", load_ohm)):
+        if not np.isfinite(impedance) or complex(impedance).real <= 0:
+            raise ValueError("source and load must be finite with positive real resistance")
+        inputs[name + "_r_ohm"] = _q(complex(impedance).real, "ohm", f"{name.title()} resistance")
+        inputs[name + "_x_ohm"] = _q(complex(impedance).imag, "ohm", f"{name.title()} reactance")
+    choices = []
+    for i, element in enumerate(elements, 1):
+        inputs.update(_element_inputs(element, f"element{i}_"))
+        primary = {"R": "r_ohm", "L": "l_h", "C": "c_f"}[element.kind.upper()]
+        choices.append([replace(element, **{primary: getattr(element, primary) * factor})
+                        for factor in sorted({1 - element.tolerance_frac, 1 + element.tolerance_frac})])
+    def curves(parts):
+        zs = [_element_z(e, f) for e in parts]
+        gi = _loaded_reflection(zs, placement, load_ohm, source_ohm)
+        go = _loaded_reflection(zs[::-1], placement[::-1], source_ohm, load_ohm)
+        with np.errstate(divide="ignore"):
+            return -20 * np.log10(np.abs(np.array([gi, go])))
+    nominal = curves(elements)
+    corner_parts = list(product(*choices))
+    corners = np.array([curves(parts) for parts in corner_parts])
+    low, high = np.min(corners, axis=0), np.max(corners, axis=0)
+    all_curves = np.concatenate((nominal[None], corners))
+    index = np.unravel_index(np.argmin(all_curves), all_curves.shape)
+    worst, nominal_min = float(np.min(all_curves)), float(np.min(nominal))
+    with np.errstate(invalid="ignore"):
+        spread = np.where(high == low, 0, high - low)
+    spread_max = float(np.max(spread))
+    outputs = {"rl_min_db": _q(worst, "dB", "Lowest return loss across both ports and all cases"),
+               "nominal_rl_min_db": _q(nominal_min, "dB", "Lowest nominal return loss"),
+               "spread_max_db": _q(spread_max, "dB", "Largest corner spread at one frequency and port"),
+               "worst_hz": _q(f[index[2]], "Hz", "Frequency of lowest return loss"),
+               "worst_port": _q(index[1] + 1, "count", "Port with lowest return loss"),
+               "worst_case": _q(index[0], "count", "Lowest return loss case", "0 is nominal; later cases enumerate tolerance endpoints"),
+               "corner_count": _q(len(corners), "count", "Tolerance endpoint combinations")}
+    worst_parts = elements if index[0] == 0 else corner_parts[index[0] - 1]
+    for i, element in enumerate(worst_parts, 1):
+        name, unit, label = {"R": ("r_ohm", "ohm", "resistance"), "L": ("l_h", "H", "inductance"),
+                             "C": ("c_f", "F", "capacitance")}[element.kind.upper()]
+        outputs[f"worst_element{i}_{name}"] = _q(getattr(element, name), unit, f"Worst match element {i} {label}")
+    verdict, limits = _limits(inputs, outputs,
+        [("rl_limit", rl_min_db, "dB", "Minimum matching return loss", "rl_min_db", True)])
+    text = (f"The lowest sampled return loss is {fmt(worst, 'dB')} at {fmt(f[index[2]], 'Hz')}; nominal is "
+            f"{fmt(nominal_min, 'dB')} and the largest corner spread is {fmt(spread_max, 'dB')}. {limits}")
+    series = [(f"{side} {label}", "dB", array[port]) for port, side in enumerate(("Input", "Output"))
+              for label, array in (("nominal", nominal), ("lowest corner", low), ("highest corner", high))]
+    markers = [Marker("Worst match", x=float(f[index[2]]), y=worst, unit="dB")]
+    if rl_min_db is not None:
+        markers.append(Marker("Return loss limit", y=rl_min_db, unit="dB"))
+    plot = plot_from_arrays("Matching network return loss", "Frequency", "Hz", f, series,
+                            x_log=True, markers=markers, caption="Both port matches at nominal values and component tolerance endpoints.")
+    return _result("RF matching sweep", "Zseries=Z+Zload; Zshunt=Z*Zload/(Z+Zload); Gamma=(Zin-conj(Zsource))/(Zin+Zsource); RL=-20 log10|Gamma|",
+        inputs, outputs, verdict, text, [("rl_min_db", _want(rl_min_db, "dB", True)), ("spread_max_db", "inspect tolerance sensitivity")],
+        ("DERIVED from ladder impedances and conjugate power match for positive-real source and load",) + refs,
+        context, (f"{topology} ladder in source-to-load order: {', '.join(placement)}",
+                  "tolerance endpoints vary each primary value independently; parasitics and source/load impedances stay fixed",
+                  "sampled frequency grid and endpoint combinations do not bound tolerance interiors or unseen narrow resonances",
+                  "constant lumped elements; use manufacturer S-parameters when the lumped model is inapplicable"), (plot,))
 
 
 @dataclass(frozen=True)

@@ -5,15 +5,12 @@ description: Schematic and PCB design review for Altium or KiCad boards. Use whe
 
 # Board review
 
-Pin-and-net checks find opens, shorts and wrong pins. Boards fail on the bench for other reasons:
-a regulator outside the conditions its compensation was designed for, a bead and capacitor that
-ring at the switching frequency, a rail that cannot absorb returned current, a strap at mid-rail,
-a reset that does not assert at cold. This skill finds those, with numbers.
+Pin-and-net checks find opens, shorts and wrong pins. This skill checks bench failure mechanisms:
+unstable regulators, resonant filters, returned current, strap and reset margins, RF and clock budgets.
 
 ## Setup (once per machine)
 
-The skill runs the `boardreview` Python package from the board-review repo; this folder is the
-repo's `skill/` folder, linked into the agent's skills folder.
+This is the repo's `skill/` folder, linked into the agent's skills folder. It runs `boardreview`.
 
 1. `python -m pip install -e <board-review repo>` (Python 3.11+, numpy, scipy). It needs network
    access and a writable Python; in a sandbox, ask the user to run it.
@@ -35,7 +32,7 @@ Not for: library creation, routing, or firmware review.
 
 ## Workflow
 
-Run the stages in order. Each stage has a page in `workflow/`. Do not judge before stage 2 ends.
+Run stages in order, using `workflow/`. Do not judge before stage 2 ends.
 
 | Stage | Page | Output (in the review folder, which may sit in the board project when the user asks; never in this repo) |
 |---|---|---|
@@ -48,6 +45,9 @@ Run the stages in order. Each stage has a page in `workflow/`. Do not judge befo
 | 6 Report | workflow/60_report.md | report.html, report.md, findings.json (problems apart from open questions), bench test plan, known-good list |
 
 Checklists live in `checklists/`, one per block type; each item says check, why, compute, pass.
+RF and converter paths use [rf_front_end](checklists/rf_front_end.md),
+[data_converters](checklists/data_converters.md), [clock_distribution](checklists/clock_distribution.md)
+and the board-level [spur_plan](checklists/spur_plan.md). Fetch models per [models](workflow/models.md).
 
 ## Hard rules
 
@@ -81,8 +81,8 @@ Checklists live in `checklists/`, one per block type; each item says check, why,
 
 ## Finding format
 
-Each finding is one JSON object that validates against `schemas/finding.schema.json`; check the
-file with `python -m boardreview validate findings.json` before reporting. Required:
+Each finding validates against `schemas/finding.schema.json`; run
+`python -m boardreview validate findings.json` before reporting. Required:
 
 - `id`, `title` (one line: part or net, what fails), `severity` (blocker, major, minor, note)
 - `block` (a checklist name) and `check` (the item, for example `buck_regulator#BR-1`)
@@ -124,26 +124,26 @@ verification. Severity:
   floating protection grounds, near-duplicate rail names, parts without MPN, DNP-only links,
   BOM against netlist. `lint.to_findings` writes results as PENDING candidate findings.
 - `blocks`: candidate switching regulators, LDOs and load switches, bead and LC filters,
-  crystals, oscillators, resets, I2C buses, straps.
+  crystals, oscillators, clock buffers, PLLs, jitter cleaners, RF paths, ADCs, DACs, resets, I2C buses, straps.
 - `calc`: `buck`, `loop`, `lc_tank`, `mlcc_bias`, `divider`, `timing`, `protection`, `i2c`,
-  `crystal`, `thermal`. Each function returns a `Result`. Inputs are marked nominal, worst_case,
+  `crystal`, `thermal`, `jitter`, `clock_term`, `pll`, `rf`, `spur`, `converter`.
+  Each function returns a `Result`. Inputs are marked nominal, worst_case,
   example or ideal (a context argument or `Result.in_context`); only worst_case inputs can pass.
 - `sim`: LTspice batch runs from `sim.setups` (`run_loop_gain`, `run_load_step`, `run_startup`,
   `run_impedance`) with the checks in `sim.sanity`. A simulation is evidence only after its
-  checks pass.
+  checks pass. `sim.touchstone` reads local S-parameters and checks loss, match and passivity
+  against caller-supplied limits; model applicability is recorded per workflow/models.md.
 - Altium: the eda-agent MCP tools (any agent that speaks MCP). KiCad: `kicad-cli`.
 
 ## Running in different agents
 
 The skill needs a shell, file reads and writes, and a second context for stage 5.
-- Fresh context for stage 5 and split work (one agent per MPN or block): subagents in any agent
-  that has them (Claude Code, Codex), else separate `codex exec` runs or fresh sessions that see
-  only their inputs (workflow/50_verify.md). Split work can also run in one session.
+- Stage 5 needs fresh context: subagents, separate `codex exec` runs or fresh sessions that see
+  only their inputs (workflow/50_verify.md). Other work may run one block after another.
 - Datasheet pages are read as images (workflow/20_datasheets.md). Offline, ask the user once for
   the PDFs, never again for one they said is unavailable; never fill a digest from memory.
 
 ## Lessons and evals
 
 - `lessons/`: one page per real miss, linked to the checklist item that now catches it.
-- In the board-review repo only: `evals/` holds expected findings per board and the scorer. A
-  miss on a dev board is a checklist bug. Held-out boards are never read while editing checklists.
+- Repo `evals/` holds expected findings and the scorer. Never read held-out boards while editing checklists.

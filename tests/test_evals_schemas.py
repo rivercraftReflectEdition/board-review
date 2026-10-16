@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from boardreview.calc.base import CONTEXTS, Quantity, Result
+from boardreview.calc.base import Band, CONTEXTS, Plot, Quantity, Result, Series
 from boardreview.calc.divider import enable_thresholds
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -119,7 +119,10 @@ def test_block_and_failure_vocab_matches_checklists():
 def test_bug_classes_use_schema_vocab_and_real_checklist_items():
     blocks, modes = score.vocab(FINDING)
     classes = json.loads((EVALS / "bug_classes.json").read_text(encoding="utf-8"))["classes"]
-    assert len(classes) == 7
+    names = {c["name"] for c in classes}
+    assert len(classes) == len(names) == 13
+    assert {"lvpecl_ac_coupled_missing_pulldowns", "lp_hcsl_double_termination", "pll_loop_filter_x7r",
+            "sysref_gated_ac_coupled", "narrowband_balun_on_wideband_path", "antenna_esd_capacitance_at_band"} <= names
     for c in classes:
         assert c["block"] in blocks and c["failure_mode"] in modes
         for ref in c["checks"]:
@@ -196,3 +199,56 @@ def test_digest_entries_need_pages():
     d = _digest()
     del d["abs_max"][0]["page"]
     assert any("missing page" in e for e in score.validate(d, DIGEST))
+
+
+@pytest.mark.parametrize("name", ["finding", "check_result"])
+def test_plot_bands_validate_from_result_and_reject_incomplete_bands(name):
+    schema = json.loads((SCHEMAS / f"{name}.schema.json").read_text(encoding="utf-8"))
+    plot = Plot("Noise integration", "Offset", "Hz", (1e3, 1e6),
+                (Series("Phase noise", "dBc/Hz", (-120, -150)),), bands=(Band("Integration", 12e3, 1e6),))
+    result = Result("Noise", "integral", {}, {}, plots=(plot,)).to_dict()
+    assert score.validate(result, schema["$defs"]["calculation"], schema) == []
+    del result["plots"][0]["bands"][0]["x_min"]
+    assert any("missing x_min" in e for e in score.validate(result, schema["$defs"]["calculation"], schema))
+
+
+def test_digest_optional_clock_rf_converter_fields_and_provenance():
+    d = _digest()
+    d.update(clock_io=[{"name": "OUT0", "output_type": "LVDS", "voh_v": {"min": 1.3},
+                       "vol_v": {"max": 1.1}, "vod_v": {"min": 0.2}, "vcm_v": {"typ": 1.2},
+                       "receiver_common_mode_v": {"min": 0.5, "max": 1.5}, "page": 7}],
+             psrr=[{"parameter": "Analog rail rejection", "typ": -60, "unit": "dB", "page": 8,
+                    "conditions": "100 kHz; output/input amplitude, 3.3 V bias"}],
+             rf={"band_hz": {"min": 1e8, "max": 3e9}, "page": 4, "touchstone": [
+                 {"file": "models/synthetic.s2p", "url": "synthetic reference, no vendor model",
+                  "download_date": "2026-10-15", "sha256": "0"*64, "revision": "A", "mpn": d["mpn"],
+                  "conditions": {"bias_v": 3.3, "bias_a": 0.02, "temperature_c": 25,
+                                 "reference_plane": "component pins", "frequency_range_hz": [1e8, 3e9]},
+                  "port_map": {"1": "IN", "2": "OUT"}, "reference_ohm": [50, 50],
+                  "applicability": "Synthetic schema example", "checks": ["rf_front_end#RF-6"]}]},
+             converter={"clock_input": {"input_type": "LVDS", "frequency_hz": {"max": 1e9}, "page": 9},
+                        "jesd": [{"revision": "204B", "encoding": "8b/10b", "m": 2, "np": 16,
+                                  "l": 4, "f": 2, "k": 32, "sample_rate_hz": {"typ": 1e9},
+                                  "lane_rate_bps": {"max": 12.5e9}, "page": 10}]})
+    assert score.validate(d, DIGEST) == []
+    d["clock_io"][0]["voh_v"]["min"] = "1.3 V"
+    assert score.validate(d, DIGEST)
+
+
+def test_models_workflow_unavailable_example_validates_standalone_and_in_digest():
+    text = (ROOT / "skill" / "workflow" / "models.md").read_text(encoding="utf-8")
+    record = json.loads(text.split("```json\n", 1)[1].split("```", 1)[0])
+    assert score.validate(record, DIGEST) == []
+    d = _digest()
+    d["model_unavailable"] = [record]
+    assert score.validate(d, DIGEST) == []
+    del record["unavailable"]["consequence"]
+    assert any("missing consequence" in e for e in score.validate(record, DIGEST))
+
+
+def test_model_unavailable_does_not_require_tried_and_preserves_source_reason_enum():
+    record = {"mpn": "SYNTHETIC", "status": "model_unavailable", "kind": "ibis",
+              "unavailable": {"reason": "User said unavailable", "consequence": "Eye check stays unknown"}}
+    assert score.validate(record, DIGEST) == []
+    record["status"] = "source_unavailable"
+    assert score.validate(record, DIGEST)

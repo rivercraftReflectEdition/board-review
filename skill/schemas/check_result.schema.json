@@ -38,7 +38,8 @@
         "buck_regulator", "ldo", "ferrite_lc_filter", "pdn_decoupling", "cascaded_rails",
         "enable_uvlo_sequencing", "resets_supervisors_watchdogs", "clocks_crystals",
         "io_levels_and_domains", "straps_and_boot_pins", "ethernet_phy", "camera_csi",
-        "xspi_memory", "protection_tvs", "thermal", "layout", "netlist_integrity", "other"
+        "xspi_memory", "protection_tvs", "thermal", "layout", "netlist_integrity",
+        "clock_distribution", "rf_front_end", "spur_plan", "data_converters", "other"
       ]
     },
     "source": {
@@ -133,6 +134,19 @@
         },
         "y_log": {"type": "boolean"},
         "caption": {"type": "string", "description": "One line saying what to look at."},
+        "bands": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["label", "x_min", "x_max"],
+            "properties": {
+              "label": {"type": "string"},
+              "x_min": {"type": "number"},
+              "x_max": {"type": "number"}
+            }
+          }
+        },
         "series": {
           "type": "array",
           "minItems": 1,

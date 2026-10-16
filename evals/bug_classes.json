@@ -49,6 +49,48 @@
       "failure_mode": "reverse_current",
       "checks": ["cascaded_rails#CR-1", "buck_regulator#BR-5"],
       "mutation": "Set a downstream synchronous converter to forced-continuous mode while its upstream regulator cannot sink current and the rail has no other load or clamp."
+    },
+    {
+      "name": "lvpecl_ac_coupled_missing_pulldowns",
+      "block": "clock_distribution",
+      "failure_mode": "termination_error",
+      "checks": ["clock_distribution#CKD-3"],
+      "mutation": "For an emitter-follower LVPECL driver whose datasheet requires source pull-downs, remove both pull-downs before the AC coupling capacitors. Exclude devices whose vendor forbids those resistors."
+    },
+    {
+      "name": "lp_hcsl_double_termination",
+      "block": "clock_distribution",
+      "failure_mode": "termination_error",
+      "checks": ["clock_distribution#CKD-2", "clock_distribution#CKD-5"],
+      "mutation": "Add receiver shunts to an LP-HCSL clock already source terminated, contrary to the driver's termination circuit."
+    },
+    {
+      "name": "pll_loop_filter_x7r",
+      "block": "clock_distribution",
+      "failure_mode": "loop_instability",
+      "checks": ["clock_distribution#CKD-7"],
+      "mutation": "Replace a required C0G or film PLL loop-filter capacitor with X7R of the same nominal value. Include its bias-dependent capacitance in the loop check."
+    },
+    {
+      "name": "sysref_gated_ac_coupled",
+      "block": "data_converters",
+      "failure_mode": "sync_fault",
+      "checks": ["data_converters#ADC-9", "clock_distribution#CKD-4"],
+      "mutation": "AC couple a gated or one-shot SYSREF on a converter mode that requires DC coupling. Preserve receiver bias so the restart transient is the planted fault."
+    },
+    {
+      "name": "narrowband_balun_on_wideband_path",
+      "block": "rf_front_end",
+      "failure_mode": "rf_mismatch",
+      "checks": ["rf_front_end#RF-2"],
+      "mutation": "Replace a balun with a pin-compatible part whose documented band covers only part of the enabled tuning range."
+    },
+    {
+      "name": "antenna_esd_capacitance_at_band",
+      "block": "rf_front_end",
+      "failure_mode": "rf_mismatch",
+      "checks": ["rf_front_end#RF-9"],
+      "mutation": "Increase antenna ESD shunt capacitance so its documented RF response violates the path's return-loss or insertion-loss allocation at the operating band."
     }
   ]
 }
