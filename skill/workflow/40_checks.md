@@ -26,15 +26,32 @@ every numeric item keep the calculator `Result`.
 - Corners: resistor and reference tolerance, both temperature extremes, DC bias, aging, supply
   limits. Where two corners push in opposite directions (leakage hot, VF cold) run both.
 - A corner that intake.md records as unknown (input range, temperature, load) is not invented.
-  Run the check at a nominal value only as a diagnostic, label it nominal in the summary, and
-  record the item unknown when its verdict depends on the missing corner.
+  Run the check at a nominal value only as a diagnostic, marked nominal (below), and record the
+  item unknown when its verdict depends on the missing corner.
+- Mark what the inputs are: nominal, worst_case, example (a datasheet example's values) or ideal
+  (for example Dmax = 1). Calculators that take a `context` argument (`calc.buck.current_slew`,
+  `calc.buck.slew_clamp_vpp`, `calc.buck.example_envelope`, `calc.loop.margins`) mark their own
+  Result; mark any other with `Result.in_context`. A pass from anything but worst_case comes back
+  unknown, with the summary saying so, and the report shows it as unknown.
 - Guaranteed values decide pass and fail. Typical values may explain, never pass.
 - Print `Result.to_markdown()` in the working notes so the math is visible.
 
 ## checks.json
 
+Start the file from the blocks of stage 3:
+
+```
+python -m boardreview checks --facts <review folder>/facts --blocks <review folder>/blocks.json --out <review folder>/checks.json
+```
+
+It writes one unknown entry per checklist item per block instance, from each block's `checklist`
+field (prep's blocks by their kind), and the board-wide checklists once. Entries already in the
+file are kept, so run it again after adding blocks. Replace each entry as you run the item; one
+left with the skeleton's "Not run yet" reason was not run.
+
 Write every item run, pass or fail, to `checks.json` in the review folder: a list of objects
 that validate against `schemas/check_result.schema.json`, or `{"board": ..., "checks": [...]}`.
+Check it with `python -m boardreview validate checks.json --schema checks`.
 One entry per item per block instance:
 
 - `id` unique in the file (for example `U9-ch1.BR-1`), `block`, `instance` (for example
@@ -46,9 +63,12 @@ One entry per item per block instance:
   step." Leave it out to use the calculator's own summary;
 - `verdict`: pass, marginal, fail, unknown or not_applicable, with `reason` (required for
   unknown and not_applicable). A check's verdict is never better than its worst calculator
-  verdict unless its `summary` says why; the report flags it otherwise;
+  verdict unless its `summary` says why; the report flags it otherwise. Write an unknown's
+  reason plainly ("U6 datasheet not supplied", "bead impedance curve at bias not published"):
+  the report counts unknown checks by it;
 - `results`: each calculator `Result` as `Result.to_dict(name)`, where name is the calculator
-  path such as `calc.loop.margins`; plots are included;
+  path such as `calc.loop.margins`; plots are included, `context` says what the inputs were, and
+  a value that is not finite is written as null with a note;
 - `digest_values`: the datasheet values the check used, each with document and page;
 - `not_published`, `assumptions`, `sources`, `bench_test`;
 - `simulation`: the setup verdict, the measured verdict, each sanity check and the sim Results;
@@ -154,3 +174,8 @@ them.
 
 Severity: blocker if the board fails as built; major if it fails at a corner, over life or in a
 likely fault; minor for bounded margin or cost; note for firmware, test or next-spin items.
+
+A candidate that rests on missing data ends UNVERIFIABLE in stage 5, and the report shows it as
+an open question, not a problem, with the severity it would have if it holds
+(workflow/60_report.md). Give it `not_published` and a `bench_test` so the report can say what
+is missing and what settles it.

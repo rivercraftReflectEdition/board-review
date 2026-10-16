@@ -9,7 +9,6 @@ import pytest
 
 from boardreview.__main__ import main
 from boardreview.report import plain
-from schema_pending import pending
 
 ROOT = Path(__file__).resolve().parent.parent
 BOARD = Path(__file__).parent / "fixtures" / "report"
@@ -160,7 +159,7 @@ def test_page_data_carries_status_key_pointers_and_placement(full):
 def test_written_findings_validate_and_carry_the_merged_status(full):
     data = json.loads((full / "findings.json").read_text(encoding="utf-8"))
     for f in data["findings"]:
-        assert score.validate(f, pending(FINDING)) == [], f["id"]
+        assert score.validate(f, FINDING) == [], f["id"]
     by = {f["id"]: f for f in data["findings"]}
     assert by["F-004"]["status"] == {"fixed": True, "fixed_at": "2026-10-14T10:00:00Z"}
     assert by["F-001"]["status"]["fixed"] is True

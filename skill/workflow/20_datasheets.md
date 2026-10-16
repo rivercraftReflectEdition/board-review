@@ -5,11 +5,16 @@ list of what the documents do not publish.
 
 ## Get the documents
 
-With network access, run `python -m boardreview datasheets` with `--download` on the stage 1
-facts (`--help` lists its inputs). It collects the MPN and datasheet URL fields from the netlist
-or BOM, downloads each PDF into the review folder, and records a response that is not a PDF as
-unavailable. Then read the PDFs as below. A URL field can point at a product page or an old
-revision; check what arrived.
+With network access, run:
+
+```
+python -m boardreview datasheets --netlist <review folder>/facts/board_model.json [--bom BOM] --out <review folder>/datasheets --download
+```
+
+It collects the MPN and datasheet URL fields from the netlist or BOM into `datasheets.json` and
+`datasheets.md`, downloads each PDF next to them, and records a response that is not a PDF as
+unavailable. Without `--download` it only lists them. Then read the PDFs as below. A URL field
+can point at a product page or an old revision; check what arrived.
 
 Without network access, use the PDFs the user supplied and ask once for the others the checks
 need. When the user says a PDF is unavailable, do not ask again: write a source_unavailable

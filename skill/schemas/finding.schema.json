@@ -78,7 +78,7 @@
       "additionalProperties": false,
       "required": ["value", "unit"],
       "properties": {
-        "value": {"type": "number"},
+        "value": {"type": ["number", "null"], "description": "null for a value that is not finite (infinity or NaN); the note says why."},
         "unit": {"type": "string"},
         "note": {"type": "string"},
         "label": {"type": "string", "description": "Human name, for example 'Phase margin' or 'Top resistor'."}
@@ -100,6 +100,7 @@
         "refs": {"type": "array", "items": {"type": "string"}},
         "plots": {"type": "array", "items": {"$ref": "#/$defs/plot"}},
         "summary": {"type": "string", "description": "Two or three plain sentences with the real numbers; agrees with the verdict."},
+        "context": {"enum": ["nominal", "worst_case", "example", "ideal"], "description": "What the inputs are. Only worst_case inputs can pass; a pass from the others comes back unknown."},
         "key": {
           "type": "array",
           "description": "Key numbers against their limits, from Result.key_line().",

@@ -11,6 +11,7 @@ Write findings.json, the bench plan and the known-good list, then run:
 python -m boardreview report --findings findings.json --facts facts/ --bench bench.json \
   --known-good known_good.json [--previous OLD/findings.json] [--status status.json] \
   [--checks checks.json] [--placement board.kicad_pcb | board.d356 | board-pos.csv] [--pos-units mm] \
+  [--power-tree power_tree.json] [--blocks blocks.json] [--supporting FILE ...] [--google-fonts] \
   [--detail full] --out report/
 ```
 
@@ -37,6 +38,15 @@ Inputs:
   from the block). `parts` may hold ranges such as `R14-R22`. Write the title as what breaks.
 - **facts/**: the prep folder. Part values, MPNs, DNP state, pins and nets come from
   board_model.json; the power tree from blocks.json.
+- **Reviewed stage 3 files**: `--power-tree power_tree.json` (edges with `part`, `kind`, `input`,
+  `output`) and `--blocks blocks.json` replace the tree and blocks prep guessed, so corrected
+  directions and every LDO and load switch reach the page (workflow/30_blocks.md). Pass them
+  whenever stage 3 corrected anything.
+- **Supporting files**: verification, source availability, feedback and review files found next
+  to findings.json (verify/, intake.md, power_tree.json, checks.json and others) are linked in a
+  folded section. `--supporting` adds more, for example `datasheets/datasheets.md` from stage 2.
+- **Fonts**: the pages use system fonts and work offline. `--google-fonts` loads the display
+  fonts from Google Fonts instead.
 - **Placement**: `placement.json`, which prep writes in facts/ from a `.kicad_pcb` or an
   IPC-D-356 file it was given; or a KiCad board file, an IPC-D-356 file or a
   `kicad-cli pcb export pos` file, passed with `--placement` or dropped in facts/. The netlist

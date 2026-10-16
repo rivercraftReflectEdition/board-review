@@ -14,7 +14,6 @@ from boardreview.sim import measure, setups
 from boardreview.sim.rawfile import RawFile, Variable
 from boardreview.sim.runner import RunResult, parse_log
 from boardreview.sim.sanity import SanityReport
-from schema_pending import pending
 
 ROOT = Path(__file__).resolve().parent.parent
 FINDING = json.loads((ROOT / "skill" / "schemas" / "finding.schema.json").read_text(encoding="utf-8"))
@@ -110,7 +109,7 @@ def test_every_calculator_plot_validates_and_marks_the_verdict_point():
         for p in r.plots:
             assert plot_errors(p) == [], calc
             ET.fromstring(svgplot.plot_svg(p))
-        schema = pending(FINDING)
+        schema = FINDING
         assert score.validate(r.to_dict(calc), schema["$defs"]["calculation"], schema) == [], calc
     assert [p.title for p in lc.plots] == ["Filter transfer, source to load", "Impedance seen from the load"]
     assert {m.x for m in lc.plots[0].markers if m.label.startswith("fsw")} == {2.2e6}

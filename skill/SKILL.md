@@ -22,9 +22,8 @@ repo's `skill/` folder, linked into the agent's skills folder.
 3. KiCad boards need `kicad-cli` (verified with KiCad 10.0.6; workflow/10_extract.md). For a
    sandbox, the Codex sandbox on Windows, or UTF-8 output on Windows, see workflow/setup.md.
 
-Paths in this skill (`workflow/`, `checklists/`, `schemas/`, `lessons/`) are relative to the folder
-that holds this SKILL.md. Python names are relative to the `boardreview` package:
-`calc.buck.current_slew` is `boardreview.calc.buck.current_slew`.
+Paths here (`workflow/`, `checklists/`, `schemas/`, `lessons/`) are relative to this folder; Python
+names to the `boardreview` package (`calc.buck.current_slew` is `boardreview.calc.buck.current_slew`).
 
 ## When to use
 
@@ -43,13 +42,12 @@ Run the stages in order. Each stage has a page in `workflow/`. Do not judge befo
 | 0 Intake | workflow/00_intake.md | intake.md: scope, revision, variant, requirements and their unknowns, prior findings |
 | 1 Extract | workflow/10_extract.md | facts/ from `python -m boardreview prep`: board model, compare, lint, block candidates, facts.md; open gate items |
 | 2 Datasheets | workflow/20_datasheets.md | PDFs, one digest or source_unavailable record per MPN (schemas/datasheet_digest.schema.json), curve CSVs |
-| 3 Blocks | workflow/30_blocks.md | blocks.json and the power tree, each block mapped to a checklist |
-| 4 Checks | workflow/40_checks.md | per-item results with calculator output; candidate findings |
+| 3 Blocks | workflow/30_blocks.md | blocks.json (LDOs and load switches included) and power_tree.json, reviewed; each block mapped to a checklist |
+| 4 Checks | workflow/40_checks.md | checks.json, started by `python -m boardreview checks`, with calculator output; candidate findings |
 | 5 Verify | workflow/50_verify.md | each finding CONFIRMED, WRONG or UNVERIFIABLE by a second agent |
-| 6 Report | workflow/60_report.md | report.md, findings.json, bench test plan, known-good list |
+| 6 Report | workflow/60_report.md | report.html, report.md, findings.json (problems apart from open questions), bench test plan, known-good list |
 
-Checklists live in `checklists/`, one per block type. Each item states the check, why it matters,
-the calculator, the pass criterion, and what to do when the data is not published.
+Checklists live in `checklists/`, one per block type; each item says check, why, compute, pass.
 
 ## Hard rules
 
@@ -69,8 +67,8 @@ the calculator, the pass criterion, and what to do when the data is not publishe
    could get is source_unavailable, not "not published" (workflow/20_datasheets.md).
 5. **Every finding survives refutation.** A second agent with fresh context tries to break each
    finding against the sources (workflow/50_verify.md). WRONG findings are dropped. UNVERIFIABLE
-   findings, which include every claim that rests on missing evidence, carry a bench test.
-   High-risk passes get the same treatment: a wrong pass is how real misses happen.
+   findings (every claim that rests on missing evidence) carry a bench test and are reported as
+   open questions, not problems. High-risk passes get the same treatment.
 6. **Compare with the example envelope.** For every regulator, compare the operating point with
    the datasheet's example circuits for the same compensation mode. Correct pins do not mean a
    stable loop.
@@ -111,11 +109,13 @@ verification. Severity:
   netlist compare in one folder, indexed by `facts.md` (workflow/10_extract.md).
 - `python -m boardreview datasheets`: MPN and datasheet URL fields from the netlist or BOM;
   `--download` fetches the PDFs into the review folder (workflow/20_datasheets.md).
-- `python -m boardreview validate FILE`: schema check for findings.json (`--schema digest` or
-  `--schema board_model` for the others).
+- `python -m boardreview checks`: checks.json skeleton, one unknown entry per checklist item per
+  block instance, from blocks.json (workflow/40_checks.md).
+- `python -m boardreview validate FILE`: schema check for findings.json; `--schema checks`,
+  `digest` or `board_model` for the others.
 - `python -m boardreview report`: report.html, the artifact page, report.md, ticket drafts and,
-  with `--detail full`, analysis.html, from findings.json and the facts folder
-  (workflow/60_report.md).
+  with `--detail full`, analysis.html (workflow/60_report.md). `--power-tree` and `--blocks` take
+  the reviewed stage 3 files, `--supporting` links more files, `--google-fonts` loads web fonts.
 - `python -m boardreview verify-fixes`: marks findings set fixed as verified, or not, in the facts
   of the fixed design (workflow/60_report.md).
 - `model`: board model from IPC-D-356, KiCad XML, `.kicad_pcb`, Protel .NET, eda-agent JSON and
@@ -123,10 +123,11 @@ verification. Severity:
 - `lint`: single-pin nets, unconnected IC pins, ground and supply pins on the wrong net,
   floating protection grounds, near-duplicate rail names, parts without MPN, DNP-only links,
   BOM against netlist. `lint.to_findings` writes results as PENDING candidate findings.
-- `blocks`: candidate switching regulators, bead and LC filters, crystals, oscillators, resets,
-  I2C buses, straps.
+- `blocks`: candidate switching regulators, LDOs and load switches, bead and LC filters,
+  crystals, oscillators, resets, I2C buses, straps.
 - `calc`: `buck`, `loop`, `lc_tank`, `mlcc_bias`, `divider`, `timing`, `protection`, `i2c`,
-  `crystal`, `thermal`. Each function returns a `Result`.
+  `crystal`, `thermal`. Each function returns a `Result`. Inputs are marked nominal, worst_case,
+  example or ideal (a context argument or `Result.in_context`); only worst_case inputs can pass.
 - `sim`: LTspice batch runs from `sim.setups` (`run_loop_gain`, `run_load_step`, `run_startup`,
   `run_impedance`) with the checks in `sim.sanity`. A simulation is evidence only after its
   checks pass.
@@ -135,10 +136,9 @@ verification. Severity:
 ## Running in different agents
 
 The skill needs a shell, file reads and writes, and a second context for stage 5.
-- Fresh context for stage 5, and split work (one agent per MPN or per block): subagents in any
-  agent that has them (Claude Code, Codex); otherwise separate `codex exec` runs or fresh
-  sessions that see only their inputs (workflow/50_verify.md). Split work can also run one piece
-  after another in one session; the output files are the same.
+- Fresh context for stage 5 and split work (one agent per MPN or block): subagents in any agent
+  that has them (Claude Code, Codex), else separate `codex exec` runs or fresh sessions that see
+  only their inputs (workflow/50_verify.md). Split work can also run in one session.
 - Datasheet pages are read as images (workflow/20_datasheets.md). Offline, ask the user once for
   the PDFs, never again for one they said is unavailable; never fill a digest from memory.
 
