@@ -10,12 +10,14 @@ from boardreview.blocks.i2c import find_i2c_buses
 from boardreview.blocks.linear import find_linear
 from boardreview.blocks.regulators import find_switching_regulators
 from boardreview.blocks.resets import find_reset_nets
+from boardreview.blocks.rf import find_rf
 from boardreview.blocks.straps import find_straps
 from boardreview.model.board import BoardModel
 from boardreview.model.graph import Graph
 
 ORDER = ["switching_regulator", "ldo", "load_switch", "ferrite_filter", "lc_filter", "crystal", "oscillator",
-         "clock_buffer", "pll", "jitter_cleaner", "reset", "adc", "dac", "i2c_bus", "strap"]
+         "clock_buffer", "pll", "jitter_cleaner", "reset", "adc", "dac", "i2c_bus", "strap",
+         "balun", "rf_switch", "rf_amplifier", "attenuator_pad", "rf_connector"]
 
 
 def _rail_roles(regs: list[Block], linear: list[Block]) -> tuple[dict[str, str], dict[str, str]]:
@@ -33,7 +35,7 @@ def _rail_roles(regs: list[Block], linear: list[Block]) -> tuple[dict[str, str],
 
 
 def find_all(model: BoardModel) -> list[Block]:
-    """Run every finder; straps skip nets already explained as feedback, I2C, reset or clock nets."""
+    """Run every finder; straps skip nets explained as feedback, I2C, reset, clock or RF paths."""
     g = Graph(model)
     regs = find_switching_regulators(g)
     linear = find_linear(g, exclude={b.roles["controller"][0] for b in regs})
@@ -43,6 +45,7 @@ def find_all(model: BoardModel) -> list[Block]:
     converters = find_converters(g)
     resets = find_reset_nets(g)
     buses = find_i2c_buses(g)
+    rf = find_rf(g)
     taken: set[str] = set()
     for b in regs:
         taken.update(b.roles.get("feedback_node", []))
@@ -56,7 +59,12 @@ def find_all(model: BoardModel) -> list[Block]:
         for role, nets in b.roles.items():
             if role.endswith("_nets"):
                 taken.update(nets)
-    return regs + linear + filters + clocks + converters + resets + buses + find_straps(g, taken)
+    for b in rf:
+        if b.confidence == "low" or b.kind == "attenuator_pad" and b.confidence != "high":
+            continue
+        for role in ("signal_nets", "rf_ports", "input", "output", "ports", "middle"):
+            taken.update(b.roles.get(role, []))
+    return regs + linear + filters + clocks + converters + resets + buses + find_straps(g, taken) + rf
 
 
 def power_edges(blocks: list[Block]) -> list[str]:
