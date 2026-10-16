@@ -1,9 +1,10 @@
 # Lessons
 
 One page per real miss or near miss. Each page states the general rule first, then the case that
-taught it, then the checklist items that now catch it. The cases come from the Sauron rev1 star
-tracker carrier (STM32N657, LTC3633A, LT8640, ADIN1200, S28HS01GT, S80KS5123, IMX900 module).
-Checklists stay vendor-neutral; these pages are the examples.
+taught it, then the checklist items that now catch it. Most cases come from the Sauron rev1 star
+tracker carrier (STM32N657, LTC3633A, LT8640, ADIN1200, S28HS01GT, S80KS5123, IMX900 module);
+one comes from an offline review of an open-source carrier board. Checklists stay
+vendor-neutral; these pages are the examples.
 
 Status: missed = reached hardware; near miss = caught late or by luck; caught = caught by review.
 
@@ -28,6 +29,7 @@ Status: missed = reached hardware; near miss = caught late or by luck; caught = 
 | [I/O range fuses](io-range-fuses.md) | near miss | IO-4, MEM-4 |
 | [Module keepout](module-keepout-shadow.md) | caught | LAY-6 |
 | [Verifier dispute on ESD grounds](verifier-dispute-esd-grounds.md) | near miss | 50_verify, PROT-4 |
+| [DNP in the schematic, fitted in the PCB](dnp-in-schematic-fitted-in-pcb.md) | caught | NET-7, NET-1 |
 
 ## Adding a lesson
 

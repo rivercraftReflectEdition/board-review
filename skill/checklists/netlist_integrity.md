@@ -47,7 +47,12 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Why: cheap to find mechanically, expensive on the bench.
 - Compute: `lint.run_all`; floating inputs, labels and designators from the staging views (no
   lint check yet).
-- Pass: every lint result fixed or waived with a reason.
+- Pass: every lint result fixed or waived with a reason. An open, NC or option pin (unused
+  PGOOD, MODE or address pin tied off, a pin the symbol calls NC) passes only with a source: the
+  digest pin table or a datasheet page that allows that state for the selected mode. A schematic
+  no-connect flag, a pin name or the lint result itself is not a source.
+- Not published: no source for the pin's unused state, or no digest for the part. The pin stays
+  unknown with a vendor question; a pin that could float an input gets a pull footprint.
 
 ## NET-6 Value outliers
 - Check: resistor values off by a decade or more from their divider partner or from parts with
@@ -59,14 +64,21 @@ Missing data: follow the not-published rule in workflow/40_checks.md unless the 
 - Pass: every outlier explained.
 - Example: [UVLO resistor decade typo](../lessons/uvlo-resistor-decade-typo.md)
 
-## NET-7 Variant data present
+## NET-7 Variant data present and consistent
 - Check: the BOM carries fitted and DNP state per variant, and the variant reviewed is the one
-  ordered for assembly.
-- Why: without variant data every strap pair and option footprint is unreviewable.
+  ordered for assembly. The fitted state of every part agrees between the BOM, the schematic and
+  the PCB, because assembly files generated from the PCB (position file, PCB-side BOM, ODB++)
+  carry the footprint's own DNP flag.
+- Why: without variant data every strap pair and option footprint is unreviewable. A DNP flag
+  that never reached the PCB fits a part the BOM leaves off.
 - Compute: `model.bom.read_bom` with the variant columns; `lint.parts.bom_netlist_mismatch` and
-  `lint.parts.fitted_without_mpn`.
-- Pass: variant table present and matches the assembly order.
-- Example: [strap pairs fitted on both sides](../lessons/strap-pairs-fitted-both-sides.md)
+  `lint.parts.fitted_without_mpn`; `model.compare` lists parts fitted in one source and DNP in
+  another (`compare.md`).
+- Pass: variant table present and matches the assembly order; no part fitted in one source and
+  DNP in another. A bounded difference is a finding, not a stop: analyze the circuit in both
+  fitted states (workflow/10_extract.md, Gate).
+- Example: [strap pairs fitted on both sides](../lessons/strap-pairs-fitted-both-sides.md),
+  [DNP in the schematic, fitted in the PCB](../lessons/dnp-in-schematic-fitted-in-pcb.md)
 
 ## NET-8 Symbol pins against the datasheet
 - Check: every IC symbol's pin numbers and names against the digest pin table, including

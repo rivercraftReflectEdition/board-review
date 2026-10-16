@@ -2,7 +2,9 @@
 
 Goal: a board model that matches what will be built, and the mechanical checks that prove it.
 No judgment of circuits until this stage passes. If it fails badly (a missing sheet, merged
-buses), stop and report that first; every later stage would review the wrong circuit.
+buses, netlists that disagree in ways nobody can explain), stop and report that first; every
+later stage would review the wrong circuit. A missing tool or a bounded discrepancy is not a stop
+(Gate, below).
 
 ## What the tools read
 
@@ -51,6 +53,19 @@ prep reads the IPC-D-356A fab netlist, an exported netlist in KiCad XML or Prote
 board file, and the BOM with variant columns (CSV or XLSX). Read the schematic PDF for pages, and
 the pick-and-place file or ODB++ for placement when there is no `.kicad_pcb`, by hand.
 
+When kicad-cli or the CAD tool cannot run here (not installed, blocked by a sandbox as in
+workflow/setup.md, no license), use the exports the user supplies and continue. Say in
+intake.md what is lost:
+- ERC and compiler messages (NET-2 duplicate nets, NET-3 project contents).
+- The tool's native schematic-to-PCB parity (`--schematic-parity`, `proj_compare_sch_pcb`). The
+  3-way compare still runs on the exports.
+- Export freshness: nothing proves the exports match the latest schematic and board edits.
+  Record each file's date and hash, and ask when the exports were made.
+- PDF page references, when no schematic PDF was supplied.
+
+Each is an open gate item: the review goes on, the report lists it under what was not checked,
+and any check that needs it stays unknown.
+
 ## KiCad through kicad-cli
 
 Verified with KiCad 10.0.6 on Windows (October 2026) on the demo projects that ship with KiCad.
@@ -63,8 +78,8 @@ Find kicad-cli: `kicad-cli` on PATH; Windows per-user install
 `/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli`; Linux `/usr/bin/kicad-cli`. Record
 `kicad-cli version` in intake.md.
 
-Write outputs outside the project folder, and run the schematic commands on the root sheet
-(`<project>.kicad_sch`), which pulls in the whole hierarchy:
+Write outputs into the review folder, not among the design files, and run the schematic commands
+on the root sheet (`<project>.kicad_sch`), which pulls in the whole hierarchy:
 
 ```
 kicad-cli sch export netlist --format kicadxml -o out/sch.xml board.kicad_sch
@@ -138,7 +153,18 @@ python -m boardreview prep SCH_NETLIST --bom BOM --compare PCB_NETLIST FAB_NETLI
 
 ## Gate
 
-Run every netlist_integrity item. Record results in the review folder. Lessons behind this gate:
+Run every netlist_integrity item. Record results in the review folder, each as passed, failed or
+open. The gate passes with open items when each is named with what it costs; it stops the review
+only when the connectivity model itself cannot be trusted.
+
+A bounded assembly discrepancy does not stop the review. For example, one part is DNP in the
+schematic and BOM but fitted in the PCB (`compare.md` lists fitted-state differences). Raise it
+as a NET-7 finding, keep the rest of the connectivity model, and run every check that touches
+the part in both fitted states. Its severity follows the worse state, weighed by which files the
+assembler builds from.
+
+Lessons behind this gate:
 [bus net name collision](../lessons/bus-net-name-collision.md),
 [sheet dropped from the compile](../lessons/sheet-dropped-from-compile.md),
-[fix batch regressions](../lessons/fix-batch-regressions.md).
+[fix batch regressions](../lessons/fix-batch-regressions.md),
+[DNP in the schematic, fitted in the PCB](../lessons/dnp-in-schematic-fitted-in-pcb.md).
